@@ -1,0 +1,3153 @@
+{
+ "name": "synthetic-cse-s0",
+ "calendar": {
+  "days": [
+   "Mon",
+   "Tue",
+   "Wed",
+   "Thu",
+   "Fri"
+  ],
+  "slots_per_day": 8,
+  "lunch_slot": 4,
+  "weeks": 16
+ },
+ "rooms": [
+  {
+   "id": "R-101",
+   "name": "Room 101",
+   "capacity": 120,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-102",
+   "name": "Room 102",
+   "capacity": 120,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-103",
+   "name": "Room 103",
+   "capacity": 60,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-104",
+   "name": "Room 104",
+   "capacity": 80,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-105",
+   "name": "Room 105",
+   "capacity": 120,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-106",
+   "name": "Room 106",
+   "capacity": 120,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-107",
+   "name": "Room 107",
+   "capacity": 80,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-108",
+   "name": "Room 108",
+   "capacity": 120,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-109",
+   "name": "Room 109",
+   "capacity": 80,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-110",
+   "name": "Room 110",
+   "capacity": 60,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-111",
+   "name": "Room 111",
+   "capacity": 60,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-112",
+   "name": "Room 112",
+   "capacity": 80,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-113",
+   "name": "Room 113",
+   "capacity": 60,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-114",
+   "name": "Room 114",
+   "capacity": 60,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "R-115",
+   "name": "Room 115",
+   "capacity": 80,
+   "type": "lecture",
+   "equipment": []
+  },
+  {
+   "id": "L-1",
+   "name": "Lab 1",
+   "capacity": 60,
+   "type": "lab",
+   "equipment": [
+    "gpu"
+   ]
+  },
+  {
+   "id": "L-2",
+   "name": "Lab 2",
+   "capacity": 60,
+   "type": "lab",
+   "equipment": [
+    "gpu",
+    "routers"
+   ]
+  },
+  {
+   "id": "L-3",
+   "name": "Lab 3",
+   "capacity": 60,
+   "type": "lab",
+   "equipment": [
+    "electronics"
+   ]
+  },
+  {
+   "id": "L-4",
+   "name": "Lab 4",
+   "capacity": 60,
+   "type": "lab",
+   "equipment": []
+  },
+  {
+   "id": "L-5",
+   "name": "Lab 5",
+   "capacity": 60,
+   "type": "lab",
+   "equipment": [
+    "electronics",
+    "gpu"
+   ]
+  }
+ ],
+ "faculty": [
+  {
+   "id": "F-101",
+   "name": "Dr. Rao",
+   "department": "CSE",
+   "role": "hod",
+   "reports_to": null
+  },
+  {
+   "id": "F-102",
+   "name": "Dr. Menon",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-103",
+   "name": "Dr. Iyer",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-104",
+   "name": "Dr. Khan",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-105",
+   "name": "Dr. Das",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-106",
+   "name": "Dr. Pillai",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-107",
+   "name": "Dr. Sharma",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-108",
+   "name": "Dr. Gupta",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-109",
+   "name": "Dr. Nair",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-110",
+   "name": "Dr. Reddy",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-111",
+   "name": "Dr. Banerjee",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-112",
+   "name": "Dr. Mukherjee",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-113",
+   "name": "Dr. Joshi",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-114",
+   "name": "Dr. Kulkarni",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-115",
+   "name": "Dr. Patel",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-116",
+   "name": "Dr. Shah",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-117",
+   "name": "Dr. Singh",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-118",
+   "name": "Dr. Verma",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-119",
+   "name": "Dr. Chatterjee",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-120",
+   "name": "Dr. Bose",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-121",
+   "name": "Dr. Kapoor",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-122",
+   "name": "Dr. Mehta",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-123",
+   "name": "Dr. Desai",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-124",
+   "name": "Dr. Naidu",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-125",
+   "name": "Dr. Hegde",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-126",
+   "name": "Dr. Kumar",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-127",
+   "name": "Dr. Agarwal",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-128",
+   "name": "Dr. Saxena",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-129",
+   "name": "Dr. Mishra",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  },
+  {
+   "id": "F-130",
+   "name": "Dr. Tiwari",
+   "department": "CSE",
+   "role": "faculty",
+   "reports_to": "F-101"
+  }
+ ],
+ "groups": [
+  {
+   "id": "G-01",
+   "name": "Section 1",
+   "size": 57
+  },
+  {
+   "id": "G-02",
+   "name": "Section 2",
+   "size": 59
+  },
+  {
+   "id": "G-03",
+   "name": "Section 3",
+   "size": 44
+  },
+  {
+   "id": "G-04",
+   "name": "Section 4",
+   "size": 49
+  },
+  {
+   "id": "G-05",
+   "name": "Section 5",
+   "size": 43
+  },
+  {
+   "id": "G-06",
+   "name": "Section 6",
+   "size": 42
+  },
+  {
+   "id": "G-07",
+   "name": "Section 7",
+   "size": 50
+  },
+  {
+   "id": "G-08",
+   "name": "Section 8",
+   "size": 55
+  },
+  {
+   "id": "G-09",
+   "name": "Section 9",
+   "size": 57
+  },
+  {
+   "id": "G-10",
+   "name": "Section 10",
+   "size": 43
+  }
+ ],
+ "sessions": [
+  {
+   "id": "C-011-L1",
+   "course": "C-011",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-011-L2",
+   "course": "C-011",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-011-L3",
+   "course": "C-011",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-012-L1",
+   "course": "C-012",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-012-L2",
+   "course": "C-012",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-012-L3",
+   "course": "C-012",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-012-P",
+   "course": "C-012",
+   "kind": "practical",
+   "faculty": "F-116",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-013-L1",
+   "course": "C-013",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-013-L2",
+   "course": "C-013",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-013-L3",
+   "course": "C-013",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-014-L1",
+   "course": "C-014",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-014-L2",
+   "course": "C-014",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-014-L3",
+   "course": "C-014",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-014-P",
+   "course": "C-014",
+   "kind": "practical",
+   "faculty": "F-107",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-015-L1",
+   "course": "C-015",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-015-L2",
+   "course": "C-015",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-015-L3",
+   "course": "C-015",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-016-L1",
+   "course": "C-016",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-016-L2",
+   "course": "C-016",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-016-L3",
+   "course": "C-016",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-01"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-021-L1",
+   "course": "C-021",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-021-L2",
+   "course": "C-021",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-021-L3",
+   "course": "C-021",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-022-L1",
+   "course": "C-022",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-022-L2",
+   "course": "C-022",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-022-L3",
+   "course": "C-022",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-022-P",
+   "course": "C-022",
+   "kind": "practical",
+   "faculty": "F-106",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-023-L1",
+   "course": "C-023",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-023-L2",
+   "course": "C-023",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-023-L3",
+   "course": "C-023",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-024-L1",
+   "course": "C-024",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-024-L2",
+   "course": "C-024",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-024-L3",
+   "course": "C-024",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-024-P",
+   "course": "C-024",
+   "kind": "practical",
+   "faculty": "F-105",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-025-L1",
+   "course": "C-025",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-025-L2",
+   "course": "C-025",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-025-L3",
+   "course": "C-025",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-026-L1",
+   "course": "C-026",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-026-L2",
+   "course": "C-026",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-026-L3",
+   "course": "C-026",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-026-P",
+   "course": "C-026",
+   "kind": "practical",
+   "faculty": "F-104",
+   "groups": [
+    "G-02"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-031-L1",
+   "course": "C-031",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-031-L2",
+   "course": "C-031",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-031-L3",
+   "course": "C-031",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-031-P",
+   "course": "C-031",
+   "kind": "practical",
+   "faculty": "F-102",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-032-L1",
+   "course": "C-032",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-032-L2",
+   "course": "C-032",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-032-L3",
+   "course": "C-032",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-032-P",
+   "course": "C-032",
+   "kind": "practical",
+   "faculty": "F-128",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-033-L1",
+   "course": "C-033",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-033-L2",
+   "course": "C-033",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-033-L3",
+   "course": "C-033",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-034-L1",
+   "course": "C-034",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-034-L2",
+   "course": "C-034",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-034-L3",
+   "course": "C-034",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-034-P",
+   "course": "C-034",
+   "kind": "practical",
+   "faculty": "F-118",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-035-L1",
+   "course": "C-035",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-035-L2",
+   "course": "C-035",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-035-L3",
+   "course": "C-035",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-036-L1",
+   "course": "C-036",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-036-L2",
+   "course": "C-036",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-036-L3",
+   "course": "C-036",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-03"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-041-L1",
+   "course": "C-041",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-041-L2",
+   "course": "C-041",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-041-L3",
+   "course": "C-041",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-041-P",
+   "course": "C-041",
+   "kind": "practical",
+   "faculty": "F-124",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-042-L1",
+   "course": "C-042",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-042-L2",
+   "course": "C-042",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-042-L3",
+   "course": "C-042",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-043-L1",
+   "course": "C-043",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-043-L2",
+   "course": "C-043",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-043-L3",
+   "course": "C-043",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-043-P",
+   "course": "C-043",
+   "kind": "practical",
+   "faculty": "F-114",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-044-L1",
+   "course": "C-044",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-044-L2",
+   "course": "C-044",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-044-L3",
+   "course": "C-044",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-045-L1",
+   "course": "C-045",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-045-L2",
+   "course": "C-045",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-045-L3",
+   "course": "C-045",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-045-P",
+   "course": "C-045",
+   "kind": "practical",
+   "faculty": "F-109",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-046-L1",
+   "course": "C-046",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-046-L2",
+   "course": "C-046",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-046-L3",
+   "course": "C-046",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-04"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-051-L1",
+   "course": "C-051",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-051-L2",
+   "course": "C-051",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-051-L3",
+   "course": "C-051",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-052-L1",
+   "course": "C-052",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-052-L2",
+   "course": "C-052",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-052-L3",
+   "course": "C-052",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-053-L1",
+   "course": "C-053",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-053-L2",
+   "course": "C-053",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-053-L3",
+   "course": "C-053",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-053-P",
+   "course": "C-053",
+   "kind": "practical",
+   "faculty": "F-101",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-054-L1",
+   "course": "C-054",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-054-L2",
+   "course": "C-054",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-054-L3",
+   "course": "C-054",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-055-L1",
+   "course": "C-055",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-055-L2",
+   "course": "C-055",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-055-L3",
+   "course": "C-055",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-055-P",
+   "course": "C-055",
+   "kind": "practical",
+   "faculty": "F-123",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-056-L1",
+   "course": "C-056",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-056-L2",
+   "course": "C-056",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-056-L3",
+   "course": "C-056",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-05"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-061-L1",
+   "course": "C-061",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-061-L2",
+   "course": "C-061",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-061-L3",
+   "course": "C-061",
+   "kind": "lecture",
+   "faculty": "F-120",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-062-L1",
+   "course": "C-062",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-062-L2",
+   "course": "C-062",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-062-L3",
+   "course": "C-062",
+   "kind": "lecture",
+   "faculty": "F-127",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-063-L1",
+   "course": "C-063",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-063-L2",
+   "course": "C-063",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-063-L3",
+   "course": "C-063",
+   "kind": "lecture",
+   "faculty": "F-103",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-064-L1",
+   "course": "C-064",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-064-L2",
+   "course": "C-064",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-064-L3",
+   "course": "C-064",
+   "kind": "lecture",
+   "faculty": "F-110",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-064-P",
+   "course": "C-064",
+   "kind": "practical",
+   "faculty": "F-110",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-065-L1",
+   "course": "C-065",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-065-L2",
+   "course": "C-065",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-065-L3",
+   "course": "C-065",
+   "kind": "lecture",
+   "faculty": "F-112",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-066-L1",
+   "course": "C-066",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-066-L2",
+   "course": "C-066",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-066-L3",
+   "course": "C-066",
+   "kind": "lecture",
+   "faculty": "F-125",
+   "groups": [
+    "G-06"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-071-L1",
+   "course": "C-071",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-071-L2",
+   "course": "C-071",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-071-L3",
+   "course": "C-071",
+   "kind": "lecture",
+   "faculty": "F-122",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-072-L1",
+   "course": "C-072",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-072-L2",
+   "course": "C-072",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-072-L3",
+   "course": "C-072",
+   "kind": "lecture",
+   "faculty": "F-115",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-073-L1",
+   "course": "C-073",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-073-L2",
+   "course": "C-073",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-073-L3",
+   "course": "C-073",
+   "kind": "lecture",
+   "faculty": "F-121",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-074-L1",
+   "course": "C-074",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-074-L2",
+   "course": "C-074",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-074-L3",
+   "course": "C-074",
+   "kind": "lecture",
+   "faculty": "F-113",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-074-P",
+   "course": "C-074",
+   "kind": "practical",
+   "faculty": "F-113",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-075-L1",
+   "course": "C-075",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-075-L2",
+   "course": "C-075",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-075-L3",
+   "course": "C-075",
+   "kind": "lecture",
+   "faculty": "F-117",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-076-L1",
+   "course": "C-076",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-076-L2",
+   "course": "C-076",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-076-L3",
+   "course": "C-076",
+   "kind": "lecture",
+   "faculty": "F-126",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-076-P",
+   "course": "C-076",
+   "kind": "practical",
+   "faculty": "F-126",
+   "groups": [
+    "G-07"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-081-L1",
+   "course": "C-081",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-081-L2",
+   "course": "C-081",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-081-L3",
+   "course": "C-081",
+   "kind": "lecture",
+   "faculty": "F-108",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-081-P",
+   "course": "C-081",
+   "kind": "practical",
+   "faculty": "F-108",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-082-L1",
+   "course": "C-082",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-082-L2",
+   "course": "C-082",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-082-L3",
+   "course": "C-082",
+   "kind": "lecture",
+   "faculty": "F-130",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-083-L1",
+   "course": "C-083",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-083-L2",
+   "course": "C-083",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-083-L3",
+   "course": "C-083",
+   "kind": "lecture",
+   "faculty": "F-119",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-084-L1",
+   "course": "C-084",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-084-L2",
+   "course": "C-084",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-084-L3",
+   "course": "C-084",
+   "kind": "lecture",
+   "faculty": "F-111",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-085-L1",
+   "course": "C-085",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-085-L2",
+   "course": "C-085",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-085-L3",
+   "course": "C-085",
+   "kind": "lecture",
+   "faculty": "F-129",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-086-L1",
+   "course": "C-086",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-086-L2",
+   "course": "C-086",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-086-L3",
+   "course": "C-086",
+   "kind": "lecture",
+   "faculty": "F-118",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-086-P",
+   "course": "C-086",
+   "kind": "practical",
+   "faculty": "F-118",
+   "groups": [
+    "G-08"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-091-L1",
+   "course": "C-091",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-091-L2",
+   "course": "C-091",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-091-L3",
+   "course": "C-091",
+   "kind": "lecture",
+   "faculty": "F-105",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-092-L1",
+   "course": "C-092",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-092-L2",
+   "course": "C-092",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-092-L3",
+   "course": "C-092",
+   "kind": "lecture",
+   "faculty": "F-101",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-093-L1",
+   "course": "C-093",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-093-L2",
+   "course": "C-093",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-093-L3",
+   "course": "C-093",
+   "kind": "lecture",
+   "faculty": "F-124",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-093-P",
+   "course": "C-093",
+   "kind": "practical",
+   "faculty": "F-124",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-094-L1",
+   "course": "C-094",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-094-L2",
+   "course": "C-094",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-094-L3",
+   "course": "C-094",
+   "kind": "lecture",
+   "faculty": "F-128",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-095-L1",
+   "course": "C-095",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-095-L2",
+   "course": "C-095",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-095-L3",
+   "course": "C-095",
+   "kind": "lecture",
+   "faculty": "F-102",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-096-L1",
+   "course": "C-096",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-096-L2",
+   "course": "C-096",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-096-L3",
+   "course": "C-096",
+   "kind": "lecture",
+   "faculty": "F-109",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-096-P",
+   "course": "C-096",
+   "kind": "practical",
+   "faculty": "F-109",
+   "groups": [
+    "G-09"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-101-L1",
+   "course": "C-101",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-101-L2",
+   "course": "C-101",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-101-L3",
+   "course": "C-101",
+   "kind": "lecture",
+   "faculty": "F-123",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-102-L1",
+   "course": "C-102",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-102-L2",
+   "course": "C-102",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-102-L3",
+   "course": "C-102",
+   "kind": "lecture",
+   "faculty": "F-106",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-102-P",
+   "course": "C-102",
+   "kind": "practical",
+   "faculty": "F-106",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "electronics"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-103-L1",
+   "course": "C-103",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-103-L2",
+   "course": "C-103",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-103-L3",
+   "course": "C-103",
+   "kind": "lecture",
+   "faculty": "F-114",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-103-P",
+   "course": "C-103",
+   "kind": "practical",
+   "faculty": "F-114",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 2,
+   "room_type": "lab",
+   "equipment": [
+    "gpu"
+   ],
+   "size": null
+  },
+  {
+   "id": "C-104-L1",
+   "course": "C-104",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-104-L2",
+   "course": "C-104",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-104-L3",
+   "course": "C-104",
+   "kind": "lecture",
+   "faculty": "F-104",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-105-L1",
+   "course": "C-105",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-105-L2",
+   "course": "C-105",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-105-L3",
+   "course": "C-105",
+   "kind": "lecture",
+   "faculty": "F-116",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-106-L1",
+   "course": "C-106",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-106-L2",
+   "course": "C-106",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  },
+  {
+   "id": "C-106-L3",
+   "course": "C-106",
+   "kind": "lecture",
+   "faculty": "F-107",
+   "groups": [
+    "G-10"
+   ],
+   "duration": 1,
+   "room_type": "lecture",
+   "equipment": [],
+   "size": null
+  }
+ ],
+ "policy": {
+  "max_consecutive": 3,
+  "lunch_break": true
+ },
+ "course_titles": {
+  "C-011": "Data Structures",
+  "C-012": "Operating Systems",
+  "C-013": "Computer Networks",
+  "C-014": "Database Systems",
+  "C-015": "Machine Learning",
+  "C-016": "Compiler Design",
+  "C-021": "Theory of Computation",
+  "C-022": "Computer Architecture",
+  "C-023": "Software Engineering",
+  "C-024": "Discrete Mathematics",
+  "C-025": "Digital Logic",
+  "C-026": "Algorithms",
+  "C-031": "Computer Graphics",
+  "C-032": "Information Security",
+  "C-033": "Distributed Systems",
+  "C-034": "Artificial Intelligence",
+  "C-035": "Probability and Statistics",
+  "C-036": "Linear Algebra",
+  "C-041": "Signals and Systems",
+  "C-042": "Cloud Computing",
+  "C-043": "Data Structures",
+  "C-044": "Operating Systems",
+  "C-045": "Computer Networks",
+  "C-046": "Database Systems",
+  "C-051": "Machine Learning",
+  "C-052": "Compiler Design",
+  "C-053": "Theory of Computation",
+  "C-054": "Computer Architecture",
+  "C-055": "Software Engineering",
+  "C-056": "Discrete Mathematics",
+  "C-061": "Digital Logic",
+  "C-062": "Algorithms",
+  "C-063": "Computer Graphics",
+  "C-064": "Information Security",
+  "C-065": "Distributed Systems",
+  "C-066": "Artificial Intelligence",
+  "C-071": "Probability and Statistics",
+  "C-072": "Linear Algebra",
+  "C-073": "Signals and Systems",
+  "C-074": "Cloud Computing",
+  "C-075": "Data Structures",
+  "C-076": "Operating Systems",
+  "C-081": "Computer Networks",
+  "C-082": "Database Systems",
+  "C-083": "Machine Learning",
+  "C-084": "Compiler Design",
+  "C-085": "Theory of Computation",
+  "C-086": "Computer Architecture",
+  "C-091": "Software Engineering",
+  "C-092": "Discrete Mathematics",
+  "C-093": "Digital Logic",
+  "C-094": "Algorithms",
+  "C-095": "Computer Graphics",
+  "C-096": "Information Security",
+  "C-101": "Distributed Systems",
+  "C-102": "Artificial Intelligence",
+  "C-103": "Probability and Statistics",
+  "C-104": "Linear Algebra",
+  "C-105": "Signals and Systems",
+  "C-106": "Cloud Computing"
+ }
+}
