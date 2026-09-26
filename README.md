@@ -102,6 +102,31 @@ when the agent model's daily quota is spent.
 | `nts/policy.py` | L3, UC2, UC4 | Handbook loader, BM25, policy agent with citation checks |
 | `nts/eval_policy.py` | Table 11 (RAG) | Parse-then-policy evaluation |
 
+## Fine-tuned compiler (local model)
+
+`uv run python -m nts.compiler` writes `data/compiler/{train,val,test}.jsonl`:
+chat examples (short system prompt, compact directory, message) with the gold
+`ParseOutput` JSON as the answer. `deny`/`refuse` requests are left out, since
+those are decided after parsing. Templated and paraphrased versions of a
+request share a split.
+
+`notebooks/train_compiler_kaggle.ipynb` trains it on a Kaggle T4: 16-bit LoRA
+on Qwen3.5-4B (Unsloth advises against QLoRA for Qwen3.5), fp16, loss on the
+answer only, then exports GGUF (Q5_K_M, about 3.1 GB) for llama.cpp on a 6 GB
+laptop GPU. Run it with `TRIAL = True` first.
+
+Evaluate the downloaded model locally with the same harness as Gemini:
+
+```sh
+llama-server -m qwen3.5-4b-nts.Q5_K_M.gguf --jinja -ngl 99 -c 4096 --port 8080
+uv run python -m nts.eval_parsing --local --corpus data/requests-para.jsonl --split val --limit 100 --workers 1
+```
+
+`nts/local.py` talks to any OpenAI-compatible server (llama.cpp, Ollama, LM
+Studio), constrains output to the JSON schema, keeps thinking off and caches
+like the Gemini client. On a GPU with less memory than the model file, lower
+`-ngl` so some layers run on the CPU.
+
 ## Data
 
 `uv run python -m nts.corpus` regenerates `data/requests.jsonl` (600 requests,
@@ -150,6 +175,6 @@ stability are not modelled.
 ## Next steps (proposal timeline)
 
 - Weeks 3–4 (remaining): 100 hand-written requests checked by two annotators; swap requests.
-- Weeks 5–6 (remaining): QLoRA compiler; the institute's real handbook; a dense
+- Weeks 5–6 (remaining): train the compiler (Kaggle notebook) and a local client for it; the institute's real handbook; a dense
   retriever for the BM25 + embedding hybrid.
 - Weeks 7–8: priority scores π_k, resolution ladder, concession ledger, grounded explainer.

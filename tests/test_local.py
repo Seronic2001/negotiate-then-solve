@@ -1,0 +1,79 @@
+"""Local client against a fake OpenAI-compatible server (no GPU needed)."""
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import pytest
+
+from nts.compiler import CompilerParser, completion, gold_output
+from nts.corpus import ExpectedAction, generate_corpus
+from nts.generator import generate_department
+from nts.llm import LLMError
+from nts.local import LocalClient
+from nts.metrics import exact_match
+
+
+class FakeServer:
+    """Serves /v1/models and answers every chat request with ``reply``."""
+
+    def __init__(self) -> None:
+        self.reply = "{}"
+        self.requests: list[dict] = []
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def _send(self, body: dict) -> None:
+                data = json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                self._send({"data": [{"id": "/models/qwen3.5-4b-nts.Q5_K_M.gguf"}]})
+
+            def do_POST(self):
+                fake.requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                self._send({"choices": [{"message": {"content": fake.reply}}],
+                            "usage": {"prompt_tokens": 800, "completion_tokens": 60}})
+
+        self.httpd = HTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.httpd.server_port}/v1"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+
+@pytest.fixture
+def server():
+    s = FakeServer()
+    yield s
+    s.httpd.shutdown()
+
+
+def test_compiler_parser_through_local_client(server, tmp_path):
+    instance = generate_department(seed=0)
+    ex = next(e for e in generate_corpus(instance, n=100, seed=0) if e.expected_action == ExpectedAction.COMPILE)
+    server.reply = completion(gold_output(ex))
+    client = LocalClient(base_url=server.url, cache_dir=tmp_path)
+    assert client.model == "local:qwen3.5-4b-nts.Q5_K_M.gguf"
+
+    result = CompilerParser(instance, client).parse(ex.request)
+    assert result.action == ExpectedAction.COMPILE and exact_match(result.constraints, ex.targets, instance)
+
+    sent = server.requests[0]
+    assert sent["chat_template_kwargs"] == {"enable_thinking": False}
+    assert sent["response_format"]["type"] == "json_schema" and sent["temperature"] == 0.0
+    assert ex.request.raw_text in sent["messages"][1]["content"]
+    assert client.usage.calls == 1 and client.usage.prompt_tokens == 800
+
+    CompilerParser(instance, client).parse(ex.request)  # second time from the cache
+    assert len(server.requests) == 1 and client.usage.cache_hits == 1
+
+
+def test_unreachable_server_is_a_clear_error(tmp_path):
+    with pytest.raises(LLMError, match="not reachable"):
+        LocalClient(base_url="http://127.0.0.1:9/v1", cache_dir=tmp_path, timeout=2)

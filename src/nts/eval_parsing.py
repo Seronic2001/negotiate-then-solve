@@ -1,6 +1,7 @@
 """Parsing evaluation (RQ3 and the fine-tuning/tool metrics of Table 11).
 
     uv run python -m nts.eval_parsing --limit 40
+    uv run python -m nts.eval_parsing --local --corpus data/requests-para.jsonl --limit 151 --workers 1
 
 * System One: trained on the train split, tau tuned on val, scored on test
   (type/action accuracy, ECE, fast-path share, latency). No API calls.
@@ -61,14 +62,16 @@ def eval_system_one(corpus: list[CorpusExample], train_corpus: list[CorpusExampl
 def eval_system_two(
     corpus: list[CorpusExample],
     instance: Instance,
-    client: GeminiClient,
+    client,
     limit: int,
     split: str = "test",
     workers: int = 4,
+    parser=None,
 ) -> dict:
-    """Requests run concurrently (``workers`` in flight); the client still
-    starts at most RPM requests per minute, so this only hides latency."""
-    parser = SystemTwoParser(instance, client)
+    """Requests run concurrently (``workers`` in flight); a Gemini client
+    still starts at most RPM requests per minute, so this only hides latency.
+    ``parser`` defaults to the Gemini System Two parser over ``client``."""
+    parser = parser or SystemTwoParser(instance, client)
     examples = [ex for ex in corpus if ex.split == split][:limit]
     rows = []
     tp = n_pred = n_gold = 0
@@ -146,6 +149,8 @@ def main() -> None:
     ap.add_argument("--split", default="test", choices=["train", "val", "test"],
                     help="split for System Two; iterate prompts on val, report test once")
     ap.add_argument("--model", default=None, help="Gemini model id (default: the pinned agent model, or GEMINI_MODEL)")
+    ap.add_argument("--local", metavar="URL", nargs="?", const="http://localhost:8080/v1", default=None,
+                    help="use the fine-tuned compiler on a local OpenAI-compatible server instead of Gemini")
     ap.add_argument("--skip-llm", action="store_true")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
@@ -157,8 +162,16 @@ def main() -> None:
                     "system_one": eval_system_one(corpus, s1_train)}
     print("System One:", json.dumps(report["system_one"], indent=1))
     if not args.skip_llm:
-        client = GeminiClient(args.model)
-        report["system_two"] = eval_system_two(corpus, instance, client, args.limit, args.split, args.workers)
+        parser = None
+        if args.local:
+            from .compiler import CompilerParser
+            from .local import LocalClient
+            client = LocalClient(args.model, base_url=args.local)
+            parser = CompilerParser(instance, client)
+        else:
+            client = GeminiClient(args.model)
+        report["system_two"] = eval_system_two(corpus, instance, client, args.limit, args.split, args.workers,
+                                               parser=parser)
         print("System Two:", json.dumps({k: v for k, v in report["system_two"].items() if k != "rows"}, indent=1))
 
     out = args.out or Path("runs") / f"parsing-{datetime.now():%Y%m%d-%H%M%S}.json"
