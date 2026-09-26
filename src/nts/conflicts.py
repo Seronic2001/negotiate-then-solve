@@ -56,15 +56,19 @@ def enumerate_mcs(
     relaxable_tiers: Collection[Tier] = DEFAULT_RELAXABLE,
     costs: Mapping[str, int] | None = None,
     limit: int = 5,
+    keep: Collection[str] = (),
 ) -> list[CorrectionOption]:
     """Up to ``limit`` minimal correction sets, cheapest first.
 
     Only constraints in ``relaxable_tiers`` may be dropped; tiers outside it
-    stay enforced. ``costs`` (default 1 each) must be positive, which is what
-    makes each cheapest remaining solution subset-minimal.
+    stay enforced, and so do the constraints in ``keep`` (e.g. ones whose
+    owner already refused to concede). ``costs`` (default 1 each) must be
+    positive, which is what makes each cheapest remaining solution
+    subset-minimal.
     """
     enabled = list(solver.hard_ids if enabled is None else enabled)
-    relaxable = [i for i in enabled if solver.constraints[i].tier in relaxable_tiers]
+    kept = set(keep)
+    relaxable = [i for i in enabled if solver.constraints[i].tier in relaxable_tiers and i not in kept]
     cost = {i: (costs or {}).get(i, 1) for i in relaxable}
     if any(v <= 0 for v in cost.values()):
         raise ValueError("MCS costs must be positive")

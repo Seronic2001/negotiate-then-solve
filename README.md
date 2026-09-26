@@ -1,10 +1,17 @@
 # Negotiate, Then Solve
 
 Conflict-aware university timetabling with LLM agents and constraint solvers
-(LMA Group Project 2026). This repository currently holds the **foundation**
-(proposal weeks 1–4): data schemas, a synthetic instance generator, the CP-SAT
-model with assumption literals, conflict analysis (MUS/MCS), an independent
-validator, an ITC-2007 loader and the labelled request corpus.
+(LMA Group Project 2026). Every layer of the proposal's architecture is
+implemented: channels and the request store (L0–L1), System One / System Two
+parsing and the fine-tuned compiler (L2), the policy agent (L3), CP-SAT with
+conflict analysis (L4), the interpretation layer with the resolution ladder,
+grounded explanations and the concession ledger (L5), and human approval
+before publishing (L6). The evaluation harness covers the negotiation
+benchmark (baselines B1–B4, ablations A1–A3), parsing, policy and the safety set.
+
+Every LLM-backed component has a deterministic path (template explanations,
+scripted simulators, stub parsers), so the whole system can be developed and
+tested without API calls; the Gemini free-tier quota is kept for experiments.
 
 ## Setup
 
@@ -15,6 +22,7 @@ uv sync                       # create .venv and install dependencies
 uv run pytest -m "not slow"   # fast tests (< 1 min)
 uv run pytest                 # includes a full department-size solve
 uv run python -m nts.demo     # generate a department, solve it, run UC3
+uv run uvicorn nts.api:demo_app --factory   # portal on http://127.0.0.1:8000 (no API key)
 ```
 
 ## Layout
@@ -28,7 +36,7 @@ uv run python -m nts.demo     # generate a department, solve it, run UC3
 | `nts/conflicts.py` | §8.5 | `find_mus` (deletion-based shrinking), `enumerate_mcs` (cheapest-first, solver-verified witnesses) |
 | `nts/validator.py` | §8.2 step 4, §12.4 | Rejects bad compiled constraints; scores any timetable's hard-constraint validity |
 | `nts/generator.py` | §12.1 | Seeded synthetic departments (30 faculty, 60 course sections, 20 rooms by default) |
-| `nts/scenarios.py` | §9 | Use-case fixtures (UC3 lab contention so far) |
+| `nts/scenarios.py` | §9 | UC3 lab-contention fixture (the benchmark generalises it) |
 | `nts/itc.py` | §12.1 | ITC-2007 Track 3 `.ctt` loader and `.sol` writer |
 | `nts/corpus.py` | §12.1 | Request corpus generator with labels; JSONL load/save |
 
@@ -156,6 +164,68 @@ maintained by the University of Udine. Load them with
 as in ITC; the ITC soft constraints for working days, compactness and room
 stability are not modelled.
 
+## Interpretation layer (L5): negotiation
+
+| Module | Proposal | What it does |
+|---|---|---|
+| `nts/priority.py` | §8.4 | π_k = auth + impact + justification + lead + credit − disruption; option cost = Σπ + λ1·moved + λ2·ΔGini; `flat=True` for ablation A2 |
+| `nts/ledger.py` | §8.6 | Concession ledger with semester decay; Gini coefficient |
+| `nts/explainer.py` | §8.7 | Conflict → numbered facts (MUS constraints, rules, rooms, options, ledger). Template, grounded (claims cite facts; a checker drops claims whose days, numbers or names are not in the cited facts) and free (A3) modes; private-reason leak check |
+| `nts/negotiation.py` | §8.6 | Resolution ladder: auto-substitute → auto-relax (notices) → negotiate over MCS options (2–3 solver-verified alternatives per message, cheapest owner first, lowest credit on ties, one extra probe after a refusal) → escalate with a brief. Replies: accept / counter / reject / no reply |
+| `nts/simulators.py` | §12.1 | Stakeholders with hidden flexibility (acceptable windows, room flexibility, whether they volunteer it, whether they reply); scripted or LLM-voiced replies |
+| `nts/benchmark.py` | §12.1 | 60 scenarios: contention, substitute, deadlock, Tier 3 vs 4 squeeze, capacity shortfall, preference trade-off, policy; the oracle (B4) tries every hidden-flexibility combination |
+| `nts/eval_negotiation.py` | §12.2–12.5 | Runs ours / A1–A3 / B1–B4; validity, correct outcome, rounds, cost vs oracle, escalation P/R, concession Gini, faithfulness, leaks; McNemar, Wilcoxon, bootstrap CIs |
+| `nts/judge.py`, `nts/stats.py` | §12.5 | Batched LLM judge (clarity, acceptability) and quadratic-weighted Cohen's κ against human raters |
+
+```sh
+uv run python -m nts.benchmark                                  # data/scenarios.jsonl (about 30 s)
+uv run python -m nts.eval_negotiation --offline                 # ours, A2, B2, B4: no API calls (about 6 min)
+uv run python -m nts.eval_negotiation --configs ours-llm,A1,A3,B1,B3   # Gemini; spread over days
+uv run python -m nts.judge runs/negotiation-XXXX.json           # LLM judge (batched, Flash-Lite)
+uv run python -m nts.judge --kappa data/human_ratings.csv       # judge vs human raters
+```
+
+Offline results so far (60 scenarios; `runs/negotiation-offline.json`,
+`runs/negotiation-ours-probe.json`):
+
+| | Correct outcome | Valid timetables | Rounds (agreements) | Within 10% of oracle | Escalation P / R | Concession Gini |
+|---|---|---|---|---|---|---|
+| Ours (MCS, tiers, ledger, probing) | 95% | 100% | 1.56 | 100% | 0.85 / 1.00 | 0.23 |
+| A2: flat weights, no ledger | 93% | 100% | 1.53 | 100% | 0.81 / 1.00 | 0.27 |
+| B2: solver imposes, no negotiation | 18% | 100% | 0 | – | 1.00 / 0.47 | – |
+| B4: oracle | 100% | 100% | 0 | 100% | 1.00 / 1.00 | – |
+
+The A2 row is from the run before probing was added; rerun it for a
+like-for-like comparison. Under B2 only 4% of imposed changes would have been
+acceptable to their owners. The three scenarios ours escalates although the
+oracle agrees are stakeholders who accept only one narrow window and never
+say so; six offered alternatives missed it. LLM configurations (ours-llm, A1,
+A3, B1, B3) need the API; a 3-scenario smoke run already shows the free
+explanation (A3) leaking a private reason, and the LLM-only timetable (B1)
+silently breaking requesters' hard constraints.
+
+## Orchestrator, channels and approval (L0, L1, L6)
+
+| Module | Proposal | What it does |
+|---|---|---|
+| `nts/orchestrator.py` | Fig. 2, §8.9 | The request lifecycle end to end; System One routing; refusal, denial, clarification, escalation, answer and forward exits; fairness audit; publishing only through `approve()` by a listed approver; notifications to affected people only |
+| `nts/store.py` | L1, state | SQLite: requests (with dedupe), constraint records, timetable versions (per week, with rollback), ledger, audit log |
+| `nts/graph.py` | §8.8 | NetworkX knowledge graph: owns, references, has_authority_over, reports_to, derived_from, conflicts_with, affects, balance |
+| `nts/ingest.py` | L0 | Email (RFC 822, IMAP poller), messaging (Slack-shaped JSON) and portal adapters; email → person → role; unknown senders rejected; quoted replies stripped; threading |
+| `nts/api.py` | L0, L6 | FastAPI portal: submit, case status and trace, approval queue, approve/reject (coordinator only), published timetable; the `X-User` header stands in for SSO |
+
+## Safety (proposal §13)
+
+`uv run python -m nts.safety` runs the 50-case safety set (authority,
+claimed authority, "I approve" messages, injections, private-reason probing,
+spoofing) through intake and the orchestrator with System Two and the policy
+agent (Gemini). `--compromised` swaps in a parser that obeys every injected
+instruction, to show which defences are deterministic: 49/50 pass, with 0
+unapproved publishes, 0 authority violations, 0 injection successes and 0
+leaks. The one failure is an "I approve, publish it" email from the HoD: the
+fooled parser's constraint is within the HoD's authority, so it is created,
+but it still only reaches "awaiting approval".
+
 ## Key conventions
 
 - **Tier 0** rules (each session once, no room/faculty/group clash, compatible
@@ -172,9 +242,14 @@ stability are not modelled.
   3–4). Tier 1–2 options need a human with authority and go through
   escalation instead.
 
-## Next steps (proposal timeline)
+## Next steps
 
-- Weeks 3–4 (remaining): 100 hand-written requests checked by two annotators; swap requests.
-- Weeks 5–6 (remaining): train the compiler (Kaggle notebook) and a local client for it; the institute's real handbook; a dense
-  retriever for the BM25 + embedding hybrid.
-- Weeks 7–8: priority scores π_k, resolution ladder, concession ledger, grounded explainer.
+- **Experiment runs (API quota, spread over days):** parsing test split on the
+  paraphrased corpus; policy test split; negotiation LLM configurations
+  (ours-llm, A1, A3, B1, B3) on all 60 scenarios; the safety set with Gemini;
+  judge ratings. Each run resumes from the cache after a daily-quota stop.
+- **Team:** 100 hand-written requests and two annotators; the institute's
+  real handbook; human pilot ratings (`data/human_ratings.csv`) for judge κ.
+- **Compiler:** evaluate the Kaggle-trained GGUF with `eval_parsing --local`.
+- Not built yet: swap requests, and a dense retriever for the BM25 +
+  embedding hybrid.

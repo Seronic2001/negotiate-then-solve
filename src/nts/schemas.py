@@ -187,13 +187,15 @@ class RequestStatus(str, Enum):
     AWAITING_APPROVAL = "awaiting_approval"
     PUBLISHED = "published"
     ESCALATED = "escalated"
+    ANSWERED = "answered"  # policy question answered from the handbook
+    FORWARDED = "forwarded"  # clash report or out-of-scope message passed to a person
 
 
 _S = RequestStatus
 TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.RECEIVED: frozenset({_S.CLASSIFIED}),
-    _S.CLASSIFIED: frozenset({_S.POLICY_CHECKED, _S.REFUSED}),
-    _S.POLICY_CHECKED: frozenset({_S.COMPILED, _S.DENIED}),
+    _S.CLASSIFIED: frozenset({_S.POLICY_CHECKED, _S.REFUSED, _S.ANSWERED, _S.FORWARDED}),
+    _S.POLICY_CHECKED: frozenset({_S.COMPILED, _S.DENIED, _S.ESCALATED, _S.CLARIFICATION}),
     _S.COMPILED: frozenset({_S.SOLVED, _S.CLARIFICATION}),
     _S.CLARIFICATION: frozenset({_S.RECEIVED}),
     _S.SOLVED: frozenset({_S.FAIRNESS_AUDITED, _S.NEGOTIATING}),
@@ -204,6 +206,8 @@ TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.DENIED: frozenset(),
     _S.PUBLISHED: frozenset(),
     _S.ESCALATED: frozenset(),
+    _S.ANSWERED: frozenset(),
+    _S.FORWARDED: frozenset(),
 }
 
 
@@ -245,6 +249,7 @@ class TimetableVersion(BaseModel):
     assignment: dict[str, Placement]
     parent: int | None = None
     approved_by: str | None = None
+    week: int | None = None  # None: the semester timetable; n: the repaired timetable for week n
 
     def diff(self, other: TimetableVersion) -> dict[str, tuple[Placement | None, Placement | None]]:
         """Sessions whose placement differs, as ``id -> (self, other)``."""
