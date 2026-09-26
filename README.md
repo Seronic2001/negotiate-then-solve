@@ -42,23 +42,30 @@ uv run nts-web                # web app on http://127.0.0.1:8000 (build the fron
 
 ## Parsing layer and Gemini
 
-Put the key in `.env` (git-ignored):
+Put one or more keys in `.env` (git-ignored):
 
 ```sh
-GEMINI_API_KEY=...
+# Single key or comma-separated list of keys:
+GEMINI_API_KEY=key1,key2,key3
+# Or explicitly via GEMINI_API_KEYS:
+# GEMINI_API_KEYS=key1,key2,key3
+# Or numbered:
+# GEMINI_API_KEY_1=...
+# GEMINI_API_KEY_2=...
+
 # optional overrides (defaults are pinned in nts/llm.py)
 GEMINI_MODEL=gemini-3.5-flash-lite       # agent: System Two parser, negotiator
 GEMINI_SIM_MODEL=gemini-3.1-flash-lite   # stakeholder simulators, LLM judge
 GEMINI_FLASH_MODEL=gemini-3.8-flash      # larger-model comparison set
-GEMINI_RPM=15     # requests per minute
-GEMINI_RPD=500    # requests per day; the client stops cleanly at this budget
+GEMINI_RPM=15     # requests per minute per key
+GEMINI_RPD=500    # requests per day per key
 ```
 
-Free-tier quotas are per model per day (AI Studio, Sep 2026): Flash-Lite
-models 15 RPM / 500 RPD each; Flash models 5 RPM / **20 RPD** each. Bulk runs
-therefore use the two Flash-Lite models, which have separate quotas, and
-Flash is kept for a small comparison set. A daily-quota 429 stops a run
-immediately; rerun the next day and the cache resumes it.
+**API Key Pooling & Load Balancing**: When multiple keys are configured, `nts/llm.py`
+pools them automatically with round-robin load balancing. Having $N$ keys multiplies
+your total throughput ($N \times \text{RPM}$) and daily capacity ($N \times \text{RPD}$).
+If an individual key hits a per-minute rate limit or reaches its daily quota, the
+client dynamically rotates and fails over to the next available key in the pool.
 
 `nts/llm.py` caches every response under `runs/llm_cache/` (keyed by model,
 prompts, schema and temperature), so rerunning an experiment costs no quota,
