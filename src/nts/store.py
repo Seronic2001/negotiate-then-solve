@@ -135,13 +135,20 @@ class Store:
         self._exec("INSERT INTO events (case_id, at, kind, body) VALUES (?,?,?,?)",
                    (case_id, datetime.now().isoformat(), kind, json.dumps(body, default=str)))
 
-    def events(self, case_id: str | None = None, kind: str | None = None) -> list[dict]:
-        sql, args = "SELECT case_id, at, kind, body FROM events WHERE 1=1", []
+    def events(self, case_id: str | None = None, kind: str | None = None, after: int = 0,
+               limit: int | None = None) -> list[dict]:
+        sql, args = "SELECT n, case_id, at, kind, body FROM events WHERE n > ?", [after]
         if case_id:
             sql += " AND case_id=?"
             args.append(case_id)
         if kind:
             sql += " AND kind=?"
             args.append(kind)
-        return [{"case": c, "at": a, "kind": k, **json.loads(b)} for c, a, k, b in
-                self._exec(sql + " ORDER BY n", tuple(args)).fetchall()]
+        rows = self._exec(sql + " ORDER BY n" + (f" LIMIT {int(limit)}" if limit else ""), tuple(args)).fetchall()
+        return [{"n": n, "case": c, "at": a, "kind": k, **json.loads(b)} for n, c, a, k, b in rows]
+
+    def versions(self) -> list[dict]:
+        rows = self._exec("SELECT version, parent, approved_by, published, case_id, created_at, body "
+                          "FROM versions ORDER BY version").fetchall()
+        return [{"version": v, "parent": p, "approved_by": a, "published": bool(pub), "case": c,
+                 "created_at": t, "week": json.loads(b).get("week")} for v, p, a, pub, c, t, b in rows]

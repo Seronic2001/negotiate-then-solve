@@ -83,12 +83,24 @@ def _clock(m: re.Match) -> str:
     return f" h{h} "
 
 
-def tokens(text: str) -> list[str]:
+def _stem(t: str) -> str:
+    """Light suffix folding so "rescheduling", "rescheduled" and "reschedule"
+    meet ("hours" ~ "hour", "classes" ~ "class")."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if len(t) > len(suffix) + 3 and t.endswith(suffix) and not t.endswith("ss"):
+            t = t[: -len(suffix)]
+            break
+    return t.rstrip("e") if len(t) > 4 else t
+
+
+def tokens(text: str, stem: bool = False) -> list[str]:
     out = []
     for t in _TOKEN.findall(_CLOCK.sub(_clock, text).lower().replace("-", " ")):
         if t in _STOP:
             continue
-        if len(t) > 4 and t.endswith("s") and not t.endswith("ss"):
+        if stem:
+            t = _stem(t)
+        elif len(t) > 4 and t.endswith("s") and not t.endswith("ss"):
             t = t[:-1]  # crude plural folding: "hours" ~ "hour"
         out.append(t)
     return out
@@ -99,9 +111,10 @@ class BM25:
     wording matters ("consecutive", "lunch"), so lexical retrieval is the
     baseline; a dense retriever can be added for the hybrid in the proposal."""
 
-    def __init__(self, rules: list[Rule], k1: float = 1.5, b: float = 0.75) -> None:
+    def __init__(self, rules: list[Rule], k1: float = 1.5, b: float = 0.75, stem: bool = False) -> None:
         self.rules = rules
-        self.docs = [Counter(tokens(f"{r.title} {r.title} {r.text}")) for r in rules]
+        self.stem = stem
+        self.docs = [Counter(tokens(f"{r.title} {r.title} {r.text}", stem)) for r in rules]
         self.lengths = [sum(d.values()) for d in self.docs]
         self.avg = sum(self.lengths) / len(self.lengths)
         df = Counter(t for d in self.docs for t in d)
@@ -110,7 +123,7 @@ class BM25:
         self.k1, self.b = k1, b
 
     def scores(self, query: str) -> list[float]:
-        q = tokens(query)
+        q = tokens(query, self.stem)
         out = []
         for d, length in zip(self.docs, self.lengths, strict=True):
             s = 0.0
@@ -272,3 +285,57 @@ class PolicyAgent:
             hallucinated=hallucinated, explanation=out.explanation, alternative=out.alternative,
             answer=out.answer, uncited_escalation=uncited,
         )
+
+
+class RulePolicyAgent:
+    """Offline policy check with the same interface as ``PolicyAgent``:
+    retrieval is the real BM25, the verdict comes from explicit checks of the
+    parsed constraints against the institute policy (lunch break, consecutive
+    hours) instead of the LLM. Used when no API key is configured."""
+
+    mode = "offline"
+
+    def __init__(self, rules: list[Rule], instance: Instance, k: int = 5) -> None:
+        self.rules = {r.id: r for r in rules}
+        self.retriever = BM25(rules, stem=True)  # stemming helps the top-1 answer; the LLM path sees top-5
+        self.instance = instance
+        self.k = k
+
+    def review(self, text: str, parse: ParseResult | None = None) -> PolicyDecision:
+        retrieved = self.retriever.search(f"{text} {query_hints(self.instance, parse)}", self.k)
+        shown = [r.id for r in retrieved]
+        cal, pol = self.instance.calendar, self.instance.policy
+
+        def decision(verdict: Verdict, cited: list[str], explanation: str, **kw) -> PolicyDecision:
+            return PolicyDecision(verdict=verdict, cited=cited, retrieved=shown,
+                                  explanation=explanation, **kw)
+
+        if parse is not None and parse.output is not None and parse.output.action == "answer":
+            top = retrieved[0] if retrieved else None
+            if top is None:
+                return decision(Verdict.ALLOWED, [], "No rule found.", answer="I could not find a rule on that.")
+            return decision(Verdict.ALLOWED, [top.id], f"From {top.cite()}.", answer=f"{top.cite()}: {top.text}")
+
+        cons = parse.constraints if parse is not None else []
+        for c in cons:
+            slots = sorted(c.when.slots or [])
+            if (c.type.value == "prefer" and c.hard and cal.lunch_slot is not None and cal.lunch_slot in slots
+                    and "P-LUNCH" in self.rules):
+                return decision(Verdict.FORBIDDEN, ["P-LUNCH"],
+                                f"The hour from 13:00 to 14:00 is a common lunch break ({self.rules['P-LUNCH'].cite()}).",
+                                alternative="Any other slot on the same day, for example 2 pm.")
+            run = best = 0
+            for i, s in enumerate(slots):
+                run = run + 1 if i and s == slots[i - 1] + 1 else 1
+                best = max(best, run)
+            if (c.type.value == "prefer" and c.hard and pol.max_consecutive and best > pol.max_consecutive
+                    and re.search(r"back.to.back|in a row|straight|consecutive|without (any )?breaks?", text, re.I)
+                    and "P-MAXCONSEC" in self.rules):
+                return decision(Verdict.FORBIDDEN, ["P-MAXCONSEC"],
+                                f"No more than {pol.max_consecutive} consecutive teaching hours "
+                                f"({self.rules['P-MAXCONSEC'].cite()}).",
+                                alternative=f"{pol.max_consecutive} hours in a row, a one-hour break, then the rest.")
+        obligations = [r for r in ("P-MAKEUP",) if r in self.rules and any(
+            c.type.value == "unavailable" and c.scope.faculty and c.when.weeks for c in cons)]
+        return decision(Verdict.ALLOWED, [], "No institute rule is broken by this request.",
+                        obligations=obligations)

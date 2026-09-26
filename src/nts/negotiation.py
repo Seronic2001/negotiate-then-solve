@@ -19,7 +19,7 @@ ledger is A2; the explainer's mode is A3.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
@@ -67,6 +67,8 @@ class Message(BaseModel):
     faithfulness: float
     leaks: list[str] = Field(default_factory=list)
     rejected_claims: int = 0
+    facts: list[dict] = Field(default_factory=list)  # {id, text}: what the explanation may use
+    claims: list[dict] = Field(default_factory=list)  # {text, facts, supported}: what it said
 
 
 class Reply(BaseModel):
@@ -147,6 +149,7 @@ class Outcome:
     notices: dict[str, list[str]] = field(default_factory=dict)
     escalation: EscalationBrief | None = None
     trace: list[str] = field(default_factory=list)
+    mus_log: list[list[str]] = field(default_factory=list)  # the MUS found in each round
 
     @property
     def valid(self) -> bool:
@@ -192,6 +195,9 @@ class Negotiator:
         relaxable_tiers: Iterable[Tier] = DEFAULT_RELAXABLE,
         use_ledger: bool = True,
         time_limit: float = 20.0,
+        listener: Callable[[str, dict], None] | None = None,
+        mcs_limit: int | None = None,
+        presolve: bool = True,
     ) -> None:
         if option_source == "llm" and option_client is None:
             raise ValueError("LLM-invented options need option_client")
@@ -209,13 +215,20 @@ class Negotiator:
         self.relaxable = frozenset(relaxable_tiers)
         self.use_ledger = use_ledger
         self.time_limit = time_limit
+        self.listener = listener  # called with (event, data) as negotiation proceeds
+        self.mcs_limit = mcs_limit  # correction sets enumerated per round (default k + 2)
+        self.presolve = presolve
         self.stakeholders = sorted({s.faculty for s in instance.sessions})  # people who teach
+
+    def _emit(self, kind: str, **data) -> None:
+        if self.listener is not None:
+            self.listener(kind, data)
 
     # -- helpers ---------------------------------------------------------------
 
     def _solver(self, cons: Mapping[str, Constraint], week, baseline) -> TimetableSolver:
         return TimetableSolver(self.instance, cons.values(), week=week, baseline=baseline,
-                               time_limit=self.time_limit)
+                               time_limit=self.time_limit, presolve=self.presolve)
 
     def _conceded(self, c: Constraint, assignment: Mapping[str, Placement]) -> dict[str, Placement]:
         """Sessions whose placement in ``assignment`` breaks ``c``."""
@@ -291,34 +304,54 @@ class Negotiator:
                 f"asked {m.to}: {r.decision}" for m, r in zip(out.messages, out.replies, strict=False)))
         out.status, out.step = "escalated", 4
         out.escalation = EscalationBrief(to=to, reason=reason, text="\n".join(lines))
+        self._emit("escalated", to=to, reason=reason)
         out.constraints = list(cons.values())
         return out
 
     # -- options -----------------------------------------------------------------
 
     def _mcs_offers(self, solver: TimetableSolver, cons, baseline, keep, week,
-                    exclude: Mapping[str, set[tuple[str, int]]]) -> list[tuple[str, Offer]]:
+                    exclude: Mapping[str, set[tuple[str, int]]], responders) -> tuple[str, list[Offer]] | None:
+        """Rank the minimal correction sets by cost, pick whom to ask (the
+        owner of the cheapest; lowest fairness credit on ties), and only then
+        compute 2-3 alternatives for that person's options, so no solver time
+        goes to alternatives nobody is shown."""
         costs = self.priority.int_scores(cons.values())
-        options = enumerate_mcs(solver, relaxable_tiers=self.relaxable, costs=costs, limit=2 * self.k + 2,
-                                keep=keep)
+        options = enumerate_mcs(solver, relaxable_tiers=self.relaxable, costs=costs,
+                                limit=self.mcs_limit or self.k + 2, keep=keep)
         ranked = []
         for o in options:
             owners = {cons[i].owner for i in o.drop}
             if len(owners) != 1 or None in owners or not o.witness.ok:
                 continue
             owner = owners.pop()
+            if owner not in responders:
+                continue
             placements: dict[str, Placement] = {}
             for i in o.drop:
                 placements |= self._conceded(cons[i], o.witness.assignment)
             moved = self._moved(o.witness.assignment, baseline)
             cost = self.priority.option_cost([cons[i] for i in o.drop], moved, self.stakeholders)
-            for alt, alt_moved in self._alternatives(cons, o.drop, placements, moved, week, baseline, exclude):
-                ranked.append((owner, Offer(key="", drop=o.drop, placements=alt, cost=cost, moved=alt_moved)))
+            ranked.append((owner, Offer(key="", drop=o.drop, placements=placements, cost=cost, moved=moved)))
+        if not ranked:
+            return None
         ranked.sort(key=lambda x: (round(x[1].cost, 6), self._credit(x[0]), x[0], x[1].moved))
-        return ranked
+        target = ranked[0][0]
+        self._emit("options", correction_sets=len(ranked), target=target,
+                   costs=[round(o.cost, 3) for _, o in ranked])
+        offers: list[Offer] = []
+        for owner, base in ranked:
+            if owner != target:
+                continue
+            for alt, alt_moved in self._alternatives(cons, base.drop, base.placements, base.moved, week, baseline,
+                                                     exclude, want=self.k - len(offers)):
+                offers.append(base.model_copy(update={"placements": alt, "moved": alt_moved}))
+            if len(offers) >= self.k:
+                break
+        return (target, offers[: self.k]) if offers else None
 
     def _alternatives(self, cons, drop, first: dict[str, Placement], moved: int, week, baseline,
-                      exclude: Mapping[str, set[tuple[str, int]]]):
+                      exclude: Mapping[str, set[tuple[str, int]]], want: int | None = None):
         """Up to ``k`` distinct solver-verified placements for the conceded
         sessions: re-solve with earlier alternatives (and anything already
         offered and declined) forbidden, preferring the times of day
@@ -343,16 +376,17 @@ class Negotiator:
         for sid in first:
             for day, slot in exclude.get(sid, ()):
                 forbid(sid, day, slot)
+        want = self.k if want is None else want
         alts = []
         if not any((p.day, p.slot) in exclude.get(sid, ()) for sid, p in first.items()):
             alts.append((first, moved))
-        for _ in range(self.k + 1):
-            if len(alts) >= self.k:
+        for _ in range(want + 1):
+            if len(alts) >= want:
                 break
             for sid, p in (alts[-1][0].items() if alts else ()):
                 forbid(sid, p.day, p.slot)
             res = TimetableSolver(self.instance, [*base, *extra.values()], week=week, baseline=baseline,
-                                  time_limit=self.time_limit).solve()
+                                  time_limit=self.time_limit, presolve=self.presolve).solve()
             if not res.ok:
                 break
             alts.append(({sid: res.assignment[sid] for sid in first}, self._moved(res.assignment, baseline)))
@@ -402,12 +436,13 @@ class Negotiator:
                 return self._finish(out, cons, solver)
             mus = find_mus(solver)
             out.trace.append(f"round {out.rounds}: MUS {mus}")
+            out.mus_log.append(list(mus))
+            self._emit("conflict", round=out.rounds + 1, mus=list(mus))
             if out.rounds >= self.max_rounds:
                 return self._escalate(out, cons, mus, "no agreement within the round limit")
             if self.option_source == "mcs":
-                ranked = [x for x in self._mcs_offers(solver, cons, baseline, keep, week, declined)
-                          if x[0] in responders]
-                if not ranked:
+                picked = self._mcs_offers(solver, cons, baseline, keep, week, declined, responders)
+                if picked is None:
                     relaxable = [i for i in mus if cons[i].tier in self.relaxable]
                     if relaxable and all(i in keep for i in relaxable):
                         reason = "deadlock: every owner asked declined"
@@ -416,8 +451,7 @@ class Negotiator:
                     else:
                         reason = "no option a single owner can accept"
                     return self._escalate(out, cons, mus, reason)
-                target = ranked[0][0]
-                offers = [o for owner, o in ranked if owner == target][: self.k]
+                target, offers = picked
             else:
                 owners = sorted({cons[i].owner for i in mus if cons[i].owner in responders and i not in keep},
                                 key=lambda o: (min(self.priority.score(cons[i]) for i in mus if cons[i].owner == o),
@@ -433,6 +467,7 @@ class Negotiator:
             for key, o in zip("ABCDEFG", offers, strict=False):
                 o.key = key
             message = self._message(out.rounds + 1, target, cons, mus, offers, private, raw_requests or {})
+            self._emit("message", message=message.model_dump())
             reply = responders[target].respond(message)
             if reply.decision is None:
                 if self.reply_parser is None:
@@ -440,6 +475,7 @@ class Negotiator:
                 reply = self.reply_parser.parse(message, reply.text)
             out.messages.append(message)
             out.replies.append(reply)
+            self._emit("reply", to=target, reply=reply.model_dump(exclude_none=True))
             out.rounds += 1
             chosen = next((o for o in offers if o.key == (reply.choice or "").strip().upper()), None)
             if reply.decision == "accept" and chosen is not None:
@@ -494,5 +530,7 @@ class Negotiator:
                 for s, p in sorted(o.placements.items())))
         lines.append("Reply with a letter, or tell us which days and times would work for you.")
         return Message(round=rnd, to=target, mus=list(mus), offers=offers, text="\n".join(lines),
+                       facts=[{"id": f.id, "text": f.text} for f in facts],
+                       claims=[{"text": t, "facts": ids, "supported": ok} for t, ids, ok in exp.claims],
                        explanation_mode=exp.mode, faithfulness=exp.faithfulness, leaks=exp.leaks,
                        rejected_claims=exp.rejected)

@@ -54,6 +54,8 @@ def world():
         "cancel": ParseOutput(request_type="preference", action="compile",
                               constraints=[to_draft(by_req["R-A"][1])]),
         "lunch": ParseOutput(request_type="policy_question", action="answer"),
+        "CHANGE-A": ParseOutput(request_type="room_issue", action="compile", constraints=[
+            to_draft(by_req["R-A"][1]).model_copy(update={"days": ["Fri" if by_req["R-A"][1].when.days != ["Fri"] else "Mon"]})]),
     }
     store = Store()
     neg = Negotiator(sc.instance, priority=PriorityModel(sc.instance), explainer=Explainer(sc.instance),
@@ -154,3 +156,14 @@ def test_portal_api(world):
     assert client.get("/timetable").json()["version"] == 2
     assert client.post("/requests", json={"text": "x"}, headers={"X-User": "nobody"}).status_code == 403
     assert client.get("/").status_code == 200
+
+
+def test_a_newer_request_replaces_the_owners_earlier_constraint(world):
+    _, orch, store, owners = world
+    orch.submit(req("R-6", owners["R-A"], "REQUEST-A"))
+    orch.approve("R-6", "C-TT")
+    c = orch.submit(req("R-7", owners["R-A"], "CHANGE-A"))
+    compiled = next(e for e in store.events("R-7") if e["kind"] == "compiled")
+    assert compiled["superseded"] and c.outcome.rounds == 0  # no negotiation with oneself
+    active = {x.id for x in store.constraints()}
+    assert not set(compiled["superseded"]) & active

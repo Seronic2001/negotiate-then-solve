@@ -181,6 +181,7 @@ class TimetableSolver:
         workers: int = 8,
         seed: int = 0,
         disruption_weight: int = 1,
+        presolve: bool = True,
     ) -> None:
         active = [c for c in constraints if c.active_in(week)]
         ids = [c.id for c in active]
@@ -195,6 +196,9 @@ class TimetableSolver:
         self.workers = workers
         self.seed = seed
         self.disruption_weight = disruption_weight
+        # CP-SAT presolve dominates on department-size models (about 2 of 3 s
+        # per feasibility check); interactive use turns it off.
+        self.presolve = presolve
         self._feas: _Model | None = None
 
     # -- building and running -------------------------------------------------
@@ -209,6 +213,7 @@ class TimetableSolver:
         solver.parameters.max_time_in_seconds = self.time_limit
         solver.parameters.num_workers = self.workers
         solver.parameters.random_seed = self.seed
+        solver.parameters.cp_model_presolve = self.presolve
         status = solver.solve(m.model)
         if status == cp_model.MODEL_INVALID:
             raise RuntimeError(m.model.validate())

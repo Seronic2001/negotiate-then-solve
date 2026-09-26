@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.6",
     "python-dotenv>=1.2.3",
     "scikit-learn>=1.9.1",
+    "uvicorn>=0.30",
 ]
 
 [dependency-groups]
@@ -31,3 +32,6 @@ testpaths = ["tests"]
 markers = [
     "slow: department-size solves (deselect with -m 'not slow')",
 ]
+
+[project.scripts]
+nts-web = "nts.web:run"

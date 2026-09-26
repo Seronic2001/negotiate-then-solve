@@ -18,7 +18,8 @@ Safety properties enforced here, not by any model:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import time
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
 from .corpus import ExpectedAction
@@ -52,6 +53,8 @@ class Case:
     fairness: dict = field(default_factory=dict)
     reply: str = ""
     notices: dict[str, str] = field(default_factory=dict)
+    routing: dict = field(default_factory=dict)  # System One decision, when routing is on
+    timings: dict[str, float] = field(default_factory=dict)  # seconds per stage
 
     @property
     def id(self) -> str:
@@ -77,6 +80,7 @@ class Orchestrator:
         responders: Mapping[str, Responder] | None = None,
         approvers: Iterable[str] = ("C-TT",),
         semester: str = "current",
+        negotiator_factory: Callable[[], Negotiator] | None = None,
     ) -> None:
         self.instance = instance
         self.store = store
@@ -89,6 +93,7 @@ class Orchestrator:
         self.responders = dict(responders or {})
         self.approvers = set(approvers)
         self.semester = semester
+        self.negotiator_factory = negotiator_factory
         self.cases: dict[str, Case] = {}
 
     # -- setup -------------------------------------------------------------------
@@ -115,9 +120,13 @@ class Orchestrator:
 
     def _parse(self, case: Case) -> ParseResult:
         r = case.request
-        if self.system_one is not None and self.fast_parser is not None:
+        if self.system_one is not None:
             d = self.system_one.decide(r)
-            if d.fast_path(self.tau):
+            fast = d.fast_path(self.tau) and self.fast_parser is not None
+            case.routing = {"request_type": d.request_type.value, "type_p": round(d.type_p, 4),
+                            "action": d.action.value, "action_p": round(d.action_p, 4),
+                            "tau": self.tau, "fast_path": fast, "latency_ms": round(d.latency_ms, 2)}
+            if fast:
                 case.route = "fast"
                 return self.fast_parser.parse(r)
         case.route = "system_two"
@@ -130,8 +139,11 @@ class Orchestrator:
             self.store.add_request(request)
         self.store.log(case.id, "received", channel=request.channel.value, sender=request.sender_id)
 
+        t = time.perf_counter()
         case.parse = self._parse(case)
-        self._advance(case, S.CLASSIFIED, route=case.route, action=case.parse.action.value)
+        case.timings["parse"] = time.perf_counter() - t
+        self._advance(case, S.CLASSIFIED, route=case.route, action=case.parse.action.value,
+                      routing=case.routing, seconds=round(case.timings["parse"], 3))
         action = case.parse.action
 
         if action == ExpectedAction.REFUSE:
@@ -155,7 +167,9 @@ class Orchestrator:
 
         # compile or clarify: check policy first
         if self.policy is not None and action == ExpectedAction.COMPILE:
+            t = time.perf_counter()
             case.policy = self.policy.review(request.raw_text, case.parse)
+            case.timings["policy"] = time.perf_counter() - t
         self._advance(case, S.POLICY_CHECKED,
                       verdict=case.policy.verdict.value if case.policy else "not_checked")
         if action == ExpectedAction.CLARIFY:
@@ -175,10 +189,27 @@ class Orchestrator:
             return case
 
         case.constraints = case.parse.constraints
+        superseded = self._supersede(case)
         self.store.add_constraints(case.constraints, request_id=case.id)
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
-                      obligations=case.policy.obligations if case.policy else [])
+                      obligations=case.policy.obligations if case.policy else [], superseded=superseded)
         return self._solve(case)
+
+    def _supersede(self, case: Case) -> list[str]:
+        """A newer request from the same owner replaces their earlier active
+        constraint of the same type, tier and scope ("actually, Friday
+        instead of Tuesday"), instead of conflicting with it."""
+        out = []
+        for old in self.store.constraints():
+            if old.source.request == case.id:
+                continue
+            for c in case.constraints:
+                if (old.owner and old.owner == c.owner and old.type == c.type and old.tier == c.tier
+                        and old.scope == c.scope and old.when.weeks == c.when.weeks):
+                    self.store.set_active(old.id, False)
+                    out.append(old.id)
+                    break
+        return out
 
     def _solve(self, case: Case) -> Case:
         weeks = sorted({w for c in case.constraints for w in (c.when.weeks or [])})
@@ -186,13 +217,26 @@ class Orchestrator:
         base = self.store.current_version(week) or self.store.current_version()
         baseline = base.assignment if base else None
         ledger = ConcessionLedger(self.store.ledger())
-        self.negotiator.ledger = ledger
-        self.negotiator.priority.ledger = ledger
-        self.negotiator.priority.baseline = dict(baseline or {})
-        outcome = self.negotiator.resolve(self.store.constraints(), self.responders, baseline=baseline, week=week)
+        neg = self.negotiator_factory() if self.negotiator_factory else self.negotiator
+        neg.ledger = ledger
+        neg.priority.ledger = ledger
+        neg.priority.baseline = dict(baseline or {})
+
+        def on_event(kind: str, data: dict) -> None:
+            if kind == "message" and case.status == S.COMPILED:
+                self._advance(case, S.SOLVED, feasible=False)
+                self._advance(case, S.NEGOTIATING)
+            self.store.log(case.id, f"negotiation_{kind}", **data)
+
+        neg.listener = on_event
+        t = time.perf_counter()
+        outcome = neg.resolve(self.store.constraints(), self.responders, baseline=baseline, week=week)
+        case.timings["solve_and_negotiate"] = time.perf_counter() - t
         case.outcome = outcome
-        self._advance(case, S.SOLVED, feasible=outcome.rounds == 0 and outcome.status == "feasible")
-        if outcome.status != "feasible":
+        if case.status == S.COMPILED:
+            self._advance(case, S.SOLVED, feasible=outcome.status == "feasible",
+                          solver_seconds=round(outcome.result.wall_time, 3) if outcome.result else None)
+        if outcome.status != "feasible" and case.status == S.SOLVED:
             self._advance(case, S.NEGOTIATING, rounds=outcome.rounds)
         if outcome.status == "escalated":
             case.reply = "Your request conflicts with others and has been escalated for a decision."

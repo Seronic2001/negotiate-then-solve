@@ -22,7 +22,7 @@ uv sync                       # create .venv and install dependencies
 uv run pytest -m "not slow"   # fast tests (< 1 min)
 uv run pytest                 # includes a full department-size solve
 uv run python -m nts.demo     # generate a department, solve it, run UC3
-uv run uvicorn nts.api:demo_app --factory   # portal on http://127.0.0.1:8000 (no API key)
+uv run nts-web                # web app on http://127.0.0.1:8000 (build the frontend first, see below)
 ```
 
 ## Layout
@@ -217,6 +217,9 @@ silently breaking requesters' hard constraints.
 | `nts/graph.py` | §8.8 | NetworkX knowledge graph: owns, references, has_authority_over, reports_to, derived_from, conflicts_with, affects, balance |
 | `nts/ingest.py` | L0 | Email (RFC 822, IMAP poller), messaging (Slack-shaped JSON) and portal adapters; email → person → role; unknown senders rejected; quoted replies stripped; threading |
 | `nts/api.py` | L0, L6 | FastAPI portal: submit, case status and trace, approval queue, approve/reject (coordinator only), published timetable; the `X-User` header stands in for SSO |
+| `nts/web.py` | all | JSON API for the React front end over the full pipeline; inboxes for interactive negotiation |
+| `nts/rule_parser.py` | L2 | Offline rule-based parser (same output and post-processing as System Two) |
+| `frontend/` | L0, L6 | React 19 + TypeScript + Tailwind 4 + Framer Motion; Recharts, d3-force |
 
 ## Safety (proposal §13)
 
@@ -229,6 +232,55 @@ unapproved publishes, 0 authority violations, 0 injection successes and 0
 leaks. The one failure is an "I approve, publish it" email from the HoD: the
 fooled parser's constraint is within the HoD's authority, so it is created,
 but it still only reaches "awaiting approval".
+
+## Web app (React + TypeScript front end, FastAPI back end)
+
+```sh
+cd frontend && npm install && npm run build && cd ..
+uv run nts-web                       # API + built UI on http://127.0.0.1:8000
+NTS_PARSER=gemini uv run nts-web     # System Two + policy agent on Gemini instead of offline rules
+
+cd frontend && npm run dev           # hot-reloading UI on :5173, /api proxied to :8000
+```
+
+`nts/web.py` runs the real pipeline on a demo CSE department (8 faculty, 56
+sessions) and replays a short history at start-up through it: a conference
+absence, preferences, a lab contention that is negotiated, a student's
+injection attempt (refused), a lunch-slot request (denied with a citation), a
+vague request (clarification), a policy question (answered) and a lab outage
+that only Tier 0-2 changes could fix (escalated). Requests run in background
+threads and the UI follows them through the event log.
+
+- **Auth is mocked.** Sign in by picking a person; the client sends `X-User`.
+  Every permission is enforced server-side (only the coordinator approves,
+  people see their own cases, replies only from the addressee). `?as=F-101`
+  on any URL signs in directly, for demos and screenshots.
+- **Negotiation is interactive.** When the negotiator needs someone's answer,
+  the message waits in that person's inbox (accept an option, counter with
+  days and times, or decline). "Let the simulator answer" and per-person
+  autopilot let one person demo both sides; unanswered messages escalate at
+  the deadline (`NTS_REPLY_DEADLINE`, default 900 s).
+- **Offline by default.** Without an API key, `nts/rule_parser.py` (a
+  rule-based stand-in for System Two: 94% action accuracy and 83% compiled
+  constraints on the paraphrased test split, vs Gemini's 100% on validation)
+  and `RulePolicyAgent` (real BM25 retrieval, rule-based verdicts) keep every
+  downstream layer real.
+- A newer request from the same person replaces their earlier constraint on
+  the same class ("superseded"), instead of negotiating with themselves.
+- The web negotiator disables CP-SAT presolve (it is about 2 of 3 seconds per
+  feasibility check at this size) and ranks correction sets before computing
+  alternatives, so a negotiation round takes about 15-20 s and a direct repair
+  about 3 s. The research runs keep the defaults.
+
+Views: sign-in (persona picker), overview with live activity, new request
+with a live lifecycle, requests, case audit (routing, parse, policy with
+retrieved/cited rules, the MUS per round, the negotiation thread, claim-to-fact
+explanation grounding, diff, fairness, event trace), negotiation inbox,
+approvals (coordinator), timetable with versions and rollback, fairness
+ledger, handbook with a retrieval playground, how decisions work (tiers,
+weights, ladder, safety rules), knowledge graph, observability (LLM quota,
+stage latency, routing, faithfulness, safety counters, event stream) and
+experiments (results from `runs/`). Dark and light themes; Ctrl+K palette.
 
 ## Key conventions
 
