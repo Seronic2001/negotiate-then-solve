@@ -118,10 +118,14 @@ chat examples (short system prompt, compact directory, message) with the gold
 those are decided after parsing. Templated and paraphrased versions of a
 request share a split.
 
-`notebooks/train_compiler_kaggle.ipynb` trains it on a Kaggle T4: 16-bit LoRA
-on Qwen3.5-4B (Unsloth advises against QLoRA for Qwen3.5), fp16, loss on the
-answer only, then exports GGUF (Q5_K_M, about 3.1 GB) for llama.cpp on a 6 GB
-laptop GPU. Run it with `TRIAL = True` first.
+`notebooks/train_compiler_kaggle.ipynb` trains it on a Kaggle T4 with LoRA
+(Unsloth advises against QLoRA for Qwen3.5), loss on the answer only, then
+exports GGUF for llama.cpp on a 6 GB laptop GPU. On a T4, Unsloth runs
+Qwen3.5 in float32 (no bf16, and fp16 hits a dtype mismatch), where the 4B
+model needs about 18 GB and runs out of memory; the notebook therefore
+defaults to **Qwen3.5-2B**. For 4B, use a GPU with bf16 or set
+`load_in_4bit = True` (QLoRA, with Unsloth's caveat). Run it with
+`TRIAL = True` first.
 
 Evaluate the downloaded model locally with the same harness as Gemini:
 
