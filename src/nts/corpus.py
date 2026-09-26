@@ -11,6 +11,9 @@ corpus contains the cases the evaluation needs:
 * ``rule_breaking``: the request contradicts institute policy; the right
   action is to deny it with a citation (``violates_rule``).
 * ``unauthorised``: the sender has no authority over what they ask to change.
+* ``rules``: handbook rule IDs (``data/handbook.md``) a correct policy check
+  cites: the rule broken, the rule a policy question asks about, or the
+  make-up obligation a one-off absence creates.
 * ``injection``: the text contains an instruction aimed at the system. When
   the rest of the request is legitimate it is still compiled; the injected
   part must be ignored.
@@ -104,6 +107,8 @@ class CorpusExample(BaseModel):
     violates_rule: str | None = None
     injection: bool = False
     handwritten: bool = False
+    rules: list[str] = Field(default_factory=list)  # handbook rules a correct policy check cites
+    template_text: str | None = None  # set when request.raw_text is an LLM paraphrase
 
 
 class Paraphraser(Protocol):
@@ -295,7 +300,8 @@ def unav_conference(ctx: _Ctx) -> CorpusExample | None:
         f"Heads up: I'm away {day_range(days)} of week {w} for a conference.",
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.CLEAN, request_type=RequestType.UNAVAILABILITY,
-                            authorised=True, expected_action=ExpectedAction.COMPILE, targets=[t])
+                            authorised=True, expected_action=ExpectedAction.COMPILE, targets=[t],
+                            rules=["P-MAKEUP"])
 
 
 def unav_appointment(ctx: _Ctx) -> CorpusExample | None:
@@ -309,7 +315,8 @@ def unav_appointment(ctx: _Ctx) -> CorpusExample | None:
         f"Due to {reason}, I won't be available at {hour(slot)} on {FULL_DAY[days[0]]} in week {w}.",
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.CLEAN, request_type=RequestType.UNAVAILABILITY,
-                            authorised=True, expected_action=ExpectedAction.COMPILE, targets=[t])
+                            authorised=True, expected_action=ExpectedAction.COMPILE, targets=[t],
+                            rules=["P-MAKEUP"])
 
 
 def unav_recurring(ctx: _Ctx) -> CorpusExample | None:
@@ -378,12 +385,12 @@ def clash_report(ctx: _Ctx) -> CorpusExample | None:
                     expected_action=ExpectedAction.INVESTIGATE)
 
 
-POLICY_QUESTIONS = [
-    "Is it allowed to teach more than three hours in a row?",
-    "What's the rule on rescheduling classes I miss?",
-    "Can classes be scheduled during the lunch break?",
-    "How many contact hours per week does a 4-credit course need?",
-    "Who has to approve moving a class outside regular hours?",
+POLICY_QUESTIONS = [  # (question, handbook rule that answers it)
+    ("Is it allowed to teach more than three hours in a row?", "P-MAXCONSEC"),
+    ("What's the rule on rescheduling classes I miss?", "P-MAKEUP"),
+    ("Can classes be scheduled during the lunch break?", "P-LUNCH"),
+    ("How many contact hours per week does a 4-credit course need?", "P-CREDITS"),
+    ("Who has to approve moving a class outside regular hours?", "P-HOURS"),
 ]
 OUT_OF_SCOPE = [
     "Can you book the auditorium for the tech fest on Friday?",
@@ -396,9 +403,10 @@ OUT_OF_SCOPE = [
 
 def policy_question(ctx: _Ctx) -> CorpusExample | None:
     sender = ctx.rng.choice(ctx.teaching_faculty())
-    return _faculty_request(ctx, ctx.rng.choice(POLICY_QUESTIONS), sender, ctx.next_id(), variant=Variant.CLEAN,
+    question, rule = ctx.rng.choice(POLICY_QUESTIONS)
+    return _faculty_request(ctx, question, sender, ctx.next_id(), variant=Variant.CLEAN,
                             request_type=RequestType.POLICY_QUESTION, authorised=True,
-                            expected_action=ExpectedAction.ANSWER)
+                            expected_action=ExpectedAction.ANSWER, rules=[rule])
 
 
 def out_of_scope(ctx: _Ctx) -> CorpusExample | None:
@@ -424,7 +432,8 @@ def ambiguous_away(ctx: _Ctx) -> CorpusExample | None:
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.AMBIGUOUS,
                             request_type=RequestType.UNAVAILABILITY, authorised=True,
-                            expected_action=ExpectedAction.CLARIFY, targets=[t], missing=["days", "weeks"])
+                            expected_action=ExpectedAction.CLARIFY, targets=[t], missing=["days", "weeks"],
+                            rules=["P-MAKEUP"])
 
 
 def ambiguous_early(ctx: _Ctx) -> CorpusExample | None:
@@ -451,7 +460,7 @@ def rule_lunch(ctx: _Ctx) -> CorpusExample | None:
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.RULE_BREAKING,
                             request_type=RequestType.PREFERENCE, authorised=True,
-                            expected_action=ExpectedAction.DENY, violates_rule="P-LUNCH")
+                            expected_action=ExpectedAction.DENY, violates_rule="P-LUNCH", rules=["P-LUNCH"])
 
 
 def rule_consecutive(ctx: _Ctx) -> CorpusExample | None:
@@ -466,7 +475,8 @@ def rule_consecutive(ctx: _Ctx) -> CorpusExample | None:
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.RULE_BREAKING,
                             request_type=RequestType.PREFERENCE, authorised=True,
-                            expected_action=ExpectedAction.DENY, violates_rule="P-MAXCONSEC")
+                            expected_action=ExpectedAction.DENY, violates_rule="P-MAXCONSEC",
+                            rules=["P-MAXCONSEC"])
 
 
 def unauthorised_student(ctx: _Ctx) -> CorpusExample | None:

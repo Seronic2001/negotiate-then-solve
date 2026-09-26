@@ -63,6 +63,44 @@ and a run stopped by the daily budget resumes the next day where it stopped.
 | `nts/system_one.py` | §8.2 | Calibrated TF-IDF + logistic regression: request type, action, confidence, fast-path routing with τ |
 | `nts/metrics.py` | Table 11 | ECE, constraint exact match, atom-level P/R/F1 |
 | `nts/eval_parsing.py` | §12 | `uv run python -m nts.eval_parsing --limit 40` |
+| `nts/paraphrase.py` | §12.1 | Rewrites the corpus in varied registers with the simulator model; a rule-based check rejects paraphrases that change days, numbers or names |
+
+**Paraphrased corpus.** `uv run python -m nts.paraphrase` writes
+`data/requests-para.jsonl`: the same 600 requests and labels, with each text
+rewritten (10 per call, about 60 calls) and the template kept in
+`template_text`. Injected instructions are cut off before paraphrasing and put
+back verbatim. Paraphrases that change a day, number, person, room, group or
+course are retried in another style. The check cannot see a wish turning into
+a demand, so read a sample by hand. Evaluate on it with
+`--corpus data/requests-para.jsonl`; add `--s1-train data/requests.jsonl` to
+train System One on templates and test it on paraphrases.
+
+## Policy agent
+
+`nts/policy.py` checks a parsed request against the handbook
+(`data/handbook.md`, **a synthetic stand-in**: replace it with the
+institute's handbook, one `## <number> <title> [RULE-ID]` heading per rule).
+
+1. BM25 retrieves the top 5 rules. Clock times are normalised ("1pm" and
+   "13:00" match), and the query is extended with what the parse implies
+   (a one-off absence adds "make-up", a run of more hours than the limit adds
+   "consecutive").
+2. The LLM returns `allowed`, `needs_approval` or `forbidden`, cited rules,
+   obligations (e.g. a make-up class), an explanation and a compliant
+   alternative; for policy questions, an answer.
+3. Deterministic checks: citations must be among the rules shown, and a
+   denial without a valid citation becomes `needs_approval`, so nothing is
+   denied without the rule it breaks.
+
+`uv run python -m nts.eval_policy --split val` scores allow/deny accuracy,
+citations, make-up obligations and retrieval recall against the corpus
+`rules` labels. Use `--policy-model gemini-3.1-flash-lite` for development
+when the agent model's daily quota is spent.
+
+| Module | Proposal | What it does |
+|---|---|---|
+| `nts/policy.py` | L3, UC2, UC4 | Handbook loader, BM25, policy agent with citation checks |
+| `nts/eval_policy.py` | Table 11 (RAG) | Parse-then-policy evaluation |
 
 ## Data
 
@@ -78,7 +116,9 @@ against in `data/synthetic-cse-s0.json`. Each line is a `CorpusExample`:
   examples these are the true constraints behind the vague text, so a
   stakeholder simulator can answer the clarifying question;
 - `missing`, `violates_rule`, `injection`: labels for ambiguous,
-  rule-breaking and prompt-injection cases.
+  rule-breaking and prompt-injection cases;
+- `rules`: handbook rules a correct policy check cites (the rule broken, the
+  rule a policy question asks about, or P-MAKEUP for a one-off absence).
 
 **Hand-written requests** (the proposal's 100 team-written examples) go in
 `data/handwritten.jsonl` in the same format with `"handwritten": true`.
@@ -109,7 +149,7 @@ stability are not modelled.
 
 ## Next steps (proposal timeline)
 
-- Weeks 3–4 (remaining): LLM paraphrasing of the corpus (`Paraphraser` hook);
-  100 hand-written requests checked by two annotators; swap requests.
-- Weeks 5–6: parsing layer (System One routing, QLoRA compiler, Gemini Flash System Two); policy RAG.
+- Weeks 3–4 (remaining): 100 hand-written requests checked by two annotators; swap requests.
+- Weeks 5–6 (remaining): QLoRA compiler; the institute's real handbook; a dense
+  retriever for the BM25 + embedding hybrid.
 - Weeks 7–8: priority scores π_k, resolution ladder, concession ledger, grounded explainer.

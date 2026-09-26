@@ -1,0 +1,58 @@
+{
+ "model": "gemini-3.1-flash-lite",
+ "n": 600,
+ "paraphrased": 600,
+ "kept_template": [],
+ "rejections": {},
+ "rejection_log": [
+  {
+   "id": "R-0003",
+   "round": 1,
+   "text": "can u stick my classes to mon-thurs only? thanks.",
+   "problems": [
+    "days ['mon', 'thu', 'tue', 'wed'] -> ['mon', 'thu']"
+   ]
+  },
+  {
+   "id": "R-0070",
+   "round": 1,
+   "text": "is teaching more than 3 hours in a row allowed?",
+   "problems": [
+    "numbers [] -> ['3']"
+   ]
+  },
+  {
+   "id": "R-0369",
+   "round": 1,
+   "text": "Hi, I'd prefer no classes before 10 am on Tuesdsay. Thanks.",
+   "problems": [
+    "days ['tue'] -> []"
+   ]
+  },
+  {
+   "id": "R-0380",
+   "round": 1,
+   "text": "Kindly note that I have clinical duty every Tuesday morning this semester, and thus I am unable to teach at that time. Please do the needful. Regards, Dr. Pillai",
+   "problems": [
+    "days ['tue'] -> ['thu', 'tue']"
+   ]
+  },
+  {
+   "id": "R-0553",
+   "round": 1,
+   "text": "Dear Timetable Office, I am writing to request a booking for the auditorium for the tech fest this coming Friday. Thank you for your assistance with this. Sincerely, Dr. Khan",
+   "problems": [
+    "entities [] -> ['dr khan']"
+   ]
+  }
+ ],
+ "stopped": null,
+ "usage": {
+  "calls": 1,
+  "cache_hits": 60,
+  "retries": 0,
+  "prompt_tokens": 484,
+  "output_tokens": 246,
+  "last_retry_reason": ""
+ }
+}

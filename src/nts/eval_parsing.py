@@ -30,8 +30,11 @@ from .parsing import SystemTwoParser
 from .system_one import SystemOne, tune_tau
 
 
-def eval_system_one(corpus: list[CorpusExample]) -> dict:
-    split = {s: [ex for ex in corpus if ex.split == s] for s in ("train", "val", "test")}
+def eval_system_one(corpus: list[CorpusExample], train_corpus: list[CorpusExample] | None = None) -> dict:
+    """Train/val come from ``train_corpus`` (default: ``corpus``), test from ``corpus``."""
+    source = train_corpus or corpus
+    split = {s: [ex for ex in source if ex.split == s] for s in ("train", "val")}
+    split["test"] = [ex for ex in corpus if ex.split == "test"]
     model = SystemOne().fit(split["train"])
     tau = tune_tau([model.decide(ex.request) for ex in split["val"]], split["val"])
     decisions = [model.decide(ex.request) for ex in split["test"]]
@@ -135,6 +138,8 @@ def eval_system_two(
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", type=Path, default=Path("data/requests.jsonl"))
+    ap.add_argument("--s1-train", type=Path, default=None,
+                    help="train System One on this corpus's train/val splits (default: --corpus)")
     ap.add_argument("--instance", type=Path, default=Path("data/synthetic-cse-s0.json"))
     ap.add_argument("--limit", type=int, default=40, help="requests sent to System Two")
     ap.add_argument("--workers", type=int, default=4, help="requests in flight at once (RPM still enforced)")
@@ -147,7 +152,9 @@ def main() -> None:
 
     instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
     corpus = load_jsonl(args.corpus, instance)
-    report: dict = {"corpus": str(args.corpus), "system_one": eval_system_one(corpus)}
+    s1_train = load_jsonl(args.s1_train, instance) if args.s1_train else None
+    report: dict = {"corpus": str(args.corpus), "s1_train": str(args.s1_train or args.corpus),
+                    "system_one": eval_system_one(corpus, s1_train)}
     print("System One:", json.dumps(report["system_one"], indent=1))
     if not args.skip_llm:
         client = GeminiClient(args.model)
