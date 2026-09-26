@@ -32,6 +32,38 @@ uv run python -m nts.demo     # generate a department, solve it, run UC3
 | `nts/itc.py` | §12.1 | ITC-2007 Track 3 `.ctt` loader and `.sol` writer |
 | `nts/corpus.py` | §12.1 | Request corpus generator with labels; JSONL load/save |
 
+## Parsing layer and Gemini
+
+Put the key in `.env` (git-ignored):
+
+```sh
+GEMINI_API_KEY=...
+# optional overrides (defaults are pinned in nts/llm.py)
+GEMINI_MODEL=gemini-3.5-flash-lite       # agent: System Two parser, negotiator
+GEMINI_SIM_MODEL=gemini-3.1-flash-lite   # stakeholder simulators, LLM judge
+GEMINI_FLASH_MODEL=gemini-3.8-flash      # larger-model comparison set
+GEMINI_RPM=15     # requests per minute
+GEMINI_RPD=500    # requests per day; the client stops cleanly at this budget
+```
+
+Free-tier quotas are per model per day (AI Studio, Sep 2026): Flash-Lite
+models 15 RPM / 500 RPD each; Flash models 5 RPM / **20 RPD** each. Bulk runs
+therefore use the two Flash-Lite models, which have separate quotas, and
+Flash is kept for a small comparison set. A daily-quota 429 stops a run
+immediately; rerun the next day and the cache resumes it.
+
+`nts/llm.py` caches every response under `runs/llm_cache/` (keyed by model,
+prompts, schema and temperature), so rerunning an experiment costs no quota,
+and a run stopped by the daily budget resumes the next day where it stopped.
+
+| Module | Proposal | What it does |
+|---|---|---|
+| `nts/llm.py` | §14 | Gemini client: structured output, cache, RPM limiter, daily budget, 429 backoff |
+| `nts/parsing.py` | §8.2 | System Two parser. The LLM drafts; tiers (Table 5), authority and validation are deterministic |
+| `nts/system_one.py` | §8.2 | Calibrated TF-IDF + logistic regression: request type, action, confidence, fast-path routing with τ |
+| `nts/metrics.py` | Table 11 | ECE, constraint exact match, atom-level P/R/F1 |
+| `nts/eval_parsing.py` | §12 | `uv run python -m nts.eval_parsing --limit 40` |
+
 ## Data
 
 `uv run python -m nts.corpus` regenerates `data/requests.jsonl` (600 requests,

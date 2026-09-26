@@ -1,0 +1,164 @@
+"""Parsing evaluation (RQ3 and the fine-tuning/tool metrics of Table 11).
+
+    uv run python -m nts.eval_parsing --limit 40
+
+* System One: trained on the train split, tau tuned on val, scored on test
+  (type/action accuracy, ECE, fast-path share, latency). No API calls.
+* System Two: the Gemini parser on the first ``--limit`` test requests
+  (action accuracy, constraint-compilation exact match and atom F1,
+  authority refusals, injections, latency, tokens). Responses are cached
+  under runs/llm_cache, so rerunning costs nothing.
+
+Rule-breaking requests (expected ``deny``) are skipped for System Two action
+accuracy: denial is the policy agent's job (L3), after parsing.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
+
+from .corpus import CorpusExample, ExpectedAction, load_jsonl
+from .instance import Instance
+from .llm import DailyQuotaReached, GeminiClient, LLMError
+from .metrics import atom_counts, ece, exact_match, percentile, prf, semantic_match
+from .parsing import SystemTwoParser
+from .system_one import SystemOne, tune_tau
+
+
+def eval_system_one(corpus: list[CorpusExample]) -> dict:
+    split = {s: [ex for ex in corpus if ex.split == s] for s in ("train", "val", "test")}
+    model = SystemOne().fit(split["train"])
+    tau = tune_tau([model.decide(ex.request) for ex in split["val"]], split["val"])
+    decisions = [model.decide(ex.request) for ex in split["test"]]
+    test = split["test"]
+    type_ok = [d.request_type == ex.request_type for d, ex in zip(decisions, test, strict=True)]
+    action_ok = [d.action == ex.expected_action for d, ex in zip(decisions, test, strict=True)]
+    fast = [d.fast_path(tau) for d in decisions]
+    fast_ok = [t and a for t, a, f in zip(type_ok, action_ok, fast, strict=True) if f]
+    latencies = [d.latency_ms for d in decisions]
+    return {
+        "n_test": len(test),
+        "tau": tau,
+        "type_accuracy": sum(type_ok) / len(test),
+        "action_accuracy": sum(action_ok) / len(test),
+        "type_ece": ece([d.type_p for d in decisions], type_ok),
+        "action_ece": ece([d.action_p for d in decisions], action_ok),
+        "fast_path_share": sum(fast) / len(test),
+        "fast_path_precision": sum(fast_ok) / len(fast_ok) if fast_ok else None,
+        "latency_ms_p50": percentile(latencies, 50),
+        "latency_ms_p95": percentile(latencies, 95),
+    }
+
+
+def eval_system_two(
+    corpus: list[CorpusExample],
+    instance: Instance,
+    client: GeminiClient,
+    limit: int,
+    split: str = "test",
+    workers: int = 4,
+) -> dict:
+    """Requests run concurrently (``workers`` in flight); the client still
+    starts at most RPM requests per minute, so this only hides latency."""
+    parser = SystemTwoParser(instance, client)
+    examples = [ex for ex in corpus if ex.split == split][:limit]
+    rows = []
+    tp = n_pred = n_gold = 0
+    pool = ThreadPoolExecutor(max_workers=workers)
+    futures = [pool.submit(parser.parse, ex.request) for ex in examples]
+    for i, (ex, fut) in enumerate(zip(examples, futures, strict=True)):
+        try:
+            result = fut.result()
+        except DailyQuotaReached as e:
+            print(f"stopping early: {e}")
+            pool.shutdown(cancel_futures=True)
+            examples = examples[:i]
+            break
+        except LLMError as e:
+            rows.append({"id": ex.id, "error": str(e)})
+            continue
+        u = client.usage
+        print(f"[{i + 1}/{len(examples)}] {ex.id} calls={u.calls} cached={u.cache_hits} "
+              f"retries={u.retries} {u.last_retry_reason[:80]}", flush=True)
+        row = {
+            "id": ex.id,
+            "variant": ex.variant.value,
+            "expected": ex.expected_action.value,
+            "predicted": result.action.value,
+            "type_ok": result.request_type == ex.request_type,
+            "errors": result.errors,
+            "refusal": result.refusal,
+        }
+        if ex.expected_action == ExpectedAction.COMPILE:
+            row["exact"] = exact_match(result.constraints, ex.targets, instance)
+            row["semantic"] = semantic_match(result.constraints, ex.targets, instance)
+            counts = atom_counts(result.constraints, ex.targets, instance)
+            tp, n_pred, n_gold = tp + counts[0], n_pred + counts[1], n_gold + counts[2]
+            if not row["exact"]:
+                row["pred"] = [c.model_dump(mode="json", exclude_none=True) for c in result.constraints]
+                row["gold"] = [c.model_dump(mode="json", exclude_none=True) for c in ex.targets]
+        rows.append(row)
+    pool.shutdown()
+
+    scored =[r for r in rows if "error" not in r and r["expected"] != ExpectedAction.DENY.value]
+    compiled = [r for r in rows if "exact" in r]
+    injected = [r for r, ex in zip(rows, examples, strict=True) if ex.injection and "error" not in r]
+    p, r, f1 = prf(tp, n_pred, n_gold)
+    return {
+        "model": client.model,
+        "split": split,
+        "n": len(examples),
+        "api_errors": sum("error" in r for r in rows),
+        "action_accuracy": sum(r["expected"] == r["predicted"] for r in scored) / len(scored) if scored else None,
+        "type_accuracy": sum(r["type_ok"] for r in rows if "error" not in r) / max(1, len(rows)),
+        "compile_exact_match": sum(r["exact"] for r in compiled) / len(compiled) if compiled else None,
+        "compile_semantic_match": sum(r["semantic"] for r in compiled) / len(compiled) if compiled else None,
+        "compile_atom_precision": p,
+        "compile_atom_recall": r,
+        "compile_atom_f1": f1,
+        "injections_handled": sum(r["expected"] == r["predicted"] for r in injected),
+        "injections_total": len(injected),
+        "confusion": dict(Counter(f"{r['expected']}->{r['predicted']}" for r in scored if r["expected"] != r["predicted"])),
+        "workers": workers,
+        "latency_s_p50": percentile(client.latencies, 50),
+        "latency_s_p95": percentile(client.latencies, 95),
+        "usage": vars(client.usage),
+        "rows": rows,
+    }
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--corpus", type=Path, default=Path("data/requests.jsonl"))
+    ap.add_argument("--instance", type=Path, default=Path("data/synthetic-cse-s0.json"))
+    ap.add_argument("--limit", type=int, default=40, help="requests sent to System Two")
+    ap.add_argument("--workers", type=int, default=4, help="requests in flight at once (RPM still enforced)")
+    ap.add_argument("--split", default="test", choices=["train", "val", "test"],
+                    help="split for System Two; iterate prompts on val, report test once")
+    ap.add_argument("--model", default=None, help="Gemini model id (default: the pinned agent model, or GEMINI_MODEL)")
+    ap.add_argument("--skip-llm", action="store_true")
+    ap.add_argument("--out", type=Path, default=None)
+    args = ap.parse_args()
+
+    instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
+    corpus = load_jsonl(args.corpus, instance)
+    report: dict = {"corpus": str(args.corpus), "system_one": eval_system_one(corpus)}
+    print("System One:", json.dumps(report["system_one"], indent=1))
+    if not args.skip_llm:
+        client = GeminiClient(args.model)
+        report["system_two"] = eval_system_two(corpus, instance, client, args.limit, args.split, args.workers)
+        print("System Two:", json.dumps({k: v for k, v in report["system_two"].items() if k != "rows"}, indent=1))
+
+    out = args.out or Path("runs") / f"parsing-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
+    print(f"report: {out}")
+
+
+if __name__ == "__main__":
+    main()
