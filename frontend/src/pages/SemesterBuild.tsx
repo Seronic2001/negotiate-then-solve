@@ -435,9 +435,32 @@ function Viewer({ ov, tt, changed }: { ov: SemesterOverview; tt: SemTimetable; c
   useEffect(() => {
     if (!options.some((o) => o.id === who)) setWho(options[0]?.id ?? "");
   }, [options, who]);
-  const shown = tt.meetings.filter((m) =>
+  const fixed = tt.meetings.filter((m) =>
     by === "cohort" ? m.cohorts.includes(who) : by === "room" ? m.rooms.includes(who) : by === "faculty" ? m.faculty.includes(who) : m.course === who,
   );
+
+  // A programme's elective slots, merged by name ("Bouquet Core" twice -> one chip, x2)
+  const slots = useMemo(() => {
+    if (by !== "cohort") return [];
+    const out = new Map<string, { slot: string; count: number; pools: { id: string; name: string; courses: string[] }[] }>();
+    for (const e of ov.cohorts.find((c) => c.id === who)?.elective_pools ?? []) {
+      const s = out.get(e.slot);
+      if (s) s.count += 1;
+      else out.set(e.slot, { slot: e.slot, count: 1, pools: e.pools });
+    }
+    return [...out.values()];
+  }, [by, who, ov]);
+  const [on, setOn] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    // a programme with only electives would otherwise show an empty week
+    setOn(new Set(fixed.length === 0 ? slots.filter((s) => s.pools.length).map((s) => s.slot) : []));
+  }, [who, by, slots]);
+  const optionCourses = new Set(slots.filter((s) => on.has(s.slot)).flatMap((s) => s.pools.flatMap((p) => p.courses)));
+  const fixedCourses = new Set(fixed.map((m) => m.course));
+  const electives = by === "cohort" ? tt.meetings.filter((m) => m.kind === "lecture" && optionCourses.has(m.course) && !fixedCourses.has(m.course) && !m.cohorts.includes(who)) : [];
+  const optional = new Set(electives.map((m) => m.component));
+  const shown = [...fixed, ...electives];
+
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
@@ -458,10 +481,51 @@ function Viewer({ ov, tt, changed }: { ov: SemesterOverview; tt: SemTimetable; c
             </option>
           ))}
         </select>
-        <span className="ml-auto text-[12.5px] text-ink-3">{shown.length} meetings a week</span>
+        <span className="ml-auto text-[12.5px] text-ink-3">
+          {fixed.length} meetings a week{electives.length > 0 && ` + ${electives.length} elective lectures`}
+        </span>
       </div>
+      {slots.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+          <span className="mr-1 text-[12.5px] text-ink-3">{fixed.length === 0 ? "No fixed courses; students choose:" : "Elective slots:"}</span>
+          {slots.map((s) => {
+            const active = on.has(s.slot);
+            const n = s.pools.reduce((k, p) => k + p.courses.length, 0);
+            return (
+              <button
+                key={s.slot}
+                disabled={!s.pools.length}
+                onClick={() => setOn((cur) => {
+                  const next = new Set(cur);
+                  if (next.has(s.slot)) next.delete(s.slot);
+                  else next.add(s.slot);
+                  return next;
+                })}
+                title={s.pools.length ? s.pools.map((p) => p.name).join(" · ") : "No class meetings (project work)"}
+                className={clsx(
+                  "rounded-md border px-2.5 py-1 text-[12.5px]",
+                  !s.pools.length ? "cursor-default border-line text-ink-3" : active ? "border-brand/60 bg-brand/10 text-ink" : "border-dashed border-line text-ink-2 hover:border-brand/40",
+                )}
+              >
+                {s.slot}
+                {s.count > 1 && ` ×${s.count}`}
+                <span className="ml-1.5 text-ink-3">{s.pools.length ? `${n} courses` : "no classes"}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="p-4">
-        <SemesterGrid calendar={ov.calendar} meetings={shown} changed={changed} onPick={setPicked} />
+        {fixed.length === 0 && by === "cohort" && !slots.some((s) => s.pools.length) && (
+          <p className="mb-3 text-[13px] text-ink-3">The offering document lists no timetabled courses for this programme.</p>
+        )}
+        <SemesterGrid calendar={ov.calendar} meetings={shown} optional={optional} changed={changed} onPick={setPicked} />
+        {electives.length > 0 && (
+          <p className="mt-3 text-[12px] text-ink-3">
+            Dashed boxes are elective lectures (their tutorials and labs are under Course): a student attends only the ones they register for. Lectures of one pool are kept in different slots where
+            possible; courses from different pools may share one.
+          </p>
+        )}
       </div>
       {picked && (
         <div className="border-t border-line px-5 py-3 text-[13px]">

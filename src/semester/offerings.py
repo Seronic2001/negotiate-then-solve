@@ -326,6 +326,60 @@ def parse_offerings(path: Path) -> OfferingDoc:
     return parse_rows(text_rows(text), path.name)
 
 
+def elective_pools(doc: OfferingDoc, cohort: Cohort) -> list[tuple[str, list[str]]]:
+    """Which pools can fill each elective slot of a programme ("Bouquet Core-4",
+    "Open Elective-1", ...). The document names slots and pools differently, so
+    this matches by keyword; a slot with no pool (honours projects) maps to []."""
+    name = cohort.name.lower()
+    ug = name.startswith(("b.tech", "le-"))
+    ece = any(k in name for k in ("ece", "ecd", "led"))
+
+    def pools(*keys: str) -> list[str]:
+        return [p.id for p in doc.pools if any(k in p.name.lower() for k in keys)]
+
+    def rule(slot: str) -> list[str]:
+        s = slot.lower()
+        if "honours" in s:
+            return []
+        if "bouquet" in s:
+            return pools("bouquet")
+        if "science elective" in s:
+            return pools("science electives")
+        if "hss" in s or "humanities" in s:
+            return pools("humanities")
+        if "math" in s:
+            return pools("math electives")
+        if "case elective" in s:
+            return pools("pg case")
+        if "cns elective" in s:
+            return pools("cnd students")
+        if "cl stream" in s:
+            return pools("gis stream", "cld students")
+        if "area elective*" in s or ("area elective" in s and "vlsi" in name):
+            return pools("m.tech vlsi")
+        if "technology / systems" in s:
+            return pools("pdm", "cse/open")
+        if "stream" in s:
+            if ece:
+                return pools("signal processing", "vlsi and embedded", "robotics stream")
+            if "cgd" in name:
+                return pools("gis stream")
+            return pools("cse/open")
+        if "open elective" in s:
+            return pools("only for ug", "cse/open") if ug else pools("cse/open")
+        if "cs elective" in s or "area" in s:
+            return pools("cse/open")
+        return []
+
+    out = [(slot, rule(slot)) for slot in cohort.electives]
+    # pools written for one programme ("Electives for CHD Students") belong to it as a whole
+    own = [p.id for p in doc.pools if (m := re.search(r"for (\w+) students", p.name, re.I))
+           and re.search(rf"\b{m[1].lower()}\b", name)]
+    if own:
+        out.append(("Programme electives", own))
+    return out
+
+
 def main() -> None:
     import sys
 

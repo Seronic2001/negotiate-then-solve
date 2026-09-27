@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from agents.policy import BM25
 from semester.clubs import ClubRequest
+from semester.offerings import elective_pools
 
 
 class TextBody(BaseModel):
@@ -49,6 +50,7 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
 
     def overview_of(p, full: bool) -> dict:
         doc = p.state.doc
+        pools = {x.id: x for x in doc.pools} if doc else {}
         pub = p.published()
         out = {
             "loaded": doc is not None,
@@ -57,7 +59,11 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
             "calendar": p.calendar.model_dump(),
             "published": pub.version if pub else None,
             "cohorts": [{"id": c.id, "name": c.name, "size": p.state.sizes.get(c.id, 0), "courses": c.courses,
-                         "electives": c.electives} for c in (doc.cohorts if doc else [])],
+                         "electives": c.electives,
+                         "elective_pools": [{"slot": slot, "pools": [{"id": x, "name": pools[x].name,
+                                                                      "courses": pools[x].courses} for x in ids]}
+                                            for slot, ids in elective_pools(doc, c)]}
+                        for c in (doc.cohorts if doc else [])],
             "rooms": [r.model_dump() for r in p.rooms],
         }
         if full and doc:

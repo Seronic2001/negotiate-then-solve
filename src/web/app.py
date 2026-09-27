@@ -712,7 +712,11 @@ def create_web_app(world: World | None = None) -> FastAPI:
         @app.get("/{path:path}")
         def spa(path: str) -> FileResponse:
             f = dist / path
-            return FileResponse(f if path and f.is_file() else dist / "index.html")
+            if path and f.is_file():
+                return FileResponse(f)
+            # the page names this build's hashed chunks, so it must never be served stale:
+            # an old copy asks for chunks a rebuild has deleted (404s on lazy pages)
+            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app
 
