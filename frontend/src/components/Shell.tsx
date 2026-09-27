@@ -5,6 +5,8 @@ import {
   BadgeCheck,
   BookOpen,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
   FileUp,
   Hammer,
@@ -63,6 +65,8 @@ export const NAV: NavItem[] = [
   { to: "/experiments", label: "Experiments", icon: FlaskConical, group: "research", view: "experiments" },
 ];
 
+const COLLAPSED_KEY = "nts.sidebar.collapsed";
+
 const GROUPS: { id: NavItem["group"]; label?: string }[] = [
   { id: "main" },
   { id: "semester", label: "Semester" },
@@ -74,17 +78,51 @@ export function Shell({ children }: { children: ReactNode }) {
   const { user, sees } = useAuth();
   const [palette, setPalette] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const location = useLocation();
   const { data: ov } = useApi(() => api.overview(), [user?.id], 4000);
   useHotkey("k", () => setPalette((p) => !p));
+  useHotkey("b", () => toggle());
   useEffect(() => setDrawer(false), [location.pathname]);
 
+  const toggle = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, c ? "0" : "1");
+      } catch {
+        /* the choice just isn't remembered */
+      }
+      return !c;
+    });
+
   const items = NAV.filter((n) => sees(n.view));
-  const sidebar = <Sidebar items={items} ov={ov} onSearch={() => setPalette(true)} />;
+  const onSearch = () => setPalette(true);
 
   return (
     <div className="flex h-full">
-      <aside className="hidden h-full w-60 shrink-0 border-r border-line bg-panel md:block">{sidebar}</aside>
+      <aside
+        className={clsx(
+          "relative hidden h-full shrink-0 border-r border-line bg-panel transition-[width] duration-200 ease-out md:block",
+          collapsed ? "w-14" : "w-60",
+        )}
+      >
+        <Sidebar items={items} ov={ov} onSearch={onSearch} collapsed={collapsed} />
+        <button
+          onClick={toggle}
+          title={collapsed ? "Expand sidebar (Ctrl B)" : "Collapse sidebar (Ctrl B)"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          className="absolute -right-3 top-7 z-10 grid size-6 place-items-center rounded-full border border-line bg-panel text-ink-3 shadow-sm hover:border-brand/60 hover:text-ink"
+        >
+          {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+        </button>
+      </aside>
 
       <AnimatePresence>
         {drawer && (
@@ -97,7 +135,7 @@ export function Shell({ children }: { children: ReactNode }) {
               onClick={(e) => e.stopPropagation()}
               className="h-full w-64 border-r border-line bg-panel"
             >
-              {sidebar}
+              <Sidebar items={items} ov={ov} onSearch={onSearch} />
             </motion.aside>
           </motion.div>
         )}
@@ -120,45 +158,72 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function Sidebar({ items, ov, onSearch }: { items: NavItem[]; ov: Overview | null; onSearch: () => void }) {
+function Sidebar({
+  items,
+  ov,
+  onSearch,
+  collapsed = false,
+}: {
+  items: NavItem[];
+  ov: Overview | null;
+  onSearch: () => void;
+  collapsed?: boolean;
+}) {
   const { sees } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? ov?.pending_approvals : 0) ?? 0;
+  const status = ov?.seeding ? "Loading demo history…" : ov?.published_version != null ? `Timetable v${ov.published_version} published` : "Connecting…";
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
+      <div className={clsx("flex items-center gap-2.5 pb-4 pt-5", collapsed ? "justify-center px-2" : "px-4")}>
         <Mark />
-        <div className="min-w-0">
-          <p className="truncate font-serif text-[15.5px] leading-tight font-semibold">Negotiate, Then Solve</p>
-          <p className="truncate text-[11.5px] text-ink-3">{ov?.department ?? "Timetabling"}</p>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-serif text-[15.5px] leading-tight font-semibold">Negotiate, Then Solve</p>
+            <p className="truncate text-[11.5px] text-ink-3">{ov?.department ?? "Timetabling"}</p>
+          </div>
+        )}
       </div>
 
-      <div className="space-y-1.5 px-3">
+      <div className={clsx("space-y-1.5", collapsed ? "px-2" : "px-3")}>
         {sees("new") && (
           <button
             onClick={() => navigate("/new")}
+            title={collapsed ? "New request" : undefined}
+            aria-label="New request"
             className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-brand text-[13px] font-medium text-panel hover:bg-brand/90"
           >
-            <Plus size={15} /> New request
+            <Plus size={15} /> {!collapsed && "New request"}
           </button>
         )}
-        <button onClick={onSearch} className="flex h-8 w-full items-center gap-2 rounded-md border border-line px-2.5 text-[13px] text-ink-3 hover:bg-panel-2">
+        <button
+          onClick={onSearch}
+          title={collapsed ? "Search (Ctrl K)" : undefined}
+          aria-label="Search"
+          className={clsx(
+            "flex h-8 w-full items-center gap-2 rounded-md border border-line text-[13px] text-ink-3 hover:bg-panel-2",
+            collapsed ? "justify-center" : "px-2.5",
+          )}
+        >
           <Search size={14} />
-          <span className="flex-1 text-left">Search</span>
-          <Kbd>Ctrl K</Kbd>
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Search</span>
+              <Kbd>Ctrl K</Kbd>
+            </>
+          )}
         </button>
       </div>
 
-      <nav className="mt-4 flex-1 space-y-4 overflow-y-auto px-3">
+      <nav className={clsx("mt-4 flex-1 space-y-4 overflow-x-hidden overflow-y-auto", collapsed ? "px-2 [scrollbar-width:none]" : "px-3")}>
         {GROUPS.map((g) => {
           const list = items.filter((i) => i.group === g.id);
           if (!list.length) return null;
           return (
             <div key={g.id}>
-              {g.label && <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>}
+              {g.label && (collapsed ? <div className="mx-2 mb-2 border-t border-line" /> : <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>)}
               {list.map((n) => {
                 const active = n.to === "/" ? location.pathname === "/" : location.pathname.startsWith(n.to);
                 const count = badge(n.badge);
@@ -166,14 +231,22 @@ function Sidebar({ items, ov, onSearch }: { items: NavItem[]; ov: Overview | nul
                   <NavLink
                     key={n.to}
                     to={n.to}
+                    title={collapsed ? (count > 0 ? `${n.label} (${count})` : n.label) : undefined}
+                    aria-label={collapsed ? n.label : undefined}
                     className={clsx(
-                      "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13.5px]",
+                      "relative flex h-8 items-center gap-2.5 rounded-md text-[13.5px]",
+                      collapsed ? "justify-center" : "px-2.5",
                       active ? "bg-panel-2 font-medium text-ink" : "text-ink-2 hover:bg-panel-2/60 hover:text-ink",
                     )}
                   >
-                    <n.icon size={16} className={active ? "text-brand" : "text-ink-3"} />
-                    <span className="flex-1 truncate">{n.label}</span>
-                    {count > 0 && <span className="rounded bg-brand px-1.5 text-[11px] font-semibold tabular-nums text-panel">{count}</span>}
+                    <n.icon size={16} className={clsx("shrink-0", active ? "text-brand" : "text-ink-3")} />
+                    {!collapsed && <span className="flex-1 truncate">{n.label}</span>}
+                    {count > 0 &&
+                      (collapsed ? (
+                        <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-brand" />
+                      ) : (
+                        <span className="rounded bg-brand px-1.5 text-[11px] font-semibold tabular-nums text-panel">{count}</span>
+                      ))}
                   </NavLink>
                 );
               })}
@@ -182,18 +255,24 @@ function Sidebar({ items, ov, onSearch }: { items: NavItem[]; ov: Overview | nul
         })}
       </nav>
 
-      <div className="border-t border-line px-3 py-3">
-        <p className="mb-2 flex items-center gap-2 px-2.5 text-[11.5px] text-ink-3">
-          <LiveDot tone={ov?.seeding ? "warn" : "ok"} pulse={!!ov?.seeding} />
-          {ov?.seeding ? "Loading demo history…" : ov?.published_version != null ? `Timetable v${ov.published_version} published` : "Connecting…"}
-        </p>
-        <Account />
+      <div className={clsx("border-t border-line py-3", collapsed ? "px-2" : "px-3")}>
+        {collapsed ? (
+          <p className="mb-2 flex justify-center" title={status}>
+            <LiveDot tone={ov?.seeding ? "warn" : "ok"} pulse={!!ov?.seeding} />
+          </p>
+        ) : (
+          <p className="mb-2 flex items-center gap-2 px-2.5 text-[11.5px] text-ink-3">
+            <LiveDot tone={ov?.seeding ? "warn" : "ok"} pulse={!!ov?.seeding} />
+            {status}
+          </p>
+        )}
+        <Account collapsed={collapsed} />
       </div>
     </div>
   );
 }
 
-function Account() {
+function Account({ collapsed = false }: { collapsed?: boolean }) {
   const { user, signIn, signOut } = useAuth();
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
@@ -210,14 +289,22 @@ function Account() {
   if (!user) return null;
 
   return (
-    <div className="relative flex items-center gap-1" data-account>
-      <button onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left hover:bg-panel-2">
+    <div className={clsx("relative flex items-center gap-1", collapsed && "flex-col")} data-account>
+      <button
+        onClick={() => setOpen(!open)}
+        title={collapsed ? `${user.name} · ${ROLE_LABEL[user.role]}` : undefined}
+        className={clsx("flex min-w-0 items-center gap-2.5 rounded-md py-1.5 text-left hover:bg-panel-2", collapsed ? "px-1" : "flex-1 px-1.5")}
+      >
         <Avatar name={user.name} id={user.id} size={28} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium leading-tight">{user.name}</p>
-          <p className="truncate text-[11.5px] leading-tight text-ink-3">{ROLE_LABEL[user.role]}</p>
-        </div>
-        <ChevronsUpDown size={14} className="shrink-0 text-ink-3" />
+        {!collapsed && (
+          <>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium leading-tight">{user.name}</p>
+              <p className="truncate text-[11.5px] leading-tight text-ink-3">{ROLE_LABEL[user.role]}</p>
+            </div>
+            <ChevronsUpDown size={14} className="shrink-0 text-ink-3" />
+          </>
+        )}
       </button>
       <button onClick={toggle} className="grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink" title={theme === "dark" ? "Light theme" : "Dark theme"}>
         {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
@@ -229,7 +316,10 @@ function Account() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            className="absolute bottom-12 left-0 z-30 w-64 overflow-hidden rounded-lg border border-line bg-panel shadow-lg"
+            className={clsx(
+              "absolute z-30 w-64 overflow-hidden rounded-lg border border-line bg-panel shadow-lg",
+              collapsed ? "bottom-0 left-full ml-2" : "bottom-12 left-0",
+            )}
           >
             <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Switch person (demo sign-in)</p>
             <div className="max-h-72 overflow-y-auto p-1">

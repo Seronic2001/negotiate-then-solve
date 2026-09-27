@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from semester.clubs import ClubDesk, ClubRequest
-from semester.offerings import parse_offerings, parse_rows, text_rows
+from semester.offerings import elective_pools, parse_offerings, parse_rows, text_rows
 from semester.requests import parse
 from semester.solver import (
     Meeting,
@@ -63,6 +63,14 @@ def test_real_offering_document():
     pools = {p.name: p for p in doc.pools}
     assert pools["Humanities Electives for UG3 &UG4"].cap == 40
     assert any(p.cap == 150 for n, p in pools.items() if n.startswith("Bouquet"))
+    # a programme with only elective slots still has something to show: the pools behind them
+    names = {p.id: p.name for p in doc.pools}
+    mtech = next(c for c in doc.cohorts if c.name.startswith("M.Tech II year I Semester - CSE"))
+    assert not mtech.courses
+    links = {slot: [names[i] for i in ids] for slot, ids in elective_pools(doc, mtech)}
+    assert links["Bouquet Core"][0].startswith("Bouquet") and links["Area Elective"] == ["CSE/Open Electives"]
+    ece = next(c for c in doc.cohorts if c.name == "B.Tech III year I Semester - ECE")
+    assert dict(elective_pools(doc, ece))["EC ECE-Honours-1 (Optional)"] == []  # project work, no classes
 
 
 def test_text_rows_and_needs(small):

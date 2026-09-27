@@ -379,6 +379,8 @@ export interface SemCohort {
   size: number;
   courses: string[];
   electives: string[];
+  /** Each elective slot and the pools its course can come from ([] for honours projects). */
+  elective_pools?: { slot: string; pools: { id: string; name: string; courses: string[] }[] }[];
 }
 
 export interface SemNeed {
