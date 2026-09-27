@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, currentUserId, setCurrentUserId } from "./api";
-import type { Persona } from "./types";
+import type { Persona, Role, View } from "./types";
 
 interface Auth {
   user: Persona | null;
@@ -8,6 +8,8 @@ interface Auth {
   signIn: (id: string) => Promise<void>;
   signOut: () => void;
   can: (what: Capability) => boolean;
+  /** Whether this person's role has the view (the server's list). */
+  sees: (view: View) => boolean;
 }
 
 export type Capability = "approve" | "see_all" | "observe" | "request" | "negotiate";
@@ -18,6 +20,23 @@ const CAPS: Record<Capability, string[]> = {
   observe: ["coordinator", "hod", "dean"],
   request: ["faculty", "hod", "guest_faculty", "lab_incharge", "student", "exam_cell", "coordinator"],
   negotiate: ["faculty", "hod", "guest_faculty"],
+};
+
+/** Mirror of ``VIEWS`` in nts/web.py, used only when an older server sends no list. */
+const TEACHING: Role[] = ["hod", "faculty", "guest_faculty"];
+const FALLBACK_VIEWS: Record<View, Role[]> = {
+  home: [], requests: [], timetable: [], handbook: [], how: [], // everyone
+  new: ["coordinator", "hod", "faculty", "guest_faculty", "lab_incharge", "exam_cell", "student"],
+  inbox: ["coordinator", ...TEACHING],
+  approvals: ["coordinator"],
+  documents: ["coordinator"],
+  semester: ["coordinator"],
+  prefs: ["coordinator", "hod", "faculty", "guest_faculty", "student"],
+  clubs: ["coordinator", "student"],
+  fairness: ["coordinator", "dean", ...TEACHING],
+  graph: ["coordinator"],
+  health: ["coordinator"],
+  experiments: ["coordinator"],
 };
 
 const AuthContext = createContext<Auth | null>(null);
@@ -69,8 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const can = useCallback((what: Capability) => !!user && CAPS[what].includes(user.role), [user]);
+  const sees = useCallback(
+    (view: View) => {
+      if (!user) return false;
+      if (user.views) return user.views.includes(view);
+      const roles = FALLBACK_VIEWS[view];
+      return !roles.length || roles.includes(user.role);
+    },
+    [user],
+  );
 
-  const value = useMemo(() => ({ user, ready, signIn, signOut, can }), [user, ready, signIn, signOut, can]);
+  const value = useMemo(() => ({ user, ready, signIn, signOut, can, sees }), [user, ready, signIn, signOut, can, sees]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

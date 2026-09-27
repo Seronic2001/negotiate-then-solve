@@ -9,7 +9,7 @@ pytestmark = _pytest.mark.slow  # starts real solves in background threads (~75 
 import pytest
 from fastapi.testclient import TestClient
 
-from nts.web import COORDINATOR, World, create_web_app
+from web.app import COORDINATOR, World, create_web_app, views_for
 
 
 @pytest.fixture(scope="module")
@@ -94,11 +94,38 @@ def test_transparency_endpoints(client):
     assert s["results"][0]["id"] == "P-LUNCH" and "h13" in s["tokens"]
     t = c.get("/api/transparency", headers=h).json()
     assert len(t["tiers"]) == 6 and t["ladder"][2]["name"] == "Negotiate"
-    g = c.get("/api/graph", headers=h).json()
-    assert any(e["rel"] == "reports_to" for e in g["edges"])
     assert "gini" in c.get("/api/ledger", headers=h).json()
-    o = c.get("/api/observability", headers=h).json()
+    office = as_(COORDINATOR)
+    g = c.get("/api/graph", headers=office).json()
+    assert any(e["rel"] == "reports_to" for e in g["edges"])
+    o = c.get("/api/observability", headers=office).json()
     assert "stages" in o and "llm" in o
-    assert isinstance(c.get("/api/experiments", headers=h).json(), list)
+    assert isinstance(c.get("/api/experiments", headers=office).json(), list)
     assert c.get("/api/instance", headers=h).json()["slots"][4]["label"] == "1 pm"
     assert c.post("/api/demo/reset", headers=h).status_code == 403
+
+
+def test_views_are_scoped_by_role(client):
+    c, _ = client
+    people = {p["role"]: p["id"] for p in c.get("/api/personas").json()}
+    views = {role: set(c.post("/api/login", json={"person": pid}).json()["views"]) for role, pid in people.items()}
+    assert {"approvals", "graph", "health", "experiments"} <= views["coordinator"]
+    assert "inbox" in views["faculty"] and "approvals" not in views["faculty"] and "health" not in views["faculty"]
+    assert "inbox" not in views["student"] and "fairness" not in views["student"] and "new" in views["student"]
+    assert "new" not in views_for("dean") and "fairness" in views_for("dean")  # no Dean in the demo directory
+    student = as_(people["student"])
+    for path in ("/api/ledger", "/api/graph", "/api/observability", "/api/experiments"):
+        assert c.get(path, headers=student).status_code == 403, path
+    assert c.get("/api/graph", headers=as_("F-104")).status_code == 403
+    assert "documents" in views["coordinator"] and "documents" not in views["hod"]
+    for who in ("F-104", people["hod"], people["student"]):  # pending changes are the coordinator's
+        assert c.get("/api/approvals", headers=as_(who)).status_code == 403
+        assert c.get("/api/handbook/documents", headers=as_(who)).status_code == 403
+    assert c.get("/api/approvals", headers=as_(COORDINATOR)).status_code == 200
+    # The activity log shows a student only their own requests.
+    rid = c.post("/api/requests", json={"text": "Is it allowed to teach more than three hours in a row?"},
+                 headers=student).json()["id"]
+    wait_for(c, rid, {"answered", "refused", "forwarded", "clarification_requested", "denied"}, user=people["student"])
+    cases = {e.get("case") for e in c.get("/api/events", headers=student).json()}
+    assert cases == {rid}
+    assert len({e.get("case") for e in c.get("/api/events", headers=as_(COORDINATOR)).json()}) > 1

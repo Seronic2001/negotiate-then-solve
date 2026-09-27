@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from nts.schemas import Constraint, Request, RequestStatus, Tier
+from core.schemas import Constraint, Request, RequestStatus, Tier
 
 # The constraint record from proposal Section 7.4, comments included.
 PROPOSAL_EXAMPLE = """

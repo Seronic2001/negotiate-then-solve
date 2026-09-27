@@ -1,7 +1,7 @@
 # Timetabling Regulations (synthetic stand-in)
 
 > This is a synthetic handbook written for development. It matches the
-> calendar and policy of the synthetic instances (`nts.instance.Policy`).
+> calendar and policy of the synthetic instances (`core.instance.Policy`).
 > Replace it with the institute's published academic handbook; keep one
 > `## <number> <title> [RULE-ID]` heading per rule so citations can be checked.
 

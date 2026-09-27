@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import { motion } from "framer-motion";
 import { FlaskConical, MessagesSquare, ScanText, Scale, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
+import { useTokens } from "../lib/theme";
 import { ago, num, pct } from "../lib/meta";
 import type { Experiment, NegotiationSummary } from "../lib/types";
 
@@ -39,22 +39,19 @@ export default function Experiments() {
   return (
     <>
       <PageHeader
-        eyebrow="Evaluation"
         title="Experiments"
-        subtitle="Results written by the evaluation scripts in runs/. Offline runs use scripted simulators and template explanations; LLM rows so far come from small smoke runs."
+        subtitle="Results from the evaluation scripts in runs/."
       />
       {!data ? (
         <Skeleton className="h-96" />
       ) : !data.length ? (
         <Card>
-          <EmptyState icon={FlaskConical} title="No results yet" text="Run uv run python -m nts.eval_negotiation --offline to produce the first report." />
+          <EmptyState icon={FlaskConical} title="No results yet" text="Run uv run python -m evaluation.negotiation --offline to produce the first report." />
         </Card>
       ) : (
         <div className="space-y-6">
-          {data.map((e, i) => (
-            <motion.div key={e.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
-              <ExperimentCard e={e} />
-            </motion.div>
+          {data.map((e) => (
+            <ExperimentCard key={e.id} e={e} />
           ))}
         </div>
       )}
@@ -63,6 +60,7 @@ export default function Experiments() {
 }
 
 function ExperimentCard({ e }: { e: Experiment }) {
+  const t = useTokens();
   if (e.kind === "negotiation") {
     const configs = Object.entries(e.configs);
     const chart = configs.map(([k, s]) => ({
@@ -79,17 +77,17 @@ function ExperimentCard({ e }: { e: Experiment }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
               <XAxis dataKey="name" tick={{ fill: "var(--ink-3)", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis unit="%" tick={{ fill: "var(--ink-3)", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: "var(--panel-2)" }} contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, fontSize: 12 }} />
+              <Tooltip cursor={{ fill: "var(--panel-2)" }} contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Correct outcome" fill="#8b7dff" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="Agreement rate" fill="#38d0f5" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Correct outcome" fill={t.brand} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Agreement rate" fill={t["ink-3"]} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <div className="overflow-x-auto border-t border-line">
           <table className="w-full min-w-[980px] text-[12.5px]">
             <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
+              <tr className="border-b border-line text-left text-[11.5px] text-ink-3">
                 <th className="px-5 py-2.5 font-medium">Config</th>
                 {METRICS.map((m) => (
                   <th key={m.key} className="px-2 py-2.5 text-right font-medium">
@@ -100,7 +98,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
             </thead>
             <tbody>
               {configs.map(([k, s]) => (
-                <tr key={k} className={clsx("border-b border-line/60", k.startsWith("ours") && "bg-brand/5")}>
+                <tr key={k} className={clsx("border-b border-line/60", k.startsWith("ours") && "bg-panel-2")}>
                   <td className="px-5 py-2.5 font-medium">{CONFIG_LABEL[k] ?? k}</td>
                   {METRICS.map((m) => {
                     const vals = configs.map(([, x]) => x[m.key] as number | null).filter((x): x is number => typeof x === "number");
@@ -173,9 +171,9 @@ function ExperimentCard({ e }: { e: Experiment }) {
 
 function Metric({ label, v }: { label: string; v: string }) {
   return (
-    <div className="rounded-xl border border-line bg-panel-2/50 p-4">
+    <div>
       <p className="text-[12px] text-ink-3">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums">{v}</p>
+      <p className="mt-1 font-serif text-2xl font-semibold tabular-nums">{v}</p>
     </div>
   );
 }

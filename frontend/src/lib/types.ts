@@ -7,7 +7,11 @@ export interface Persona {
   name: string;
   role: Role;
   email?: string;
+  /** Views this person may open, decided by the server (``VIEWS`` in nts/web.py). */
+  views?: View[];
 }
+
+export type View = "home" | "requests" | "timetable" | "handbook" | "how" | "new" | "inbox" | "approvals" | "documents" | "semester" | "prefs" | "clubs" | "fairness" | "graph" | "health" | "experiments";
 
 export type Status =
   | "received"
@@ -267,7 +271,27 @@ export interface Rule {
   number: string;
   title: string;
   text: string;
+  source: string;
+  pages: number[];
+  method: string; // "markdown", "html", "text layer" or "ocr: <backend>"
   score?: number;
+}
+
+export interface PolicyDocument {
+  name: string;
+  kind: "pdf" | "html" | "image" | "markdown";
+  pages: number;
+  methods: Record<string, number>;
+  ocr_confidence: number | null;
+  rules: string[];
+  seconds: number;
+  error: string | null;
+}
+
+export interface PolicyDocuments {
+  ocr: { backend: string; model: string };
+  accepts: string[];
+  documents: PolicyDocument[];
 }
 
 export interface Transparency {
@@ -321,3 +345,198 @@ export type Experiment =
   | { id: string; title: string; at: string; kind: "parsing"; system_one: Record<string, number> | null; system_two: Record<string, unknown> }
   | { id: string; title: string; at: string; kind: "policy"; summary: Record<string, unknown> }
   | { id: string; title: string; at: string; kind: "safety"; summary: Record<string, unknown> };
+
+// -- semester timetable ---------------------------------------------------------
+
+export interface SemWindow {
+  days: string[];
+  start: string;
+  end: string;
+  reason: string;
+}
+
+export interface SemCalendar {
+  days: string[];
+  mirror: Record<string, string>;
+  lecture_slots: [string, string][];
+  tutorial_slots: [string, string][];
+  lab_starts: string[];
+  blocked: SemWindow[];
+  club_hours: SemWindow[];
+  weeks: number;
+  evening_slot: number;
+}
+
+export interface SemRoom {
+  id: string;
+  capacity: number;
+  type: string;
+}
+
+export interface SemCohort {
+  id: string;
+  name: string;
+  size: number;
+  courses: string[];
+  electives: string[];
+}
+
+export interface SemNeed {
+  kind: "lecture" | "tutorial" | "lab";
+  label: string;
+  rooms: number[];
+  room_type: string;
+  options: number;
+  pair: boolean;
+}
+
+export interface SemCourse {
+  code: string;
+  name: string;
+  L: number;
+  T: number;
+  P: number;
+  C: number;
+  faculty: string[];
+  half: string;
+  cap: number | null;
+  cohorts: string[];
+  pools: string[];
+  scheduled: boolean;
+  note: string;
+  needs: SemNeed[];
+}
+
+export interface SemPreference {
+  id: string;
+  target: "faculty" | "course" | "cohort";
+  who: string;
+  mode: "avoid" | "prefer";
+  days: string[] | null;
+  start: string | null;
+  end: string | null;
+  hard: boolean;
+  weight: number;
+  text: string;
+  source: string;
+}
+
+export interface SemReport {
+  status: string;
+  seconds: number;
+  components: number;
+  meetings: number;
+  hard_violations: string[];
+  preferences: { id: string; text: string; met: boolean; hard: boolean; sessions: number }[];
+  pool_clashes: number;
+  evening_sessions: number;
+  moved: number;
+  notes: string[];
+  room_use?: Record<string, number>;
+}
+
+export interface SemVersionMeta {
+  version: number;
+  created: string;
+  kind: "build" | "change";
+  note: string;
+  published: boolean;
+  based_on: number | null;
+  moved: number;
+  report: SemReport;
+}
+
+export interface SemesterOverview {
+  loaded: boolean;
+  source: string | null;
+  semester_start: string;
+  calendar: SemCalendar;
+  published: number | null;
+  cohorts: SemCohort[];
+  rooms: SemRoom[];
+  courses?: SemCourse[];
+  pools?: { id: string; name: string; courses: string[]; cap: number | null }[];
+  warnings?: string[];
+  preferences?: SemPreference[];
+  closures?: { room: string; window: SemWindow; text: string }[];
+  versions?: SemVersionMeta[];
+  sample_available?: boolean;
+}
+
+export interface SemMeeting {
+  component: string;
+  course: string;
+  name: string;
+  kind: "lecture" | "tutorial" | "lab";
+  label: string;
+  day: string;
+  start: string;
+  end: string;
+  slot: number | null;
+  rooms: string[];
+  faculty: string[];
+  cohorts: string[];
+  half: string;
+}
+
+export interface SemDiffRow {
+  component: string;
+  course: string;
+  name: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
+export interface SemTimetable {
+  version: number;
+  published: boolean;
+  kind: string;
+  note: string;
+  diff: SemDiffRow[];
+  meetings: SemMeeting[];
+  report: SemReport;
+}
+
+export interface SemStatus {
+  running: boolean;
+  kind?: string;
+  note?: string;
+  elapsed?: number;
+  error?: string | null;
+  version?: number | null;
+}
+
+export interface ParsedInput {
+  ok: boolean;
+  error?: string;
+  summary?: string[];
+  preferences?: SemPreference[];
+  closures?: ({ room: string } & SemWindow)[];
+  status?: SemStatus;
+}
+
+export interface ClubRequest {
+  club: string;
+  activity: string;
+  date: string;
+  start: string;
+  end: string;
+  attendees: number;
+  cohorts: string[];
+  room: string | null;
+  requested_by?: string;
+}
+
+export interface ClubDecision {
+  id: string;
+  request: ClubRequest;
+  status: "booked" | "needs_approval" | "rejected";
+  room: string | null;
+  day: string;
+  week: number | null;
+  checks: { name: string; ok: boolean; detail: string }[];
+  alternatives: { date: string; day: string; start: string; end: string; room: string }[];
+  rules: { id: string; title: string; source: string; text: string }[];
+  decided_at: string;
+}

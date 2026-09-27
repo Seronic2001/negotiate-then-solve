@@ -4,7 +4,7 @@ import { Bot, Check, Clock3, Inbox as InboxIcon, MessageSquareDashed, Undo2, X }
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { GroundedExplanation, OfferCard } from "../components/Negotiation";
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, LiveDot, PageHeader, Tabs, Toast } from "../components/ui";
+import { Avatar, Button, Card, CardHeader, Collapse, EmptyState, LiveDot, PageHeader, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
@@ -30,9 +30,8 @@ export default function Inbox() {
   return (
     <>
       <PageHeader
-        eyebrow="Negotiation"
         title="Inbox"
-        subtitle="When your request clashes with someone else's, or theirs with yours, the negotiator writes to the person whose concession costs least, offering options the solver has already proved work."
+        subtitle="Messages from the negotiator when a request clashes with yours."
         actions={
           user?.role !== "coordinator" &&
           auto && (
@@ -41,20 +40,18 @@ export default function Inbox() {
                 await api.setAutopilot(user!.id, !auto[user!.id]);
                 await refreshAuto();
               }}
-              className={clsx(
-                "flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] transition-colors",
-                auto[user!.id] ? "border-ok/40 bg-ok/10 text-ok" : "border-line bg-panel-2 text-ink-2",
-              )}
+              title="Let the simulator answer your messages automatically"
+              className="flex items-center gap-2.5 text-[13px] text-ink-2"
             >
-              <Bot size={15} /> Autopilot {auto[user!.id] ? "on" : "off"}
-              <span className={clsx("relative h-5 w-9 rounded-full transition-colors", auto[user!.id] ? "bg-ok" : "bg-line")}>
-                <motion.span layout className="absolute top-0.5 size-4 rounded-full bg-white shadow" style={{ left: auto[user!.id] ? 18 : 2 }} />
+              <Bot size={15} className="text-ink-3" /> Answer automatically
+              <span className={clsx("relative h-[18px] w-8 rounded-full transition-colors", auto[user!.id] ? "bg-ok" : "bg-line")}>
+                <span className="absolute top-[3px] size-3 rounded-full bg-panel transition-[left]" style={{ left: auto[user!.id] ? 17 : 3 }} />
               </span>
             </button>
           )
         }
       />
-      <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <div className="border-b border-line p-3">
             <Tabs
@@ -69,43 +66,37 @@ export default function Inbox() {
               }}
             />
           </div>
-          <div className="max-h-[640px] divide-y divide-line overflow-y-auto">
-            <AnimatePresence initial={false}>
-              {items.map((i) => (
-                <motion.button
-                  layout
+          <div className="max-h-[680px] divide-y divide-line overflow-y-auto">
+            {items.map((i) => (
+                <button
                   key={i.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
                   onClick={() => setSel(i.id)}
-                  className={clsx("relative flex w-full gap-3 px-4 py-3.5 text-left transition-colors", sel === i.id ? "bg-brand/8" : "hover:bg-panel-2/60")}
+                  className={clsx("relative flex w-full gap-3 px-4 py-3 text-left", sel === i.id ? "bg-panel-2" : "hover:bg-panel-2/50")}
                 >
-                  {sel === i.id && <motion.span layoutId="inbox-sel" className="absolute inset-y-0 left-0 w-0.5 grad-bg" />}
-                  <Avatar name={i.to_name} id={i.to} size={34} />
+                  {sel === i.id && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
+                  <Avatar name={i.to_name} id={i.to} size={30} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-[13.5px] font-medium">{user?.role === "coordinator" ? `To ${i.to_name}` : "Timetable negotiator"}</p>
+                      <p className="truncate text-[13.5px] font-medium">{user?.role === "coordinator" ? `To ${i.to_name}` : "Timetable office"}</p>
                       {!i.reply && <LiveDot tone="warn" />}
                       <span className="ml-auto shrink-0 text-[11px] text-ink-3">{ago(i.created)}</span>
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-3">{i.message.text.split("\n")[0]}</p>
-                    <div className="mt-1.5 flex gap-1.5">
-                      <Badge tone="muted">round {i.message.round}</Badge>
-                      <Badge tone="brand">{i.message.offers.length} option{i.message.offers.length === 1 ? "" : "s"}</Badge>
-                      {i.reply && <Badge tone={i.reply.decision === "accept" ? "ok" : "warn"}>{i.reply.decision}</Badge>}
-                    </div>
+                    <p className="mt-1 text-[12px] text-ink-3">
+                      {i.message.offers.length} option{i.message.offers.length === 1 ? "" : "s"}
+                      {i.message.round > 1 ? ` · round ${i.message.round}` : ""}
+                      {i.reply && <span className={i.reply.decision === "accept" ? "text-ok" : "text-warn"}> · {i.reply.decision}</span>}
+                    </p>
                   </div>
-                </motion.button>
+                </button>
               ))}
-            </AnimatePresence>
-            {!items.length && <EmptyState icon={InboxIcon} title={view === "open" ? "Nothing waiting" : "No answered messages"} text="Messages appear here when a request you're part of needs a concession." />}
+            {!items.length && <EmptyState icon={InboxIcon} title={view === "open" ? "Nothing waiting" : "No answered messages"} text="Messages arrive here when a request clashes with your timetable." />}
           </div>
         </Card>
 
         <AnimatePresence mode="wait">
           {current && inst ? (
-            <motion.div key={current.id} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
+            <motion.div key={current.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
               <Thread
                 item={current}
                 mine={!!mine}
@@ -119,7 +110,7 @@ export default function Inbox() {
               />
             </motion.div>
           ) : (
-            <Card className="grid place-items-center">
+            <Card className="hidden place-items-center lg:grid">
               <EmptyState icon={MessageSquareDashed} title="Select a message" />
             </Card>
           )}
@@ -172,7 +163,7 @@ function Thread({
     <div className="space-y-6">
       <Card>
         <CardHeader
-          title={`Round ${m.round}: a timetable conflict${mine ? " needs your answer" : ` for ${item.to_name}`}`}
+          title={mine ? "A clash with your timetable" : `A clash for ${item.to_name}`}
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
               {item.case && (
@@ -201,8 +192,8 @@ function Thread({
           </div>
 
           {answered ? (
-            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-3 rounded-2xl border border-ok/30 bg-ok/8 p-4 text-sm">
-              <Check size={18} className="text-ok" />
+            <div className="flex items-center gap-2.5 rounded-md border border-line bg-panel-2 px-4 py-3 text-[13.5px]">
+              <Check size={16} className="text-ok" />
               <span>
                 Answered{item.answered_by === "simulator" ? " by the simulator" : item.answered_by === "deadline" ? " (deadline passed)" : ""}:{" "}
                 <span className="font-medium">
@@ -211,21 +202,21 @@ function Thread({
                 </span>
                 {item.reply?.text ? ` · “${item.reply.text}”` : ""}
               </span>
-            </motion.div>
+            </div>
           ) : (
             <div className="space-y-4">
               {mine && (
                 <AnimatePresence>
                   {mode === "counter" && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                      <div className="rounded-2xl border border-warn/30 bg-warn/5 p-4">
+                      <div className="rounded-md border border-line bg-panel-2 p-4">
                         <p className="text-[13px] font-medium">Which days and times would work instead?</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {days.map((d) => (
                             <button
                               key={d}
                               onClick={() => setCDays((xs) => (xs.includes(d) ? xs.filter((x) => x !== d) : [...xs, d]))}
-                              className={clsx("rounded-xl border px-3 py-1.5 text-[13px] transition-colors", cDays.includes(d) ? "border-warn bg-warn/15 text-ink" : "border-line text-ink-2")}
+                              className={clsx("rounded-md border px-3 py-1 text-[13px]", cDays.includes(d) ? "border-brand bg-brand text-panel" : "border-line bg-panel text-ink-2")}
                             >
                               {d}
                             </button>
@@ -258,13 +249,13 @@ function Thread({
                 {mine && (
                   <>
                     <Button
-                      variant="success"
+                      variant="primary"
                       icon={Check}
                       disabled={!choice || mode !== "pick"}
                       loading={busy === "accept"}
                       onClick={() => act("accept", () => api.reply(item.id, { decision: "accept", choice: choice!, text: `Option ${choice} works for me.` }), `Accepted option ${choice}. The solver re-solves now.`)}
                     >
-                      Accept {choice ?? "an option"}
+                      {choice ? `Accept option ${choice}` : "Pick an option"}
                     </Button>
                     {mode === "counter" ? (
                       <Button
@@ -289,7 +280,7 @@ function Thread({
                       </Button>
                     ) : (
                       <Button icon={Undo2} onClick={() => setMode("counter")}>
-                        Suggest other times
+                        Suggest another time
                       </Button>
                     )}
                     <Button
@@ -304,21 +295,18 @@ function Thread({
                 )}
                 {canSimulate && (
                   <Button variant="ghost" icon={Bot} loading={busy === "sim"} className="ml-auto" onClick={() => act("sim", () => api.simulate(item.id), "The simulated stakeholder answered.")}>
-                    Let the simulator answer
+                    Simulate a reply
                   </Button>
                 )}
               </div>
-              {error && <p className="rounded-xl bg-bad/10 px-3 py-2 text-sm text-bad">{error}</p>}
+              {error && <p className="rounded-md bg-bad/10 px-3 py-2 text-sm text-bad">{error}</p>}
             </div>
           )}
         </div>
       </Card>
-      <Card>
-        <CardHeader title="Why you are seeing this" subtitle="Every sentence of the explanation must trace to a fact below; private reasons are never among them" />
-        <div className="p-5">
+      <Collapse title="Why these options (the facts behind the message)">
           <GroundedExplanation m={m} />
-        </div>
-      </Card>
+        </Collapse>
     </div>
   );
 }

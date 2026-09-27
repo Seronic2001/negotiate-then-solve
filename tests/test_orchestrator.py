@@ -6,19 +6,19 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from nts.api import create_app
-from nts.benchmark import build
-from nts.compiler import to_draft
-from nts.explainer import Explainer
-from nts.ingest import Directory, Intake, UnknownSender
-from nts.negotiation import Negotiator
-from nts.orchestrator import NotAuthorised, Orchestrator
-from nts.parsing import ParseOutput, postprocess
-from nts.policy import PolicyDecision, Verdict
-from nts.priority import PriorityModel
-from nts.schemas import Channel, Request, RequestStatus, Role
-from nts.simulators import Simulator
-from nts.store import Store
+from agents.explainer import Explainer
+from agents.negotiation import Negotiator
+from agents.policy import PolicyDecision, Verdict
+from agents.priority import PriorityModel
+from agents.simulators import Simulator
+from core.schemas import Channel, Request, RequestStatus, Role
+from evaluation.benchmark import build
+from language.compiler import to_draft
+from language.parsing import ParseOutput, postprocess
+from pipeline.ingest import Directory, Intake, UnknownSender
+from pipeline.orchestrator import NotAuthorised, Orchestrator
+from pipeline.store import Store
+from web.portal import create_app
 
 S = RequestStatus
 

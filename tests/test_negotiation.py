@@ -3,15 +3,22 @@ ladder and the oracle. No API calls (template explanations, scripted replies).""
 
 import pytest
 
-from nts.benchmark import build
-from nts.explainer import ClaimChecker, Explainer, Fact, OptionView, conflict_facts, leaks
-from nts.ledger import ConcessionLedger, gini
-from nts.negotiation import Negotiator, Reply
-from nts.priority import PriorityModel
-from nts.scenarios import uc3_lab_contention
-from nts.schemas import ConcessionEntry, Justification, Tier
-from nts.simulators import Profile, Simulator, Window
-from nts.validator import verify_timetable
+from agents.explainer import (
+    ClaimChecker,
+    Explainer,
+    Fact,
+    OptionView,
+    conflict_facts,
+    leaks,
+)
+from agents.ledger import ConcessionLedger, gini
+from agents.negotiation import Negotiator, Reply
+from agents.priority import PriorityModel
+from agents.simulators import Profile, Simulator, Window
+from core.scenarios import uc3_lab_contention
+from core.schemas import ConcessionEntry, Justification, Tier
+from core.validator import verify_timetable
+from evaluation.benchmark import build
 
 
 def test_gini():
