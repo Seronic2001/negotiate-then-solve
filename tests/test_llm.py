@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from types import SimpleNamespace
@@ -11,8 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
-from nts.llm import (
-    ApiKeyPool,
+from language.llm import (
     DailyQuotaReached,
     GeminiClient,
     LLMError,

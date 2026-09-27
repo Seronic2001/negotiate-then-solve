@@ -2,9 +2,13 @@
 
 import pytest
 
-from nts.corpus import INJECTIONS, generate_corpus
-from nts.generator import generate_department
-from nts.paraphrase import FidelityCheck, GeminiParaphraser, paraphrase_corpus, split_injection
+from core.generator import generate_department
+from language.corpus import INJECTIONS, generate_corpus
+from language.paraphrase import (
+    FidelityCheck,
+    paraphrase_corpus,
+    split_injection,
+)
 
 
 @pytest.fixture(scope="module")

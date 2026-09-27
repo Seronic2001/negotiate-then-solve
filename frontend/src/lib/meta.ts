@@ -13,7 +13,7 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
+  ScanText,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -23,7 +23,7 @@ export type Tone = "brand" | "ok" | "warn" | "bad" | "info" | "muted";
 
 export const STATUS: Record<Status, { label: string; tone: Tone; icon: LucideIcon; terminal?: boolean }> = {
   received: { label: "Received", tone: "muted", icon: Inbox },
-  classified: { label: "Classified", tone: "info", icon: Sparkles },
+  classified: { label: "Classified", tone: "info", icon: ScanText },
   policy_checked: { label: "Policy checked", tone: "info", icon: Gavel },
   compiled: { label: "Compiled", tone: "info", icon: FileCheck2 },
   solved: { label: "Solved", tone: "info", icon: Cpu },
@@ -84,6 +84,7 @@ export const EVENT_LABEL: Record<string, string> = {
   approval_refused: "Approval refused",
   bootstrap: "Timetable bootstrapped",
   seeded: "Demo history loaded",
+  policy_document: "Policy document added",
   rollback: "Rolled back",
   duplicate_dropped: "Duplicate dropped",
   unknown_sender: "Unknown sender rejected",
@@ -130,7 +131,8 @@ export function initials(name: string): string {
   return (parts[0]?.[0] ?? "?").toUpperCase() + (parts[1]?.[0] ?? "").toUpperCase();
 }
 
-const PALETTE = ["#8b7dff", "#38d0f5", "#34d399", "#fbbf24", "#fb7185", "#60a5fa", "#f472b6", "#a3e635", "#2dd4bf", "#fb923c", "#c084fc", "#facc15"];
+// Muted inks that read on paper and on the dark background alike.
+const PALETTE = ["#4f6fa8", "#a0643a", "#4a8a6a", "#8a5a8f", "#b0873a", "#3f8290", "#a84f5c", "#6f7f3f", "#7a6a55", "#5a62a8", "#9a7040", "#4f7f86"];
 export function colorFor(key: string): string {
   let h = 0x811c9dc5; // FNV-1a: similar keys ("C-011", "C-044") spread across the palette
   for (const ch of key) {
@@ -138,4 +140,12 @@ export function colorFor(key: string): string {
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return PALETTE[h % PALETTE.length];
+}
+
+/** How the text of a policy document page was obtained, in words. */
+export function how(method: string): string {
+  if (method === "markdown") return "Markdown";
+  if (method === "html") return "Web page";
+  if (method === "text layer") return "PDF text layer";
+  return method.replace(/^ocr: /, "OCR · ");
 }

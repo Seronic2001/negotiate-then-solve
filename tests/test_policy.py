@@ -5,10 +5,18 @@ from pathlib import Path
 
 import pytest
 
-from nts.generator import generate_department
-from nts.parsing import DraftConstraint, ParseOutput, postprocess
-from nts.policy import BM25, PolicyAgent, PolicyOutput, Verdict, load_handbook, query_hints, tokens
-from nts.schemas import Channel, Request, Role
+from agents.policy import (
+    BM25,
+    PolicyAgent,
+    PolicyOutput,
+    Verdict,
+    load_handbook,
+    query_hints,
+    tokens,
+)
+from core.generator import generate_department
+from core.schemas import Channel, Request, Role
+from language.parsing import DraftConstraint, ParseOutput, postprocess
 
 HANDBOOK = Path(__file__).parents[1] / "data" / "handbook.md"
 

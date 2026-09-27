@@ -1,22 +1,13 @@
 import clsx from "clsx";
-import { motion } from "framer-motion";
-import { ArrowRight, BadgeCheck, CircleSlash, Clock, MapPin, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, CircleSlash, Clock, MapPin, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { pct } from "../lib/meta";
 import type { ConstraintView, DiffRow, MessageView, OfferView } from "../lib/types";
-import { Avatar, Badge, TierBadge } from "./ui";
+import { Avatar, Badge, Mark, TierBadge } from "./ui";
 
 export function ConstraintCard({ c, highlight, index = 0 }: { c: ConstraintView; highlight?: boolean; index?: number }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06 }}
-      className={clsx(
-        "rounded-xl border bg-panel-2/60 p-3.5 transition-colors",
-        highlight ? "border-bad/50 shadow-[0_0_0_3px] shadow-bad/10" : "border-line",
-      )}
-    >
+    <div data-index={index} className={clsx("rounded-md border p-3.5", highlight ? "border-bad/35 bg-bad/[0.04]" : "border-line bg-panel")}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[11.5px] text-ink-3">{c.id}</span>
         <TierBadge tier={c.tier} />
@@ -34,7 +25,7 @@ export function ConstraintCard({ c, highlight, index = 0 }: { c: ConstraintView;
           </span>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -57,16 +48,13 @@ export function GroundedExplanation({ m }: { m: MessageView }) {
         </div>
         <div className="space-y-1.5">
           {m.claims.map((c, i) => (
-            <motion.div
+            <div
               key={i}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
               className={clsx(
-                "cursor-default rounded-lg border px-3 py-2 text-[13px] leading-relaxed transition-colors",
-                hover === i ? "border-brand/50 bg-brand/8" : "border-transparent",
+                "cursor-default rounded-md border px-3 py-2 text-[13px] leading-relaxed transition-colors",
+                hover === i ? "border-brand/40 bg-brand/[0.06]" : "border-transparent",
                 !c.supported && "text-ink-3 line-through decoration-bad/60",
               )}
             >
@@ -74,13 +62,13 @@ export function GroundedExplanation({ m }: { m: MessageView }) {
               {c.facts.length > 0 && (
                 <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
                   {c.facts.map((f) => (
-                    <span key={f} className="rounded bg-brand/12 px-1 font-mono text-[10px] text-brand">
+                    <span key={f} className="rounded bg-panel-2 px-1 font-mono text-[10px] text-ink-3">
                       {f}
                     </span>
                   ))}
                 </span>
               )}
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
@@ -91,11 +79,11 @@ export function GroundedExplanation({ m }: { m: MessageView }) {
             <div
               key={f.id}
               className={clsx(
-                "rounded-lg border px-3 py-2 text-[12.5px] transition-all",
-                active?.has(f.id) ? "border-brand bg-brand/10 shadow-md shadow-brand/10" : active ? "border-line opacity-40" : "border-line",
+                "rounded-md border px-3 py-2 text-[12.5px] transition-opacity",
+                active?.has(f.id) ? "border-brand/50 bg-brand/[0.06]" : active ? "border-line opacity-40" : "border-line",
               )}
             >
-              <span className="mr-1.5 font-mono text-[10.5px] text-brand">{f.id}</span>
+              <span className="mr-1.5 font-mono text-[10.5px] text-ink-3">{f.id}</span>
               {f.text}
             </div>
           ))}
@@ -116,55 +104,52 @@ export function OfferCard({
   onSelect?: () => void;
   accepted?: boolean;
 }) {
+  const on = selected || accepted;
   return (
-    <motion.button
+    <button
       type="button"
-      whileHover={onSelect ? { y: -3 } : undefined}
-      whileTap={onSelect ? { scale: 0.98 } : undefined}
       onClick={onSelect}
       disabled={!onSelect}
       className={clsx(
-        "relative w-full overflow-hidden rounded-2xl border p-4 text-left transition-colors",
-        selected || accepted ? "border-brand bg-brand/8 shadow-lg shadow-brand/15" : "border-line bg-panel-2/60 hover:border-brand/40",
-        !onSelect && "cursor-default",
+        "w-full rounded-md border p-3.5 text-left transition-colors",
+        on ? "border-brand bg-brand/[0.06]" : "border-line bg-panel",
+        onSelect ? "hover:border-brand/60" : "cursor-default",
       )}
     >
-      {(selected || accepted) && <motion.div layoutId={accepted ? undefined : "offer-glow"} className="absolute inset-0 bg-gradient-to-br from-brand/10 to-transparent" />}
-      <div className="relative flex items-center justify-between">
-        <span className={clsx("grid size-8 place-items-center rounded-lg text-sm font-bold", selected || accepted ? "grad-bg text-white" : "bg-panel text-ink-2 ring-1 ring-line")}>
-          {offer.key}
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-[13px] font-semibold">
+          <span className={clsx("grid size-5 place-items-center rounded-full border text-[11px]", on ? "border-brand bg-brand text-panel" : "border-line text-ink-2")}>
+            {accepted ? <Check size={11} strokeWidth={3} /> : offer.key}
+          </span>
+          Option {offer.key}
         </span>
         {offer.verified ? (
-          <Badge tone="ok">
-            <ShieldCheck size={12} /> solver-verified
-          </Badge>
+          <span className="flex items-center gap-1 text-[11.5px] text-ok">
+            <ShieldCheck size={12} /> checked by solver
+          </span>
         ) : (
-          <Badge tone="warn">
-            <Sparkles size={12} /> LLM-invented
-          </Badge>
+          <span className="text-[11.5px] text-warn">invented by the LLM</span>
         )}
       </div>
-      <div className="relative mt-3 space-y-2">
+      <div className="mt-2.5 space-y-2">
         {offer.placements.map((p) => (
           <div key={p.session}>
-            <p className="text-[13px] font-medium">{p.session_name}</p>
+            <p className="text-[13px] font-medium">{p.session_name.replace(/^the /, "")}</p>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[12.5px] text-ink-2">
               <span className="flex items-center gap-1">
-                <Clock size={12} /> {p.day} {p.time}
+                <Clock size={12} className="text-ink-3" /> {p.day} {p.time}
               </span>
               <span className="flex items-center gap-1">
-                <MapPin size={12} /> {p.room}
+                <MapPin size={12} className="text-ink-3" /> {p.room}
               </span>
             </p>
           </div>
         ))}
       </div>
-      <div className="relative mt-3 flex items-center gap-3 border-t border-line pt-2.5 text-[11.5px] text-ink-3">
-        <span>cost {offer.cost.toFixed(2)}</span>
-        <span>moves {offer.moved} class{offer.moved === 1 ? "" : "es"}</span>
-        <span className="truncate">relaxes {offer.drop.join(", ")}</span>
-      </div>
-    </motion.button>
+      <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] text-ink-3">
+        Moves {offer.moved} class{offer.moved === 1 ? "" : "es"} · cost {offer.cost.toFixed(2)}
+      </p>
+    </button>
   );
 }
 
@@ -172,10 +157,10 @@ export function MessageBubble({ m, reply }: { m: MessageView; reply?: { decision
   return (
     <div className="space-y-3">
       <div className="flex gap-3">
-        <div className="grid size-8 shrink-0 place-items-center rounded-full grad-bg text-white">
-          <Sparkles size={15} />
+        <div className="grid size-8 shrink-0 place-items-center rounded-full bg-panel-2">
+          <Mark size={16} />
         </div>
-        <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-panel-2/60 p-4">
+        <div className="min-w-0 flex-1 rounded-lg border border-line bg-panel p-4">
           <p className="mb-2 text-xs text-ink-3">
             Round {m.round} · to <span className="font-medium text-ink-2">{m.to_name}</span>
           </p>
@@ -188,8 +173,8 @@ export function MessageBubble({ m, reply }: { m: MessageView; reply?: { decision
         </div>
       </div>
       {reply && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end gap-3">
-          <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-brand/12 px-4 py-3 ring-1 ring-inset ring-brand/25">
+        <div className="flex justify-end gap-3">
+          <div className="max-w-[80%] rounded-lg border border-line bg-panel-2 px-4 py-3">
             <p className="text-xs text-ink-3">{m.to_name}</p>
             <p className="mt-1 text-[13.5px]">
               {reply.text || (reply.decision === "no_reply" ? "No reply before the deadline." : reply.decision)}
@@ -201,7 +186,7 @@ export function MessageBubble({ m, reply }: { m: MessageView; reply?: { decision
             </p>
           </div>
           <Avatar name={m.to_name} id={m.to} />
-        </motion.div>
+        </div>
       )}
     </div>
   );
@@ -219,8 +204,8 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] text-[13px]">
         <thead>
-          <tr className="border-b border-line text-left text-[11.5px] uppercase tracking-wider text-ink-3">
-            <th className="py-2 pr-3 font-medium">Session</th>
+          <tr className="border-b border-line text-left text-[12px] text-ink-3">
+            <th className="py-2 pr-3 font-medium">Class</th>
             <th className="py-2 pr-3 font-medium">Teacher</th>
             <th className="py-2 pr-3 font-medium">Before</th>
             <th className="py-2 pr-3" />
@@ -229,13 +214,7 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <motion.tr
-              key={r.session}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className="border-b border-line/60"
-            >
+            <tr key={r.session} data-index={i} className="border-b border-line/60">
               <td className="py-2.5 pr-3">
                 <p className="font-medium">{r.session_name.replace(/^the /, "")}</p>
               </td>
@@ -245,7 +224,7 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
                 <ArrowRight size={14} />
               </td>
               <td className="py-2.5 font-medium text-ok">{r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : "—"}</td>
-            </motion.tr>
+            </tr>
           ))}
         </tbody>
       </table>

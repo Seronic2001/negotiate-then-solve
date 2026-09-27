@@ -1,8 +1,8 @@
 import pytest
 
-from nts.itc import CttFormatError, load_ctt, to_ctt_solution
-from nts.solver import TimetableSolver
-from nts.validator import verify_timetable
+from core.itc import CttFormatError, load_ctt, to_ctt_solution
+from core.solver import TimetableSolver
+from core.validator import verify_timetable
 
 # The "Toy" instance from the ITC-2007 Track 3 specification.
 TOY = """Name: Toy

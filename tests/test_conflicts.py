@@ -1,9 +1,9 @@
 import pytest
 
-from nts.conflicts import enumerate_mcs, find_mus
-from nts.scenarios import uc3_lab_contention
-from nts.solver import TimetableSolver
-from nts.validator import verify_timetable
+from core.conflicts import enumerate_mcs, find_mus
+from core.scenarios import uc3_lab_contention
+from core.solver import TimetableSolver
+from core.validator import verify_timetable
 
 LAB_CONSTRAINTS = ["C-DAS-ROOM", "C-DAS-TIME", "C-KHAN-ROOM", "C-KHAN-TIME"]
 

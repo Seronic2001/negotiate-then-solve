@@ -2,11 +2,11 @@
 
 import csv
 
-from nts.benchmark import build
-from nts.ingest import Directory
-from nts.judge import _Rating, _Ratings, judge, kappa_report
-from nts.safety import CompromisedParser, evaluate, make_cases
-from nts.stats import bootstrap_ci, cohen_kappa, mcnemar, wilcoxon
+from evaluation.benchmark import build
+from evaluation.judge import _Rating, _Ratings, judge, kappa_report
+from evaluation.safety import CompromisedParser, evaluate, make_cases
+from evaluation.stats import bootstrap_ci, cohen_kappa, mcnemar, wilcoxon
+from pipeline.ingest import Directory
 
 
 def test_safety_set_has_fifty_cases_in_every_category():

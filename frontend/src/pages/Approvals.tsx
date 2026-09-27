@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BadgeCheck, Bell, CheckCircle2, ExternalLink, MessagesSquare, Scale, ShieldCheck, Users, XCircle } from "lucide-react";
+import { BadgeCheck, Bell, ExternalLink, MessagesSquare, Scale, Users, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { DiffTable } from "../components/Negotiation";
@@ -18,14 +18,8 @@ export default function Approvals() {
   return (
     <>
       <PageHeader
-        eyebrow="Human approval gate"
         title="Approvals"
-        subtitle="Nothing reaches the published timetable without you. Each change arrives with its diff, the people it affects, how it was negotiated and its fairness impact."
-        actions={
-          <Badge tone="ok">
-            <ShieldCheck size={12} /> Unapproved publishes: 0
-          </Badge>
-        }
+        subtitle="Nothing is published until you approve it."
       />
       {loading && !data ? (
         <Skeleton className="h-80" />
@@ -33,7 +27,7 @@ export default function Approvals() {
         <div className="space-y-6">
           <AnimatePresence>
             {list.map((c) => (
-              <motion.div key={c.id} layout exit={{ opacity: 0, x: 60, transition: { duration: 0.35 } }}>
+              <motion.div key={c.id} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
                 <ApprovalCard
                   c={c}
                   onDone={async (msg) => {
@@ -60,7 +54,6 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
-  const [done, setDone] = useState(false);
   const diff = c.proposal?.diff ?? [];
   const people = new Set(diff.flatMap((d) => [d.faculty_name ?? "", ...d.groups.map((g) => `Section ${g.replace("G-", "").replace(/^0/, "")}`)]).filter(Boolean));
   const o = c.outcome;
@@ -69,8 +62,6 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
     setBusy("approve");
     try {
       const r = await api.approve(c.id);
-      setDone(true);
-      await new Promise((res) => setTimeout(res, 900));
       await onDone(`Published version ${r.version}. Notified ${Object.keys(r.notified).length} affected people.`);
     } finally {
       setBusy(null);
@@ -78,17 +69,7 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
   };
 
   return (
-    <Card className="relative overflow-hidden">
-      <AnimatePresence>
-        {done && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-10 grid place-items-center bg-panel/85 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.4, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 14 }} className="flex flex-col items-center">
-              <CheckCircle2 size={64} className="text-ok" />
-              <p className="mt-3 text-lg font-semibold">Published</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <Card>
       <div className="flex flex-wrap items-start gap-4 border-b border-line p-5">
         <Avatar name={c.sender_name} id={c.sender} size={40} />
         <div className="min-w-0 flex-1">
@@ -102,23 +83,23 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="danger" icon={XCircle} onClick={() => setRejecting(!rejecting)} disabled={!!busy}>
+          <Button icon={XCircle} onClick={() => setRejecting(!rejecting)} disabled={!!busy}>
             Reject
           </Button>
-          <Button variant="success" icon={BadgeCheck} loading={busy === "approve"} onClick={approve}>
-            Approve & publish
+          <Button variant="primary" icon={BadgeCheck} loading={busy === "approve"} onClick={approve}>
+            Approve and publish
           </Button>
         </div>
       </div>
       <AnimatePresence>
         {rejecting && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-line bg-bad/5">
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-line bg-panel-2">
             <div className="flex flex-wrap items-center gap-3 p-4">
               <input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Why? The case goes back to negotiation with your note."
-                className="h-10 flex-1 rounded-xl border border-line bg-panel px-3 text-sm outline-none focus:border-bad/50"
+                className="h-10 flex-1 rounded-md border border-line bg-panel px-3 text-sm outline-none focus:border-bad/50"
               />
               <Button
                 variant="danger"
@@ -141,12 +122,12 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
       </AnimatePresence>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-ink-3">Changes ({diff.length})</p>
+          <p className="mb-3 text-xs font-medium text-ink-3">Changes ({diff.length})</p>
           <DiffTable rows={diff} />
         </div>
         <div className="space-y-5 p-5">
           <div>
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-ink-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-3">
               <Users size={13} /> Affected, will be notified
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -159,7 +140,7 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
             </div>
           </div>
           <div>
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-ink-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-3">
               <MessagesSquare size={13} /> How it was resolved
             </p>
             <p className="text-[13.5px] text-ink-2">
@@ -177,7 +158,7 @@ function ApprovalCard({ c, onDone }: { c: CaseDetail; onDone: (msg: string) => P
             )}
           </div>
           <div>
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-ink-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-3">
               <Scale size={13} /> Fairness
             </p>
             <p className="text-[13.5px]">

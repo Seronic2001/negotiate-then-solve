@@ -2,11 +2,11 @@
 
 import json
 
-from nts.compiler import completion, export, gold_output, user_message
-from nts.corpus import ExpectedAction, generate_corpus
-from nts.generator import generate_department
-from nts.metrics import exact_match
-from nts.parsing import ParseOutput, postprocess
+from core.generator import generate_department
+from evaluation.metrics import exact_match
+from language.compiler import completion, export, gold_output, user_message
+from language.corpus import ExpectedAction, generate_corpus
+from language.parsing import ParseOutput, postprocess
 
 
 def test_gold_json_round_trips_to_the_targets():

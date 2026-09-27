@@ -1,16 +1,17 @@
-import { motion } from "framer-motion";
 import { Activity, Brain, Cpu, Database, Gauge, Radio, Route, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ActivityFeed } from "../components/Lifecycle";
 import { Badge, Card, CardHeader, LiveDot, Meter, PageHeader, Skeleton, Stat } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
+import { useTokens } from "../lib/theme";
 import { EVENT_LABEL, pct, secs } from "../lib/meta";
 import { useLiveEvents } from "./Dashboard";
 
 export default function Observability() {
   const { data: o } = useApi(() => api.observability(), [], 2500);
   const events = useLiveEvents(1200);
+  const t = useTokens();
   if (!o) return <Skeleton className="h-[640px]" />;
   const kinds = Object.entries(o.events_by_kind)
     .sort((a, b) => b[1] - a[1])
@@ -23,35 +24,40 @@ export default function Observability() {
   return (
     <>
       <PageHeader
-        eyebrow="Observability"
         title="System health"
-        subtitle="What the pipeline is doing right now: model quota, latency per stage, routing, explanation quality and the safety counters."
+        subtitle="Model quota, latency per stage, routing and the safety counters."
         actions={
           <Badge tone="ok">
             <LiveDot /> up {up > 3600 ? `${(up / 3600).toFixed(1)} h` : `${Math.round(up / 60)} min`} · {o.threads_running} running
           </Badge>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Card className="grid grid-cols-2 gap-5 p-5 xl:grid-cols-4">
         <Stat label="Events recorded" value={Object.values(o.events_by_kind).reduce((a, b) => a + b, 0)} icon={Activity} />
         <Stat label="Explanation faithfulness" value={(o.explanations.faithfulness ?? 1) * 100} format={(v) => `${v.toFixed(0)}%`} icon={Brain} tone="ok" delay={0.05} hint={`${o.explanations.messages} messages · ${o.explanations.rejected_claims} claims rejected`} />
         <Stat label="Unapproved publishes" value={o.safety.unapproved_publishes} icon={ShieldCheck} tone={o.safety.unapproved_publishes ? "bad" : "ok"} delay={0.1} hint={`${o.safety.refused} refused · ${o.safety.denied} denied`} />
         <Stat label="Private-reason leaks" value={o.safety.leaks} icon={TriangleAlert} tone={o.safety.leaks ? "bad" : "ok"} delay={0.15} hint="measured on every message" />
-      </div>
+      </Card>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader icon={Database} title="LLM usage (Gemini free tier)" subtitle={`Parser: ${o.models.parser} · Policy: ${o.models.policy}`} />
+          <CardHeader icon={Database} title="LLM usage" subtitle={`Parser: ${o.models.parser} · Policy: ${o.models.policy}`} />
           <div className="space-y-4 p-5">
             {o.llm.map((m) => (
               <div key={m.model}>
                 <div className="mb-1.5 flex items-center justify-between text-[13px]">
                   <span className="font-mono text-[12.5px]">{m.model}</span>
                   <span className="text-ink-3">
-                    <span className="font-medium text-ink">{m.used_today}</span> / {m.rpd ?? "?"} today · {m.cached_responses} cached
+                    {m.model.startsWith("local:") ? (
+                      <>local model · no quota · {m.cached_responses} cached</>
+                    ) : (
+                      <><span className="font-medium text-ink">{m.used_today}</span> / {m.rpd ?? "?"} today · {m.cached_responses} cached</>
+                    )}
                   </span>
                 </div>
-                <Meter value={m.used_today} max={m.rpd ?? 1} tone={m.rpd && m.used_today / m.rpd > 0.85 ? "bad" : m.rpd && m.used_today / m.rpd > 0.6 ? "warn" : "brand"} />
+                {!m.model.startsWith("local:") && (
+                  <Meter value={m.used_today} max={m.rpd ?? 1} tone={m.rpd && m.used_today / m.rpd > 0.85 ? "bad" : m.rpd && m.used_today / m.rpd > 0.6 ? "warn" : "brand"} />
+                )}
               </div>
             ))}
             {!o.llm.length && <p className="text-sm text-ink-3">No LLM calls: running on the offline parser and policy rules.</p>}
@@ -62,12 +68,12 @@ export default function Observability() {
         <Card>
           <CardHeader icon={Timer} title="Latency by stage" subtitle="p50 (solid) and p95 (faint), across requests handled since start" />
           <div className="space-y-4 p-5">
-            {stages.map(([k, s], i) => (
+            {stages.map(([k, s]) => (
               <div key={k} className="grid grid-cols-[150px_minmax(0,1fr)_130px] items-center gap-3 text-[13px]">
                 <span className="text-ink-2">{k.replace(/_/g, " ")}</span>
-                <div className="relative h-7 rounded-lg bg-panel-2">
-                  <motion.div className="absolute inset-y-0 left-0 rounded-lg bg-brand/25" initial={{ width: 0 }} animate={{ width: `${((s.p95 ?? 0) / maxStage) * 100}%` }} transition={{ delay: i * 0.1, duration: 0.8 }} />
-                  <motion.div className="absolute inset-y-0 left-0 rounded-lg grad-bg" initial={{ width: 0 }} animate={{ width: `${((s.p50 ?? 0) / maxStage) * 100}%` }} transition={{ delay: i * 0.1 + 0.1, duration: 0.8 }} />
+                <div className="relative h-5 rounded bg-panel-2">
+                  <div className="absolute inset-y-0 left-0 rounded bg-brand/20" style={{ width: `${((s.p95 ?? 0) / maxStage) * 100}%` }} />
+                  <div className="absolute inset-y-0 left-0 rounded bg-brand" style={{ width: `${((s.p50 ?? 0) / maxStage) * 100}%` }} />
                 </div>
                 <span className="text-right font-mono text-[12px] text-ink-2">
                   {secs(s.p50)} / {secs(s.p95)}
@@ -91,27 +97,19 @@ export default function Observability() {
             <div className="relative grid size-36 place-items-center">
               <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--line)" strokeWidth="3.2" />
-                <motion.circle
+                <circle
                   cx="18"
                   cy="18"
                   r="15.9"
                   fill="none"
-                  stroke="url(#rg)"
+                  stroke={t.brand}
                   strokeWidth="3.2"
-                  strokeLinecap="round"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: o.routing.fast_path_share ?? 0 }}
-                  transition={{ duration: 1.2 }}
+                  pathLength={1}
+                  strokeDasharray={`${o.routing.fast_path_share ?? 0} 1`}
                 />
-                <defs>
-                  <linearGradient id="rg">
-                    <stop offset="0%" stopColor="var(--brand)" />
-                    <stop offset="100%" stopColor="var(--brand-2)" />
-                  </linearGradient>
-                </defs>
               </svg>
               <div className="text-center">
-                <p className="text-2xl font-semibold">{pct(o.routing.fast_path_share)}</p>
+                <p className="font-serif text-2xl font-semibold">{pct(o.routing.fast_path_share)}</p>
                 <p className="text-[11px] text-ink-3">fast path</p>
               </div>
             </div>
@@ -134,10 +132,10 @@ export default function Observability() {
               <BarChart data={kinds} layout="vertical" margin={{ left: 40 }}>
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" interval={0} tick={{ fill: "var(--ink-3)", fontSize: 11 }} width={170} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: "var(--panel-2)" }} contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, fontSize: 12 }} />
-                <Bar dataKey="v" radius={[0, 6, 6, 0]} animationDuration={900}>
+                <Tooltip cursor={{ fill: "var(--panel-2)" }} contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }} />
+                <Bar dataKey="v" radius={[0, 3, 3, 0]}>
                   {kinds.map((k, i) => (
-                    <Cell key={k.name} fill={i % 2 ? "#38d0f5" : "#8b7dff"} />
+                    <Cell key={k.name} fill={i === 0 ? t.brand : t.info} />
                   ))}
                 </Bar>
               </BarChart>

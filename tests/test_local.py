@@ -6,12 +6,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from nts.compiler import CompilerParser, completion, gold_output
-from nts.corpus import ExpectedAction, generate_corpus
-from nts.generator import generate_department
-from nts.llm import LLMError
-from nts.local import LocalClient
-from nts.metrics import exact_match
+from core.generator import generate_department
+from evaluation.metrics import exact_match
+from language.compiler import CompilerParser, completion, gold_output
+from language.corpus import ExpectedAction, generate_corpus
+from language.llm import LLMError
+from language.local import LocalClient
 
 
 class FakeServer:

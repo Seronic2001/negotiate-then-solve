@@ -1,9 +1,8 @@
 import clsx from "clsx";
-import { motion } from "framer-motion";
 import { ChevronRight, ListChecks, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Avatar, Badge, Card, EmptyState, item, PageHeader, Skeleton, Stagger, StatusBadge, Tabs } from "../components/ui";
+import { Avatar, Badge, Card, EmptyState, PageHeader, Skeleton, StatusBadge, Tabs } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
@@ -39,9 +38,8 @@ export default function Requests() {
   return (
     <>
       <PageHeader
-        eyebrow="Requests"
         title={scope === "all" ? "All requests" : "Your requests"}
-        subtitle="Every request with its current state. Open one for the full audit: routing, parsing, the policy check, the conflict, the negotiation and the change."
+        subtitle="Open a request to see how it was handled, step by step."
         actions={
           can("see_all") && (
             <Tabs
@@ -62,18 +60,18 @@ export default function Requests() {
               { id: "all", label: "All", count: count("all") },
               { id: "active", label: "In progress", count: count("active") },
               { id: "done", label: "Done", count: count("done") },
-              { id: "exits", label: "Stopped safely", count: count("exits") },
+              { id: "exits", label: "Stopped", count: count("exits") },
             ]}
             value={filter}
             onChange={setFilter}
           />
           <div className="relative ml-auto w-full max-w-xs">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Filter by text, person or id"
-              className="h-9 w-full rounded-xl border border-line bg-panel-2 pl-9 pr-3 text-[13px] outline-none focus:border-brand/50"
+              placeholder="Filter"
+              className="h-8 w-full rounded-md border border-line bg-panel pl-8 pr-3 text-[13px] outline-none focus:border-brand/50"
             />
           </div>
         </div>
@@ -84,16 +82,14 @@ export default function Requests() {
             ))}
           </div>
         ) : rows.length ? (
-          <Stagger className="divide-y divide-line">
+          <ul className="divide-y divide-line">
             {rows.map((c) => (
-              <motion.div key={c.id} variants={item}>
-                <Link to={`/requests/${c.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-panel-2/60">
-                  <Avatar name={c.sender_name} id={c.sender} size={34} />
+              <li key={c.id}>
+                <Link to={`/requests/${c.id}`} className="group flex items-center gap-3.5 px-5 py-3 hover:bg-panel-2/60">
+                  <Avatar name={c.sender_name} id={c.sender} size={30} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px]">{c.text}</p>
+                    <p className="truncate text-[13.5px]">{c.text}</p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-3">
-                      <span className="font-mono">{c.id}</span>
-                      <span>·</span>
                       <span>{c.sender_name}</span>
                       <span>·</span>
                       <span>{ago(c.received_at)}</span>
@@ -106,15 +102,14 @@ export default function Requests() {
                     </p>
                   </div>
                   <div className="hidden items-center gap-2 sm:flex">
-                    {c.route && <Badge tone={c.route === "fast" ? "ok" : "info"}>{c.route === "fast" ? "fast path" : "System Two"}</Badge>}
                     {c.rounds > 0 && <Badge tone="warn">{c.rounds} round{c.rounds > 1 ? "s" : ""}</Badge>}
                   </div>
                   <StatusBadge status={c.status} live={c.running} />
                   <ChevronRight size={16} className={clsx("text-ink-3 transition-transform group-hover:translate-x-0.5", STATUS[c.status]?.terminal && "opacity-60")} />
                 </Link>
-              </motion.div>
+              </li>
             ))}
-          </Stagger>
+          </ul>
         ) : (
           <EmptyState icon={ListChecks} title="No requests here" text="Requests you send appear here with their full audit trail." />
         )}

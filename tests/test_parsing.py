@@ -5,12 +5,17 @@ from datetime import datetime
 
 import pytest
 
-from nts.corpus import ExpectedAction, generate_corpus
-from nts.generator import generate_department
-from nts.metrics import atom_counts, ece, exact_match, semantic_match
-from nts.parsing import DraftConstraint, ParseOutput, SystemTwoParser, build_prompt
-from nts.schemas import Channel, Request, Role, Tier
-from nts.system_one import SystemOne, tune_tau
+from core.generator import generate_department
+from core.schemas import Channel, Request, Role, Tier
+from evaluation.metrics import atom_counts, ece, exact_match, semantic_match
+from language.corpus import ExpectedAction, generate_corpus
+from language.parsing import (
+    DraftConstraint,
+    ParseOutput,
+    SystemTwoParser,
+    build_prompt,
+)
+from language.system_one import SystemOne, tune_tau
 
 
 class StubClient:

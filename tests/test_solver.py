@@ -1,10 +1,10 @@
 import pytest
 
-from nts.generator import generate_department
-from nts.instance import policy_constraints
-from nts.schemas import Constraint, ConstraintType, Scope, Tier, When
-from nts.solver import TimetableSolver
-from nts.validator import validate_constraint, verify_timetable
+from core.generator import generate_department
+from core.instance import policy_constraints
+from core.schemas import Constraint, ConstraintType, Scope, Tier, When
+from core.solver import TimetableSolver
+from core.validator import validate_constraint, verify_timetable
 
 
 @pytest.fixture(scope="module")

@@ -2,7 +2,11 @@ from collections import Counter
 
 import pytest
 
-from nts.corpus import (
+from core.generator import generate_department
+from core.instance import policy_constraints
+from core.schemas import Role
+from core.solver import TimetableSolver
+from language.corpus import (
     CorpusExample,
     ExpectedAction,
     Variant,
@@ -10,10 +14,6 @@ from nts.corpus import (
     load_jsonl,
     save_jsonl,
 )
-from nts.generator import generate_department
-from nts.schemas import Role
-from nts.solver import TimetableSolver
-from nts.instance import policy_constraints
 
 
 @pytest.fixture(scope="module")

@@ -25,9 +25,8 @@ export default function Graph() {
   return (
     <>
       <PageHeader
-        eyebrow="State and memory"
         title="Knowledge graph"
-        subtitle="Stakeholders, constraints and resources, and how they relate. Every interpretation decision (who to ask, who may change what, where to escalate) is a query over this graph."
+        subtitle="Who owns which constraint, who reports to whom, and what conflicts."
         actions={
           <Badge tone="muted">
             <Move size={12} /> drag to pan · scroll to zoom · hover to focus
@@ -36,7 +35,7 @@ export default function Graph() {
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="overflow-hidden">
-          <div className="relative h-[640px] bg-[radial-gradient(circle_at_center,var(--panel-2),var(--panel))]">
+          <div className="relative h-[640px]">
             {data ? <KnowledgeGraph data={data} hidden={hidden} /> : <Skeleton className="h-full" />}
           </div>
         </Card>
@@ -45,7 +44,7 @@ export default function Graph() {
             <CardHeader icon={Network} title="Relations" subtitle="Toggle to declutter" />
             <div className="space-y-1 p-3">
               {rels.map((r) => {
-                const st = EDGE_STYLE[r] ?? { color: "#64748b", label: r };
+                const st = EDGE_STYLE[r] ?? { color: "#7a7468", label: r };
                 const off = hidden.has(r);
                 return (
                   <button
@@ -56,7 +55,7 @@ export default function Graph() {
                       else n.add(r);
                       return n;
                     })}
-                    className={clsx("flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition-opacity hover:bg-panel-2", off && "opacity-40")}
+                    className={clsx("flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition-opacity hover:bg-panel-2", off && "opacity-40")}
                   >
                     <svg width="26" height="10" className="mt-1.5 shrink-0">
                       <line x1="0" y1="5" x2="26" y2="5" stroke={st.color} strokeWidth="2.5" strokeDasharray={st.dash} />

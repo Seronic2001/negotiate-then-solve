@@ -1,5 +1,4 @@
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type SimulationLinkDatum, type SimulationNodeDatum } from "d3-force";
-import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphData } from "../lib/types";
 
@@ -7,25 +6,25 @@ type N = SimulationNodeDatum & GraphData["nodes"][number];
 type L = SimulationLinkDatum<N> & { rel: string };
 
 export const NODE_STYLE: Record<string, { color: string; r: number; label: string }> = {
-  stakeholder: { color: "#8b7dff", r: 11, label: "Stakeholder" },
-  constraint: { color: "#fbbf24", r: 8, label: "Constraint" },
-  session: { color: "#38d0f5", r: 5, label: "Session" },
-  room: { color: "#34d399", r: 7, label: "Room" },
-  group: { color: "#f472b6", r: 8, label: "Section" },
-  request: { color: "#94a3b8", r: 5, label: "Request / rule" },
-  rule: { color: "#94a3b8", r: 5, label: "Request / rule" },
+  stakeholder: { color: "#4f6fa8", r: 11, label: "Stakeholder" },
+  constraint: { color: "#b0873a", r: 8, label: "Constraint" },
+  session: { color: "#3f8290", r: 5, label: "Session" },
+  room: { color: "#4a8a6a", r: 7, label: "Room" },
+  group: { color: "#a84f5c", r: 8, label: "Section" },
+  request: { color: "#8a8477", r: 5, label: "Request / rule" },
+  rule: { color: "#8a8477", r: 5, label: "Request / rule" },
 };
 
 export const EDGE_STYLE: Record<string, { color: string; dash?: string; label: string }> = {
-  owns: { color: "#8b7dff", label: "owns" },
-  references: { color: "#fbbf24", label: "references" },
-  has_authority_over: { color: "#64748b", label: "has authority over" },
-  reports_to: { color: "#a78bfa", dash: "4 3", label: "reports to" },
-  derived_from: { color: "#94a3b8", dash: "2 3", label: "derived from" },
-  conflicts_with: { color: "#fb7185", dash: "6 3", label: "conflicts with (MUS)" },
-  attended_by: { color: "#f472b6", label: "attended by" },
-  member_of: { color: "#f472b6", dash: "2 2", label: "member of" },
-  affects: { color: "#38d0f5", label: "affects" },
+  owns: { color: "#4f6fa8", label: "owns" },
+  references: { color: "#b0873a", label: "references" },
+  has_authority_over: { color: "#7a7468", label: "has authority over" },
+  reports_to: { color: "#5a62a8", dash: "4 3", label: "reports to" },
+  derived_from: { color: "#8a8477", dash: "2 3", label: "derived from" },
+  conflicts_with: { color: "#b3443a", dash: "6 3", label: "conflicts with (MUS)" },
+  attended_by: { color: "#a84f5c", label: "attended by" },
+  member_of: { color: "#a84f5c", dash: "2 2", label: "member of" },
+  affects: { color: "#3f8290", label: "affects" },
 };
 
 function styleOf(n: GraphData["nodes"][number]) {
@@ -99,17 +98,11 @@ export function KnowledgeGraph({ data, hidden }: { data: GraphData; hidden: Set<
       onPointerUp={() => (drag.current = null)}
       onPointerLeave={() => (drag.current = null)}
     >
-      <defs>
-        <radialGradient id="glow">
-          <stop offset="0%" stopColor="#8b7dff" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#8b7dff" stopOpacity="0" />
-        </radialGradient>
-      </defs>
       <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`} style={{ transformOrigin: `${size.w / 2}px ${size.h / 2}px` }}>
         {links.map((l, i) => {
           const a = l.source as N;
           const b = l.target as N;
-          const st = EDGE_STYLE[l.rel] ?? { color: "#64748b" };
+          const st = EDGE_STYLE[l.rel] ?? { color: "#7a7468" };
           const dim = neighbours && !(neighbours.has(a.id) && neighbours.has(b.id));
           return (
             <line
@@ -131,8 +124,7 @@ export function KnowledgeGraph({ data, hidden }: { data: GraphData; hidden: Set<
           const big = n.kind === "stakeholder" || n.kind === "constraint";
           return (
             <g key={n.id} transform={`translate(${n.x ?? 0} ${n.y ?? 0})`} opacity={dim ? 0.15 : 1} onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)} className="cursor-pointer">
-              {hover === n.id && <circle r={st.r * 3} fill="url(#glow)" />}
-              <motion.circle initial={{ r: 0 }} animate={{ r: st.r }} fill={st.color} stroke="var(--panel)" strokeWidth={2} />
+              <circle r={st.r} fill={st.color} stroke="var(--panel)" strokeWidth={2} />
               {(big || hover === n.id) && (
                 <text y={-st.r - 5} textAnchor="middle" className="fill-ink-2 text-[10px] font-medium" style={{ paintOrder: "stroke", stroke: "var(--bg)", strokeWidth: 3 }}>
                   {n.label.length > 22 ? `${n.label.slice(0, 20)}…` : n.label}
