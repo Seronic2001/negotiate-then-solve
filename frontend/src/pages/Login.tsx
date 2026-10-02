@@ -36,7 +36,8 @@ export default function Login() {
 
   return (
     <div className="grid min-h-full lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="hidden border-r border-line bg-panel p-12 lg:flex lg:flex-col">
+      {/* pinned to the viewport: a large department's persona list makes the page much taller than the screen */}
+      <div className="hidden border-r border-line bg-panel p-12 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start">
         <div className="flex items-center gap-2.5">
           <Mark size={26} />
           <span className="font-serif text-[17px] font-semibold">Negotiate, Then Solve</span>

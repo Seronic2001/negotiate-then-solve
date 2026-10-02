@@ -2,7 +2,8 @@
 
     uv run nts-web                        # API on http://127.0.0.1:8000 (serves frontend/dist if built)
     NTS_PARSER=gemini uv run nts-web      # System Two + policy agent on Gemini instead of the offline rules
-    NTS_PARSER=local uv run nts-web       # fine-tuned compiler on llama-server (NTS_LOCAL_URL, default :8080)
+    NTS_PARSER=local uv run nts-web       # fine-tuned model on llama-server (NTS_LOCAL_URL, default :8080)
+    uv run nts-web --parser local --test-data 20   # benchmark department, 20 held-out test requests replayed
 
 One ``World`` holds a demo department and the real pipeline: intake, System
 One routing, the parser (offline rules, Gemini or the local compiler), the policy agent, the
@@ -34,7 +35,7 @@ from agents.documents import SUFFIXES, ingest
 from agents.explainer import TIER_NAME, describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
 from agents.negotiation import Message, Reply
-from agents.policy import BM25, Rule, tokens
+from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
 from core.graph import add_conflict, build_graph
 from core.schemas import Placement, Request, RequestStatus, Tier
@@ -378,6 +379,7 @@ def create_web_app(world: World | None = None) -> FastAPI:
             "recent": w.store.events(limit=None)[-12:],
             "models": w.models, "sessions": len(w.instance.sessions), "faculty": len(w.instance.faculty),
             "rooms": len(w.instance.rooms), "groups": len(w.instance.groups),
+            "test_run": w.test_run,
         }
 
     @app.get("/api/instance")
@@ -561,7 +563,8 @@ def create_web_app(world: World | None = None) -> FastAPI:
         return {"semester": SEMESTER, "gini": led.gini(teaching, SEMESTER), "decay": led.decay,
                 "entries": [e.model_dump() | {"name": w.name_of(e.stakeholder)} for e in entries],
                 "stakeholders": [{"id": f, "name": w.name_of(f), "credit": led.credit(f, SEMESTER),
-                                  "concessions": led.counts().get(f, 0.0)} for f in teaching]}
+                                  "concessions": led.times().get(f, 0),
+                                  "burden": led.counts().get(f, 0.0)} for f in teaching]}
 
     @app.get("/api/graph")
     def graph(u: dict = Depends(view("graph"))) -> dict:
@@ -625,13 +628,17 @@ def create_web_app(world: World | None = None) -> FastAPI:
         return {"removed": name}
 
     @app.get("/api/handbook/search")
-    def search(q: str, k: int = 5, u: dict = Depends(user)) -> dict:
+    def search(q: str, k: int = 5, mode: str | None = None, u: dict = Depends(user)) -> dict:
+        """The policy agent's retriever by default; ``mode`` compares bm25, dense or hybrid."""
         w = W()
-        bm = BM25(w.rules)
-        scores = bm.scores(q)
+        kind = mode or w.retriever_kind
+        if kind not in RETRIEVERS:
+            raise HTTPException(422, f"mode must be one of {', '.join(RETRIEVERS)}")
+        retriever = w.policy.retriever if kind == w.retriever_kind else make_retriever(w.rules, kind)
+        scores = retriever.scores(q)
         ranked = sorted(zip(scores, w.rules), key=lambda x: -x[0])[:k]
-        return {"query": q, "tokens": tokens(q),
-                "results": [_rule_view(r) | {"score": round(s, 3)} for s, r in ranked if s > 0]}
+        return {"query": q, "tokens": tokens(q), "mode": kind,
+                "results": [_rule_view(r) | {"score": round(s, 4)} for s, r in ranked if s > 0]}
 
     @app.get("/api/transparency")
     def transparency(u: dict = Depends(user)) -> dict:
@@ -722,7 +729,18 @@ def create_web_app(world: World | None = None) -> FastAPI:
 
 
 def run() -> None:
+    import argparse
+
     import uvicorn
 
+    ap = argparse.ArgumentParser(prog="nts-web", description="API + built UI (flags override the NTS_* variables)")
+    ap.add_argument("--parser", choices=["offline", "gemini", "local"], help="NTS_PARSER")
+    ap.add_argument("--test-data", type=int, metavar="N", nargs="?", const=20,
+                    help="benchmark department, replaying N held-out test requests (default 20) instead of the demo history")
+    args = ap.parse_args()
+    if args.parser:
+        os.environ["NTS_PARSER"] = args.parser
+    if args.test_data is not None:
+        os.environ["NTS_TEST_DATA"] = str(args.test_data)
     uvicorn.run(create_web_app(), host=os.environ.get("NTS_HOST", "127.0.0.1"),
                 port=int(os.environ.get("NTS_PORT", "8000")))

@@ -1,0 +1,40 @@
+{"id": "Q-01", "query": "Can I shift my practical to another lab next week?", "rules": ["LAB-1"]}
+{"id": "Q-02", "query": "Is there a limit on how many students can sit in the lab at once?", "rules": ["LAB-2"]}
+{"id": "Q-03", "query": "Can the practical go ahead if nobody from staff is around to supervise?", "rules": ["LAB-3"]}
+{"id": "Q-04", "query": "Are the labs shut on some weekends for servicing?", "rules": ["LAB-4"]}
+{"id": "Q-05", "query": "Can I put my class in the midday break?", "rules": ["P-LUNCH"]}
+{"id": "Q-06", "query": "Is it okay to teach four periods without stopping?", "rules": ["P-MAXCONSEC"]}
+{"id": "Q-07", "query": "Could I hold a session on Saturday morning?", "rules": ["P-HOURS"]}
+{"id": "Q-08", "query": "What happens to the lecture I lose while I'm at a workshop abroad?", "rules": ["P-MAKEUP"]}
+{"id": "Q-09", "query": "Dr. Iyer and I want to trade our Tuesday and Thursday lectures.", "rules": ["P-SWAP"]}
+{"id": "Q-10", "query": "Can a colleague take my class for me, or can I teach it over Zoom?", "rules": ["P-ONLINE"]}
+{"id": "Q-11", "query": "The room is too small for my section, what does the rule say?", "rules": ["P-CAPACITY"]}
+{"id": "Q-12", "query": "I want to reserve the big hall for the coding club meetup.", "rules": ["P-BOOKING", "ROOM-4.1"]}
+{"id": "Q-13", "query": "Two of our courses are at the same time, who do we tell?", "rules": ["P-CLASH"]}
+{"id": "Q-14", "query": "Will my medical reason be shown to the other faculty?", "rules": ["P-PRIVACY"]}
+{"id": "Q-15", "query": "How many hours a week am I expected to teach at most?", "rules": ["P-LOAD"]}
+{"id": "Q-16", "query": "How many hours does a four credit course with a lab get each week?", "rules": ["P-CREDITS"]}
+{"id": "Q-17", "query": "Am I allowed to ask for my mornings to be kept free?", "rules": ["P-PREFS"]}
+{"id": "Q-18", "query": "Can a professor ask to move a class that belongs to someone else?", "rules": ["P-AUTHORITY"]}
+{"id": "Q-19", "query": "Does the timetable office also handle exam scheduling and events?", "rules": ["P-SCOPE"]}
+{"id": "Q-20", "query": "When are the midterms held?", "rules": ["EXAM-3.1"]}
+{"id": "Q-21", "query": "Can I move my class in the week before the midterm?", "rules": ["EXAM-3.2"]}
+{"id": "Q-22", "query": "How many times can I be put on exam hall supervision in one week?", "rules": ["EXAM-3.3"]}
+{"id": "Q-23", "query": "A student was ill during the midsem, can they retake it?", "rules": ["EXAM-3.4"]}
+{"id": "Q-24", "query": "Can I run an additional revision session just before the finals?", "rules": ["EXAM-3.5"]}
+{"id": "Q-25", "query": "Our visiting lecturer wants a slot outside the times in her contract.", "rules": ["GUEST-1"]}
+{"id": "Q-26", "query": "How early do we have to warn a visiting lecturer before rescheduling her talk?", "rules": ["GUEST-2"]}
+{"id": "Q-27", "query": "How much can a visiting professor teach in a single day?", "rules": ["GUEST-3"]}
+{"id": "Q-28", "query": "Which room does the visiting lecturer get, and who confirms it?", "rules": ["GUEST-4"]}
+{"id": "Q-29", "query": "I no longer need the seminar room I reserved, what should I do?", "rules": ["ROOM-4.3"]}
+{"id": "Q-30", "query": "Can I grab a seminar room for an extra tutorial during the day?", "rules": ["ROOM-4.2"]}
+{"id": "Q-31", "query": "I need a lab with GPUs for my deep learning practical.", "rules": ["P-LABS"]}
+{"id": "Q-32", "query": "Is there a cap on sessions a course can have online?", "rules": ["P-ONLINE"]}
+{"id": "Q-33", "query": "Can the head of department waive the 1 pm break for our section?", "rules": ["P-LUNCH"]}
+{"id": "Q-34", "query": "Please put all three of my lectures back to back with the lab after them.", "rules": ["P-MAXCONSEC"]}
+{"id": "Q-35", "query": "I'll be out for a family matter in week 6, please rearrange things.", "rules": ["P-MAKEUP"]}
+{"id": "Q-36", "query": "Who needs to know before two teachers exchange their slots?", "rules": ["P-SWAP"]}
+{"id": "Q-37", "query": "Can I teach late in the evening, say from 6 pm?", "rules": ["P-HOURS"]}
+{"id": "Q-38", "query": "The networking lab will be under repair, where do the practicals go?", "rules": ["P-LABS"]}
+{"id": "Q-39", "query": "Our batch has 45 students, can they all be in the lab together?", "rules": ["LAB-2"]}
+{"id": "Q-40", "query": "Is teaching allowed during the exam weeks?", "rules": ["EXAM-3.1"]}

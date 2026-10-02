@@ -2,10 +2,11 @@
 ``llama-server``, Ollama, LM Studio). Same interface as ``GeminiClient``,
 so parsers and evaluations take either.
 
-    llama-server -m qwen3.5-4b-nts.Q5_K_M.gguf --jinja -ngl 99 -c 4096 --port 8080
+    llama-server -m Qwen3.5-2B.Q5_K_M-mutitask-finetune.gguf --jinja -ngl 99 -c 4096 --cache-ram 1024 --port 8080
 
 * Output is constrained to the Pydantic schema (``response_format`` with a
   JSON schema; llama.cpp turns it into a grammar), so it always parses.
+  ``grammar_schema`` keeps the grammar's key order that of the training data.
 * Thinking is switched off through ``chat_template_kwargs``, as in training.
 * Responses are cached like Gemini's; there is no quota to track.
 """
@@ -26,6 +27,22 @@ from pydantic import BaseModel, ValidationError
 from .llm import LLMError, Usage
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def grammar_schema(schema: dict) -> dict:
+    """The JSON schema as sent to llama.cpp. Its grammar writes required
+    properties first and optional ones after, so an optional field declared
+    before a required one (``cited_rules`` before ``explanation``) could only
+    come after it, out of the training order, and the model left it out.
+    Every property up to the last required one is made required, so keys
+    come in declaration order, as in the training targets."""
+    schema = json.loads(json.dumps(schema))
+    for node in [schema, *schema.get("$defs", {}).values()]:
+        props, required = list(node.get("properties", {})), set(node.get("required", []))
+        if required:
+            last = max(props.index(p) for p in required)
+            node["required"] = props[:last + 1]
+    return schema
 
 
 class LocalClient:
@@ -77,7 +94,7 @@ class LocalClient:
         temperature: float = 0.0,
         use_cache: bool = True,
     ) -> T:
-        schema_json = schema.model_json_schema()
+        schema_json = grammar_schema(schema.model_json_schema())
         key = hashlib.sha256(json.dumps(
             [self.model, str(self.thinking), system, prompt, json.dumps(schema_json, sort_keys=True), temperature]
         ).encode()).hexdigest()

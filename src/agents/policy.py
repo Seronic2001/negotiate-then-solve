@@ -16,7 +16,9 @@ For policy questions the same agent answers from the retrieved rules.
 from __future__ import annotations
 
 import math
+import os
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
@@ -111,9 +113,9 @@ def tokens(text: str, stem: bool = False) -> list[str]:
 
 
 class BM25:
-    """Okapi BM25 over rule title + text. The handbook is small and rule
-    wording matters ("consecutive", "lunch"), so lexical retrieval is the
-    baseline; a dense retriever can be added for the hybrid in the proposal."""
+    """Okapi BM25 over rule title + text. Rule wording matters ("consecutive",
+    "lunch", rule numbers), so lexical retrieval is one half of the hybrid;
+    ``DenseRetriever`` is the other."""
 
     def __init__(self, rules: list[Rule], k1: float = 1.5, b: float = 0.75, stem: bool = False) -> None:
         self.rules = rules
@@ -141,6 +143,92 @@ class BM25:
     def search(self, query: str, k: int = 4) -> list[Rule]:
         ranked = sorted(zip(self.scores(query), range(len(self.rules))), key=lambda x: (-x[0], x[1]))
         return [self.rules[i] for s, i in ranked[:k] if s > 0]
+
+
+EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+_embedders: dict[str, object] = {}
+_embed_lock = threading.Lock()
+
+
+def embedder(name: str | None = None):
+    """A fastembed ONNX sentence encoder (no torch), loaded once per process.
+    The model (about 65 MB) is downloaded to ``runs/embed_models`` on first use."""
+    name = name or os.environ.get("NTS_EMBED_MODEL", EMBED_MODEL)
+    with _embed_lock:
+        if name not in _embedders:
+            from fastembed import TextEmbedding
+
+            cache = os.environ.get("NTS_EMBED_DIR", str(Path(__file__).resolve().parents[2] / "runs" / "embed_models"))
+            _embedders[name] = TextEmbedding(name, cache_dir=cache)
+        return _embedders[name]
+
+
+class DenseRetriever:
+    """Cosine similarity between sentence embeddings of the query and of each
+    rule (title + text). It matches meanings where words differ ("shift my
+    practical to another lab" ~ "moved into a different laboratory"). The
+    corpus is one handbook plus a few documents, so a matrix product replaces
+    a vector index."""
+
+    def __init__(self, rules: list[Rule], model: str | None = None) -> None:
+        import numpy as np
+
+        self.rules = rules
+        self.model = embedder(model)
+        docs = [f"{r.title}. {r.text}" for r in rules]
+        self.matrix = np.array(list(self.model.passage_embed(docs))) if docs else np.zeros((0, 1))
+
+    def scores(self, query: str) -> list[float]:
+        import numpy as np
+
+        if not self.rules:
+            return []
+        q = np.array(next(iter(self.model.query_embed([query]))))
+        return (self.matrix @ q).tolist()  # bge vectors are normalised: dot product = cosine
+
+    def search(self, query: str, k: int = 4) -> list[Rule]:
+        ranked = sorted(zip(self.scores(query), range(len(self.rules))), key=lambda x: (-x[0], x[1]))
+        return [self.rules[i] for _, i in ranked[:k]]
+
+
+class HybridRetriever:
+    """BM25 and dense rankings merged by reciprocal rank fusion (score =
+    sum of 1 / (c + rank) over the two lists). Rule numbers and exact terms
+    come from BM25, paraphrases from the embeddings; a rule BM25 scores 0
+    gets no lexical share."""
+
+    def __init__(self, rules: list[Rule], stem: bool = False, c: int = 60, model: str | None = None) -> None:
+        self.rules = rules
+        self.bm25 = BM25(rules, stem=stem)
+        self.dense = DenseRetriever(rules, model)
+        self.c = c
+
+    def scores(self, query: str) -> list[float]:
+        fused = [0.0] * len(self.rules)
+        for scores, lexical in ((self.bm25.scores(query), True), (self.dense.scores(query), False)):
+            order = sorted(range(len(scores)), key=lambda i: (-scores[i], i))
+            for rank, i in enumerate(order, 1):
+                if lexical and scores[i] <= 0:
+                    break
+                fused[i] += 1 / (self.c + rank)
+        return fused
+
+    def search(self, query: str, k: int = 4) -> list[Rule]:
+        ranked = sorted(zip(self.scores(query), range(len(self.rules))), key=lambda x: (-x[0], x[1]))
+        return [self.rules[i] for _, i in ranked[:k]]
+
+
+RETRIEVERS = ("bm25", "dense", "hybrid")
+
+
+def make_retriever(rules: list[Rule], kind: str = "bm25", stem: bool = False):
+    if kind == "bm25":
+        return BM25(rules, stem=stem)
+    if kind == "dense":
+        return DenseRetriever(rules)
+    if kind == "hybrid":
+        return HybridRetriever(rules, stem=stem)
+    raise ValueError(f"unknown retriever {kind!r}; expected one of {RETRIEVERS}")
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +339,9 @@ def query_hints(instance: Instance, parse: ParseResult | None) -> str:
 
 
 class PolicyAgent:
-    def __init__(self, rules: list[Rule], client: GeminiClient, instance: Instance, k: int = 5) -> None:
+    def __init__(self, rules: list[Rule], client: GeminiClient, instance: Instance, k: int = 5,
+                 retriever: str = "bm25") -> None:
+        self.retriever_kind = retriever
         self.set_rules(rules)
         self.client = client
         self.instance = instance
@@ -260,7 +350,7 @@ class PolicyAgent:
     def set_rules(self, rules: list[Rule]) -> None:
         """Swap the corpus (a policy document was added) and rebuild the index."""
         self.rules = {r.id: r for r in rules}
-        self.retriever = BM25(rules)
+        self.retriever = make_retriever(rules, self.retriever_kind)
 
     def retrieve(self, text: str) -> list[Rule]:
         return self.retriever.search(text, self.k)
@@ -303,14 +393,16 @@ class RulePolicyAgent:
 
     mode = "offline"
 
-    def __init__(self, rules: list[Rule], instance: Instance, k: int = 5) -> None:
+    def __init__(self, rules: list[Rule], instance: Instance, k: int = 5, retriever: str = "bm25") -> None:
+        self.retriever_kind = retriever
         self.set_rules(rules)
         self.instance = instance
         self.k = k
 
     def set_rules(self, rules: list[Rule]) -> None:
         self.rules = {r.id: r for r in rules}
-        self.retriever = BM25(rules, stem=True)  # stemming helps the top-1 answer; the LLM path sees top-5
+        # stemming helps the top-1 answer; the LLM path sees top-5
+        self.retriever = make_retriever(rules, self.retriever_kind, stem=True)
 
     def review(self, text: str, parse: ParseResult | None = None) -> PolicyDecision:
         retrieved = self.retriever.search(f"{text} {query_hints(self.instance, parse)}", self.k)

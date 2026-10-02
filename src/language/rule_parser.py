@@ -33,6 +33,14 @@ QUESTION = re.compile(r"\b(rule|allowed|permitted|permissible|policy|who (has|ne
 OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.I)
 VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.I)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
+SWAP = re.compile(r"\b(swap|swapp\w*|exchange|trade|switch)\b|"
+                  r"\btake my\b.*\b(and )?I (take|teach|cover) (their|his|her)\b", re.I)
+_TITLE_WORD = re.compile(r"^(dr|prof|professor|mr|ms|mrs)\.?$", re.I)
+
+
+def surname(name: str) -> str:
+    parts = [p for p in re.split(r"[\s.]+", name) if p and not _TITLE_WORD.match(p)]
+    return parts[-1] if parts else name
 
 
 def _slot(hour: int, ampm: str) -> int:
@@ -97,6 +105,19 @@ class RuleParser:
                 return f.id
         return None
 
+    def mentioned(self, text: str, sender: str) -> list[str]:
+        """Other faculty members the text names: by full name, else every one
+        whose surname appears ("Dr. Rao" may fit two people)."""
+        if found := self.other_faculty(text, sender):
+            return [found]
+        low = text.lower()
+        return [f.id for f in self.instance.faculty
+                if f.id != sender and re.search(rf"\b{re.escape(surname(f.name).lower())}\b", low)]
+
+    def colleague(self, text: str, sender: str) -> str | None:
+        hits = self.mentioned(text, sender)
+        return hits[0] if len(hits) == 1 else None
+
     # -- parsing -----------------------------------------------------------------------
 
     def parse(self, request: Request) -> ParseResult:
@@ -116,6 +137,10 @@ class RuleParser:
             return ParseOutput(request_type="clash_report", action="investigate")
         if "?" in text and QUESTION.search(low) and not re.search(r"\b(could you|can you|please)\b", low):
             return ParseOutput(request_type="policy_question", action="answer")
+
+        if role != "student" and SWAP.search(low) and self.mentioned(text, sender):
+            # which two sessions is decided against the timetable (agents.swap), not here
+            return ParseOutput(request_type="swap", action="compile")
 
         days, weeks, slots = self.days(text), self.weeks(text), self.slots(text)
         other = self.other_faculty(text, sender)

@@ -8,3 +8,6 @@ build/
 runs/
 .env
 data/*.zip
+*.aux
+*.log
+*.out

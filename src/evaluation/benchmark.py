@@ -18,8 +18,18 @@ that arrived since (``planted``), and hidden stakeholder profiles. Kinds:
 * ``policy`` (UC4): a demand that breaks the lunch break or the
   consecutive-hours rule (the requester must move, or the Dean decides).
 
-The oracle (baseline B4) knows every profile and tries all combinations of
-the flexibility they hide; its best outcome is what negotiation should reach.
+Each scenario is assigned one stakeholder policy family (strict, flexible,
+cost-sensitive, history-sensitive; balanced within each kind) that reshapes
+the hidden profiles and makes replies stochastic (``agents.simulators``).
+
+The oracle (the upper bound) knows every profile and tries all combinations of
+the flexibility they hide. It optimises the same published policy and
+objective as the negotiator (proposal Section 13.2): lexicographically, the
+constraints given up per tier (Tier 3 first), then the option cost
+``sum pi_k + l1 moved + l2 dGini`` from ``PriorityModel.option_cost``, with
+the scenario's own concession history. Ties go to fewer stakeholders asked.
+``objective`` scores any outcome the same way, so systems are compared with
+the oracle on one scale.
 """
 
 from __future__ import annotations
@@ -28,11 +38,16 @@ import argparse
 import itertools
 import json
 import random
+import re
+from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from agents.simulators import Profile, Window
+from agents.ledger import ConcessionLedger
+from agents.priority import PriorityModel
+from agents.simulators import FAMILIES, Family, Profile, Simulator, Window, apply_family
 from core.generator import SURNAMES
 from core.instance import (
     Faculty,
@@ -67,15 +82,18 @@ COURSES = ["Machine Learning", "Computer Networks", "Operating Systems", "Databa
            "Digital Logic", "Compiler Design", "Algorithms", "Computer Graphics"]
 
 
+SEMESTER = "2026-1"  # the semester scenarios are negotiated in
+SCORED_TIERS = (Tier.VERIFIED_UNAVAILABILITY, Tier.OPERATIONAL, Tier.PREFERENCE)
+
+
 class OracleOutcome(BaseModel):
     status: str  # feasible | agree | escalate
     moved: int = 0
-    concessions: int = 0
+    concessions: int = 0  # stakeholders who give something up
     choice: dict[str, str] = Field(default_factory=dict)  # owner -> keep | window:i | room
-
-    @property
-    def cost(self) -> int:
-        return self.moved + self.concessions
+    relaxed: list[str] = Field(default_factory=list)  # constraints given up or weakened
+    tiers: list[int] = Field(default_factory=list)  # constraints given up in Tiers 3, 4, 5
+    objective: float | None = None  # option cost of the outcome (see ``objective``)
 
 
 class Scenario(BaseModel):
@@ -91,6 +109,7 @@ class Scenario(BaseModel):
     ledger: list[ConcessionEntry] = Field(default_factory=list)
     raw_requests: dict[str, str] = Field(default_factory=dict)
     private: list[str] = Field(default_factory=list)
+    family: Family | None = None  # stakeholder policy family; None: deterministic legacy profiles
     oracle: OracleOutcome | None = None
 
     @property
@@ -328,6 +347,37 @@ def _flex_options(sc: Scenario) -> dict[str, list[tuple[str, list[Constraint], l
     return out
 
 
+_SUFFIX = re.compile(r"(-[NW]\d+)+$")  # negotiated (-N3) and oracle (-W0) replacements
+
+
+def original_ids(sc: Scenario, relaxed: Iterable[str]) -> list[str]:
+    """The scenario's own constraints behind relaxed IDs: a counter-offer
+    replaces C-A-TIME with C-A-TIME-N2, and relaxing that gives up C-A-TIME."""
+    known = {c.id for c in sc.constraints}
+    out: list[str] = []
+    for cid in relaxed:
+        orig = _SUFFIX.sub("", cid)
+        if orig in known and orig not in out:
+            out.append(orig)
+    return out
+
+
+def stakeholders(sc: Scenario) -> list[str]:
+    return sorted({s.faculty for s in sc.instance.sessions})
+
+
+def objective(sc: Scenario, relaxed: Iterable[str], moved: int) -> tuple[list[int], float]:
+    """The oracle objective J for an outcome that gave up ``relaxed`` and moved
+    ``moved`` sessions: (constraints given up in Tiers 3, 4, 5; option cost),
+    compared lexicographically. It uses the published default weights and the
+    scenario's own concession history, the same for every system."""
+    by_id = {c.id: c for c in sc.constraints}
+    given = [by_id[i] for i in original_ids(sc, relaxed)]
+    pm = PriorityModel(sc.instance, ledger=ConcessionLedger(sc.ledger), semester=SEMESTER, baseline=sc.baseline)
+    tiers = [sum(1 for c in given if c.tier == t) for t in SCORED_TIERS]
+    return tiers, pm.option_cost(given, moved, stakeholders(sc))
+
+
 def compute_oracle(sc: Scenario, time_limit: float = 20.0) -> OracleOutcome:
     base = {c.id: c for c in sc.constraints}
     solver = TimetableSolver(sc.instance, base.values(), week=sc.week, baseline=sc.baseline, time_limit=time_limit)
@@ -336,29 +386,58 @@ def compute_oracle(sc: Scenario, time_limit: float = 20.0) -> OracleOutcome:
         return OracleOutcome(status="feasible", moved=r.moved or 0)
     flex = _flex_options(sc)
     best: OracleOutcome | None = None
+    best_key = None
     owners = list(flex)
     for combo in itertools.product(*(flex[o] for o in owners)):
         changed = sum(label != "keep" for label, _, _ in combo)
         if changed == 0:
             continue
         cons = dict(base)
+        removed: list[str] = []
         for _, add, remove in combo:
             for i in remove:
                 cons.pop(i, None)
+                removed.append(i)
             for c in add:
                 cons[c.id] = c
         r = TimetableSolver(sc.instance, cons.values(), week=sc.week, baseline=sc.baseline,
                             time_limit=time_limit).solve()
         if not r.ok:
             continue
-        cand = OracleOutcome(status="agree", moved=r.moved or 0, concessions=changed,
-                             choice={o: label for o, (label, _, _) in zip(owners, combo, strict=True)})
-        if best is None or cand.cost < best.cost:
-            best = cand
+        moved = r.moved or 0
+        tiers, cost = objective(sc, removed, moved)
+        key = (tiers, round(cost, 9), changed)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = OracleOutcome(status="agree", moved=moved, concessions=changed, relaxed=removed, tiers=tiers,
+                                 objective=cost,
+                                 choice={o: label for o, (label, _, _) in zip(owners, combo, strict=True)})
     return best or OracleOutcome(status="escalate")
 
 
-def build(kind: str, index: int, seed: int, **kw) -> Scenario:
+def simulators(sc: Scenario, *, client=None, structured: bool = True, run_seed: int = 0) -> dict[str, Simulator]:
+    """One simulator per hidden profile. Family profiles draw refusals and
+    silences from a stream seeded by the scenario, the owner and the run seed,
+    so every system meets the same stakeholders within a run."""
+    return {p.owner: Simulator(sc.instance, p, client=client, structured=structured,
+                               rng=random.Random(f"{sc.seed}:{p.owner}:{run_seed}") if p.family else None)
+            for p in sc.profiles}
+
+
+def _with_family(parts: dict, family: Family) -> list[Profile]:
+    inst: Instance = parts["inst"]
+    past = {e.stakeholder for e in parts.get("ledger", [])}
+    out = []
+    for p in parts["profiles"]:
+        stated = sorted({s for c in parts["planted"] if c.owner == p.owner and c.type == ConstraintType.PREFER
+                         for s in (c.when.slots or [])})
+        out.append(apply_family(p, family, stated_slots=stated or None,
+                                all_slots=list(range(inst.calendar.slots_per_day)),
+                                conceded_recently=p.owner in past))
+    return out
+
+
+def build(kind: str, index: int, seed: int, family: Family | None = None, **kw) -> Scenario:
     rng = random.Random(seed)
     sid = f"S-{index:03d}-{kind}"
     parts = contention(rng, sid, **kw) if kind == "contention" else BUILDERS[kind](rng, sid)
@@ -368,17 +447,27 @@ def build(kind: str, index: int, seed: int, **kw) -> Scenario:
     baseline = TimetableSolver(inst, base, time_limit=20).solve()
     if not baseline.ok:
         raise RuntimeError(f"{sid}: base instance infeasible")
+    profiles = _with_family(parts, family) if family else parts["profiles"]
     sc = Scenario(id=sid, kind=kind if not kw.get("substitute") else "substitute", seed=seed, instance=inst,
                   base=base, planted=parts["planted"], baseline=baseline.assignment, week=week,
-                  profiles=parts["profiles"], ledger=parts.get("ledger", []), raw_requests=parts["raw"],
-                  private=parts.get("private", []))
+                  profiles=profiles, ledger=parts.get("ledger", []), raw_requests=parts["raw"],
+                  private=parts.get("private", []), family=family)
     sc.oracle = compute_oracle(sc)
     return sc
 
 
-def generate(seed: int = 0) -> list[Scenario]:
+def generate(seed: int = 0, families: bool = True) -> list[Scenario]:
+    """The 60 scenarios. With ``families``, each kind's scenarios cycle through
+    the four stakeholder policy families, so every family meets every kind."""
     rng = random.Random(seed)
-    return [build(kind, i, rng.randrange(10**9), **kw) for i, (kind, kw) in enumerate(MIX, 1)]
+    seen: Counter[str] = Counter()
+    out = []
+    for i, (kind, kw) in enumerate(MIX, 1):
+        variant = "substitute" if kw.get("substitute") else kind
+        family = FAMILIES[seen[variant] % len(FAMILIES)] if families else None
+        seen[variant] += 1
+        out.append(build(kind, i, rng.randrange(10**9), family=family, **kw))
+    return out
 
 
 def save(scenarios: list[Scenario], path: Path) -> None:
@@ -396,13 +485,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("data/scenarios.jsonl"))
+    ap.add_argument("--no-families", action="store_true",
+                    help="deterministic legacy stakeholders instead of the four policy families")
     args = ap.parse_args()
-    scenarios = generate(args.seed)
+    scenarios = generate(args.seed, families=not args.no_families)
     save(scenarios, args.out)
-    from collections import Counter
 
     print(f"wrote {len(scenarios)} scenarios to {args.out}")
     print(json.dumps(Counter(f"{s.kind}:{s.expected}" for s in scenarios), indent=1))
+    print(json.dumps(Counter(f"{s.family}:{s.expected}" for s in scenarios), indent=1))
 
 
 if __name__ == "__main__":

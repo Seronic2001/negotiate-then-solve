@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { ago, ROLE_LABEL } from "../lib/meta";
-import type { EventRow } from "../lib/types";
+import type { EventRow, TestRun } from "../lib/types";
 
 export function useLiveEvents(intervalMs = 1500, caseId?: string) {
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -78,9 +78,11 @@ export default function Dashboard() {
 
       {ov?.seeding && (
         <p className="mb-5 flex items-center gap-2 text-[13px] text-ink-2">
-          <LiveDot tone="warn" /> Loading a demo history through the real pipeline; the lists below fill in as it runs.
+          <LiveDot tone="warn" /> {ov.test_run ? "Replaying held-out test requests through the real pipeline; the lists below fill in as it runs." : "Loading a demo history through the real pipeline; the lists below fill in as it runs."}
         </p>
       )}
+
+      {oversight && ov?.test_run && <TestRunCard run={ov.test_run} />}
 
       <Card className={oversight ? "mb-6" : "mb-6 max-w-3xl"}>
         <CardHeader title="Needs you" />
@@ -174,5 +176,39 @@ export default function Dashboard() {
         )}
       </div>
     </>
+  );
+}
+
+function TestRunCard({ run }: { run: TestRun }) {
+  const done = run.rows.length;
+  const matches = run.rows.filter((r) => r.match).length;
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title="Held-out test requests"
+        subtitle={`${done} of ${run.n} replayed · ${matches} of ${done} match the gold action${done ? ` (${Math.round((100 * matches) / done)}%)` : ""}`}
+      />
+      <ul className="max-h-80 divide-y divide-line overflow-y-auto">
+        {run.rows.map((r) => (
+          <li key={r.case}>
+            <Link to={`/requests/${r.case}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-panel-2/60">
+              <span className={`w-12 shrink-0 text-[12px] font-semibold ${r.match ? "text-ok" : "text-bad"}`}>{r.match ? "OK" : "MISS"}</span>
+              <span className="w-16 shrink-0 font-mono text-[12px] text-ink-3">{r.corpus_id}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px]">{r.text}</span>
+              <span className="shrink-0 text-[12px] text-ink-2">
+                gold <b>{r.expected}</b> · got <b>{r.got ?? "–"}</b>
+              </span>
+              {r.error && <span className="shrink-0 text-[12px] text-bad" title={r.error}>error</span>}
+              <StatusBadge status={r.status} />
+            </Link>
+          </li>
+        ))}
+        {done < run.n && (
+          <li className="flex items-center gap-2 px-5 py-2.5 text-[13px] text-ink-2">
+            <LiveDot tone="warn" pulse /> Running request {done + 1} of {run.n}…
+          </li>
+        )}
+      </ul>
+    </Card>
   );
 }

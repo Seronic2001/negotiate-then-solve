@@ -11,24 +11,27 @@ import type { Experiment, NegotiationSummary } from "../lib/types";
 const CONFIG_LABEL: Record<string, string> = {
   ours: "Ours",
   "ours-llm": "Ours (LLM)",
-  A1: "A1 · LLM options",
-  A2: "A2 · flat, no ledger",
-  A3: "A3 · free explanations",
+  A1: "A1 · flat, no ledger",
+  A2: "A2 · free explanations",
+  A3: "A3 · rule replies",
+  "A1-offline": "A1 · flat (offline)",
   B1: "B1 · LLM only",
-  B2: "B2 · imposed",
-  B3: "B3 · free negotiation",
-  B4: "B4 · oracle",
+  B2: "B2 · solver only",
+  B3: "B3 · unverified",
+  B4: "B4 · filtered",
+  oracle: "Oracle",
 };
 
 const METRICS: { key: keyof NegotiationSummary; label: string; fmt: (v: number | null) => string; better: "high" | "low" }[] = [
   { key: "correct_outcome", label: "Correct outcome", fmt: (v) => pct(v), better: "high" },
   { key: "validity_of_timetables", label: "Valid timetables", fmt: (v) => pct(v), better: "high" },
-  { key: "agreement_rate", label: "Agreement rate", fmt: (v) => pct(v), better: "high" },
-  { key: "rounds_mean", label: "Rounds", fmt: (v) => num(v), better: "low" },
-  { key: "within_10pct_of_oracle", label: "Within 10% of oracle", fmt: (v) => pct(v), better: "high" },
+  { key: "agreement_rate", label: "Resolution rate", fmt: (v) => pct(v), better: "high" },
+  { key: "rounds_mean", label: "Rounds (resolved)", fmt: (v) => num(v), better: "low" },
+  { key: "objective_gap_abs_mean", label: "Distance to oracle", fmt: (v) => num(v), better: "low" },
   { key: "escalation_precision", label: "Escalation P", fmt: (v) => num(v), better: "high" },
   { key: "escalation_recall", label: "Escalation R", fmt: (v) => num(v), better: "high" },
-  { key: "concession_gini", label: "Gini", fmt: (v) => num(v), better: "low" },
+  { key: "concession_gini", label: "Burden Gini", fmt: (v) => num(v), better: "low" },
+  { key: "burden_max", label: "Max burden", fmt: (v) => num(v), better: "low" },
   { key: "first_proposal_acceptance", label: "1st-offer accept", fmt: (v) => pct(v), better: "high" },
   { key: "explanation_faithfulness", label: "Faithfulness", fmt: (v) => pct(v), better: "high" },
   { key: "private_leaks", label: "Leaks", fmt: (v) => String(v ?? 0), better: "low" },
@@ -66,7 +69,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
     const chart = configs.map(([k, s]) => ({
       name: CONFIG_LABEL[k] ?? k,
       "Correct outcome": +(100 * (s.correct_outcome ?? 0)).toFixed(1),
-      "Agreement rate": +(100 * (s.agreement_rate ?? 0)).toFixed(1),
+      "Resolution rate": +(100 * (s.agreement_rate ?? 0)).toFixed(1),
     }));
     return (
       <Card>
@@ -80,7 +83,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
               <Tooltip cursor={{ fill: "var(--panel-2)" }} contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="Correct outcome" fill={t.brand} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Agreement rate" fill={t["ink-3"]} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Resolution rate" fill={t["ink-3"]} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

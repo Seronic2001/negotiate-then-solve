@@ -36,17 +36,29 @@ CREATE TABLE IF NOT EXISTS events (n INTEGER PRIMARY KEY AUTOINCREMENT, case_id 
 """
 
 
+class _Rows(list):
+    """A query's rows, already fetched; read like a cursor."""
+
+    def fetchone(self):
+        return self[0] if self else None
+
+    def fetchall(self) -> list:
+        return list(self)
+
+
 class Store:
     def __init__(self, path: str = ":memory:") -> None:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.executescript(SCHEMA)
         self._lock = threading.Lock()
 
-    def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
+    def _exec(self, sql: str, args: tuple = ()) -> _Rows:
+        # rows are read under the lock: the connection is shared, and another thread's
+        # statement or commit can reset a cursor that is still being read
         with self._lock:
-            cur = self.db.execute(sql, args)
+            rows = _Rows(self.db.execute(sql, args).fetchall())
             self.db.commit()
-            return cur
+            return rows
 
     # -- requests ----------------------------------------------------------------
 

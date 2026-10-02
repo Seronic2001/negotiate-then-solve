@@ -203,6 +203,24 @@ export interface Overview {
   faculty: number;
   rooms: number;
   groups: number;
+  test_run: TestRun | null;
+}
+
+export interface TestRow {
+  case: string;
+  corpus_id: string;
+  sender: string;
+  text: string;
+  expected: string;
+  got: string | null;
+  match: boolean;
+  status: Status;
+  error: string | null;
+}
+
+export interface TestRun {
+  n: number;
+  rows: TestRow[];
 }
 
 export interface TimetableEntry {
@@ -327,12 +345,20 @@ export interface NegotiationSummary {
   timetables_produced: number;
   agreement_rate: number | null;
   rounds_mean: number | null;
+  rounds_median: number | null;
+  escalation_rate: number | null;
   rounds_ci: [number, number] | null;
-  cost_ratio_to_oracle: number | null;
-  within_10pct_of_oracle: number | null;
+  objective_gap_abs_mean: number | null;
+  objective_gap_mean: number | null;
+  objective_gap_ci: [number, number] | null;
+  tier_worse_than_oracle: number | null;
   escalation_precision: number | null;
   escalation_recall: number | null;
+  escalation_reasons: Record<string, number>;
   concession_gini: number | null;
+  burden_max: number | null;
+  burden_cv: number | null;
+  burden_total: number | null;
   first_proposal_acceptance: number | null;
   explanation_faithfulness: number | null;
   private_leaks: number;

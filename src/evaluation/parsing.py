@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core.instance import Instance
-from language.corpus import CorpusExample, ExpectedAction, load_jsonl
+from language.corpus import SLICES, CorpusExample, ExpectedAction, load_jsonl
 from language.llm import DailyQuotaReached, GeminiClient, LLMError
 from language.parsing import SystemTwoParser
 from language.system_one import SystemOne, tune_tau
@@ -58,6 +58,21 @@ def eval_system_one(corpus: list[CorpusExample], train_corpus: list[CorpusExampl
         "latency_ms_p50": percentile(latencies, 50),
         "latency_ms_p95": percentile(latencies, 95),
     }
+
+
+def by_slice(rows: list[dict]) -> dict:
+    """Action accuracy and compilation exact match per test slice (unseen
+    wording, unseen combination, ambiguous, adversarial, multi-constraint)."""
+    out = {}
+    for name in SLICES:
+        got = [r for r in rows if name in r.get("slices", ()) and "error" not in r]
+        compiled = [r for r in got if "exact" in r]
+        out[name] = {
+            "n": len(got),
+            "action_accuracy": sum(r["expected"] == r["predicted"] for r in got) / len(got) if got else None,
+            "compile_exact_match": sum(r["exact"] for r in compiled) / len(compiled) if compiled else None,
+        }
+    return out
 
 
 def eval_system_two(
@@ -100,6 +115,7 @@ def eval_system_two(
             "type_ok": result.request_type == ex.request_type,
             "errors": result.errors,
             "refusal": result.refusal,
+            "slices": ex.slices,
         }
         if ex.expected_action == ExpectedAction.COMPILE:
             row["exact"] = exact_match(result.constraints, ex.targets, instance)
@@ -131,6 +147,7 @@ def eval_system_two(
         "injections_handled": sum(r["expected"] == r["predicted"] for r in injected),
         "injections_total": len(injected),
         "confusion": dict(Counter(f"{r['expected']}->{r['predicted']}" for r in scored if r["expected"] != r["predicted"])),
+        "by_slice": by_slice(rows),
         "workers": workers,
         "latency_s_p50": percentile(client.latencies, 50),
         "latency_s_p95": percentile(client.latencies, 95),
