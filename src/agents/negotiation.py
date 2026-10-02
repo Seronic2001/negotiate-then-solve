@@ -288,8 +288,8 @@ class RuleReplyParser:
         low = text.lower()
         after = re.search(r"\bafter\s+(\d{1,2})(?::00)?\s*(am|pm)?", low)
         before = re.search(r"\bbefore\s+(\d{1,2})(?::00)?\s*(am|pm)?", low)
-        between = re.search(r"\bfrom\s+(\d{1,2})(?::00)?\s*(am|pm)?\s+(?:to|until|till)\s+(\d{1,2})(?::00)?\s*(am|pm)",
-                            low)
+        between = re.search(r"\b(?:from|between)\s+(\d{1,2})(?::00)?\s*(am|pm)?\s+(?:to|until|till|and)\s+"
+                            r"(\d{1,2})(?::00)?\s*(am|pm)", low)
         if between:
             h1, a1, h2, a2 = between.groups()
             slots |= set(range(max(0, self._slot(int(h1), a1 or a2)), min(n, self._slot(int(h2), a2))))
