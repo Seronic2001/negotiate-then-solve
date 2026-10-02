@@ -351,6 +351,14 @@ Train with `notebooks/train_compiler_kaggle.ipynb` on the `data/multitask/`
 folder (it reports validation per task), then score the model with
 `eval_parsing --local`, `eval_policy --local` and `eval_negotiation --local`.
 
+For **Qwen3.5-4B**, use `notebooks/train_multigpu_kaggle.ipynb` (GPU T4 x2). A T4 has
+no bf16, so the weights stay in float32 (~17 GB), which no single T4 holds; the
+notebook drops Unsloth for plain transformers + PEFT + TRL and splits the layers
+across both GPUs (`device_map="auto"`). Only one GPU computes at a time, so expect
+2-3x the 2B run: the TRIAL run projects the full length against Kaggle's 12-hour
+limit, and training checkpoints and resumes across sessions. It exports GGUF with
+llama.cpp's converter (Q5_K_M and Q4_K_M).
+
 ## Data
 
 `uv run python -m language.corpus` regenerates `data/requests.jsonl` (600 requests,
