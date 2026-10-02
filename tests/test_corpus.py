@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 import pytest
 
@@ -6,13 +6,19 @@ from core.generator import generate_department
 from core.instance import policy_constraints
 from core.schemas import Role
 from core.solver import TimetableSolver
+from core.validator import validate_constraint
 from language.corpus import (
     CorpusExample,
     ExpectedAction,
+    RequestType,
     Variant,
+    core_text,
     generate_corpus,
     load_jsonl,
+    multi_constraint_examples,
     save_jsonl,
+    split_group,
+    tag_slices,
 )
 
 
@@ -32,6 +38,36 @@ def test_size_ids_and_splits(corpus):
     splits = Counter(ex.split for ex in corpus)
     assert abs(splits["train"] - 400) <= 10 and abs(splits["val"] - 50) <= 10 and abs(splits["test"] - 150) <= 10
     assert len({ex.request.raw_text for ex in corpus}) == 600
+
+
+def test_splits_never_divide_a_template_or_a_request(corpus):
+    """Leakage (proposal Section 13.1): a wording template, and any request
+    that differs only in greeting or sign-off, lives in exactly one split."""
+    by_group, by_text = defaultdict(set), defaultdict(set)
+    for ex in corpus:
+        by_group[split_group(ex)].add(ex.split)
+        by_text[core_text(ex.request.raw_text)].add(ex.split)
+    assert all(len(s) == 1 for s in by_group.values())
+    assert all(len(s) == 1 for s in by_text.values())
+    test = [ex for ex in corpus if ex.split == "test"]
+    assert {ex.request_type for ex in test} >= {RequestType.PREFERENCE, RequestType.UNAVAILABILITY,
+                                                RequestType.ROOM_ISSUE}
+    assert all(ex.split != "train" or not ex.slices for ex in corpus)
+    tagged = Counter(s for ex in test for s in ex.slices)
+    assert tagged["unseen_wording"] > 50 and tagged["ambiguous"] and tagged["adversarial"]
+
+
+def test_multi_constraint_requests_are_test_only_and_unseen(instance, corpus):
+    multi = multi_constraint_examples(instance, 10, 0, corpus)
+    assert len(multi) == 10
+    train_groups = {split_group(ex) for ex in corpus if ex.split == "train"}
+    for ex in multi:
+        assert ex.split == "test" and len(ex.targets) == 2 and " Also, " in ex.request.raw_text
+        assert all(t.source.request == ex.id and not validate_constraint(t, instance) for t in ex.targets)
+        assert all(part not in train_groups for part in ex.template.split("+"))
+    both = [*corpus, *multi]
+    tag_slices(both)
+    assert all({"multi_constraint", "unseen_combination"} <= set(ex.slices) for ex in both[len(corpus):])
 
 
 def test_deterministic(instance, corpus):

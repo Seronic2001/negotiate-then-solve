@@ -16,6 +16,12 @@ unchanged:
   matches the corpus label, cites the gold rules and cites nothing it was
   not shown; the make-up obligation (which the teacher often misses) is set
   from the label.
+* ``denials``: more policy examples, no API. Generated rule-breaking
+  requests and their legal look-alikes (the same ones ``language.compiler``
+  adds), and corpus denials shown with a misread parse (lunch moved an hour,
+  a run cut to the limit, or no parse): the verdict comes from the message.
+  Targets are the teacher's own answers from ``policy``, which are the same
+  text for every denial of a rule. Saved as policy rows.
 * ``compile``: the existing compiler data (``language.compiler``).
 
 Conflicts come from benchmark scenarios generated with seeds 1.. (seed 0 is
@@ -27,6 +33,7 @@ split. Policy examples use the corpus train/val splits.
     uv run python -m training.distill reply --voice template      # no API
     uv run python -m training.distill explain                     # teacher: agent model
     uv run python -m training.distill policy                      # teacher: agent model
+    uv run python -m training.distill denials                     # more policy denials, no API
     uv run python -m training.distill check --files x/reply.jsonl # validate rows made elsewhere (same filters)
     uv run python -m training.distill export                      # data/multitask/{train,val}.jsonl
 
@@ -69,8 +76,18 @@ from agents.priority import PriorityModel
 from agents.simulators import Simulator, Window, voice
 from core.instance import Instance
 from evaluation.benchmark import Scenario, generate, load, save
-from language.corpus import CorpusExample, ExpectedAction, Variant, load_jsonl
+from language.compiler import gold_output
+from language.corpus import (
+    CorpusExample,
+    ExpectedAction,
+    Variant,
+    duplicates_held_out,
+    extra_denials,
+    held_out,
+    load_jsonl,
+)
 from language.llm import DailyQuotaReached, LLMError
+from language.parsing import ParseResult, postprocess
 from language.rule_parser import RuleParser
 
 DIR = Path("data/distill")
@@ -361,6 +378,81 @@ def policy_samples(corpora: list[list[CorpusExample]], instance: Instance, handb
 
 
 # ---------------------------------------------------------------------------
+# Stage 4b: more denials (no API)
+# ---------------------------------------------------------------------------
+
+
+def canonical_answers(rows: list[dict]) -> dict[str, str]:
+    """The teacher's most common accepted answer for each denied rule, and
+    for a plain allowed preference (``"allowed"``)."""
+    by: dict[str, Counter] = {}
+    for r in rows:
+        text = r["messages"][-1]["content"]
+        out = PolicyOutput.model_validate_json(text)
+        if out.verdict == "forbidden" and len(out.cited_rules) == 1:
+            key = out.cited_rules[0]
+        elif out.verdict == "allowed" and not (out.cited_rules or out.obligations or out.answer):
+            key = "allowed"
+        else:
+            continue
+        by.setdefault(key, Counter())[text] += 1
+    return {k: c.most_common(1)[0][0] for k, c in by.items()}
+
+
+def misread(instance: Instance, parse: ParseResult, rule: str) -> ParseResult:
+    """What a weaker parser makes of a rule-breaking request: the lunch hour
+    read as the hour before, or a run cut to the limit."""
+    cal, limit = instance.calendar, instance.policy.max_consecutive
+    wrong = [cal.lunch_slot - 1] if rule == "P-LUNCH" else list(range(limit))
+    constraints = [c.model_copy(update={"when": c.when.model_copy(update={"slots": wrong})})
+                   for c in parse.constraints]
+    return ParseResult(request=parse.request, output=parse.output, constraints=constraints)
+
+
+def denial_samples(extra: list[CorpusExample], corpora: list[list[CorpusExample]], instance: Instance,
+                   handbook: Path, answers: dict[str, str], *, seed: int = 0,
+                   misread_share: float = 0.4) -> tuple[list[dict], Counter]:
+    agent = PolicyAgent(load_handbook(handbook), None, instance)
+    rng = random.Random(seed)
+    reasons: Counter = Counter()
+    jobs: list[tuple[CorpusExample, str]] = []  # (example, how the parse is shown)
+    for ex in extra:
+        jobs.append((ex, "gold"))
+        if ex.expected_action == ExpectedAction.DENY and rng.random() < misread_share:
+            jobs.append((ex, rng.choice(["misread", "none"])))
+    seen: set[str] = set()
+    for corpus in corpora:  # corpus denials already have a gold-parse row from the teacher
+        for ex in corpus:
+            if ex.split == "train" and ex.expected_action == ExpectedAction.DENY and ex.request.raw_text not in seen:
+                seen.add(ex.request.raw_text)
+                jobs.append((ex, rng.choice(["misread", "none"])))
+    rows = []
+    for ex, shown in jobs:
+        gold = gold_output(ex, instance)
+        if gold is None:
+            reasons["no gold parse"] += 1
+            continue
+        parse = postprocess(instance, ex.request, gold)
+        if shown == "misread":
+            parse = misread(instance, parse, ex.violates_rule)
+        elif shown == "none":
+            parse = None
+        text = ex.request.raw_text
+        retrieved = agent.retrieve(f"{text} {query_hints(instance, parse)}")
+        if not set(ex.rules) <= {r.id for r in retrieved}:
+            reasons["gold rule not retrieved"] += 1
+            continue
+        key = ex.violates_rule if ex.expected_action == ExpectedAction.DENY else "allowed"
+        if key not in answers:
+            reasons[f"no teacher answer for {key}"] += 1
+            continue
+        reasons[f"{key} ({shown} parse)"] += 1
+        rows.append({"id": f"{ex.id}-{shown}", "task": "policy", "split": "train",
+                     "messages": _chat(POLICY_PROMPT, agent.build_prompt(text, parse, retrieved), answers[key])})
+    return rows, reasons
+
+
+# ---------------------------------------------------------------------------
 # Checking data made elsewhere (e.g. a batch teacher run by hand)
 # ---------------------------------------------------------------------------
 
@@ -458,9 +550,12 @@ def _corpus_index(paths: list[Path], instance: Instance) -> dict[str, CorpusExam
 # ---------------------------------------------------------------------------
 
 
-def export(out_dir: Path, *, compiler_dir: Path, max_per_task: int, seed: int = 0) -> dict:
+def export(out_dir: Path, *, compiler_dir: Path, max_per_task: int, seed: int = 0,
+           held: dict[str, set[str]] | None = None) -> dict:
     """Merge the tasks into one train/val set; each task is capped at
-    ``max_per_task`` training examples so none dominates."""
+    ``max_per_task`` training examples so none dominates. With ``held`` (the
+    corpus's val and test texts), a row whose message repeats a request of a
+    later split is dropped."""
     rng = random.Random(seed)
     by_task: dict[str, list[dict]] = {}
     for split in ("train", "val"):
@@ -468,15 +563,21 @@ def export(out_dir: Path, *, compiler_dir: Path, max_per_task: int, seed: int = 
         if path.exists():
             by_task.setdefault("compile", []).extend(
                 {**r, "task": "compile", "split": split} for r in _read(path))
-    for task in ("reply", "explain", "policy"):
-        path = DIR / f"{task}.jsonl"
-        if path.exists():
-            by_task[task] = _read(path)
+    for task, files in (("reply", ["reply"]), ("explain", ["explain"]), ("policy", ["policy", "denials"])):
+        for name in files:
+            if (DIR / f"{name}.jsonl").exists():
+                by_task.setdefault(task, []).extend(_read(DIR / f"{name}.jsonl"))
     splits: dict[str, list[dict]] = {"train": [], "val": []}
     counts: dict[str, dict[str, int]] = {}
     for task, rows in by_task.items():
         for split in splits:
             part = [r for r in rows if r["split"] == split]
+            if held is not None:
+                keep = [r for r in part if not ((g := _MESSAGE.search(r["messages"][1]["content"]))
+                                                and duplicates_held_out(g.group(1), split, held))]
+                if len(keep) < len(part):
+                    counts.setdefault(task, {})[f"{split}_dropped_duplicates"] = len(part) - len(keep)
+                part = keep
             rng.shuffle(part)
             if split == "train":
                 part = part[:max_per_task]
@@ -499,7 +600,7 @@ def _seeds(text: str) -> list[int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["messages", "reply", "explain", "policy", "check", "export"])
+    ap.add_argument("stage", choices=["messages", "reply", "explain", "policy", "denials", "check", "export"])
     ap.add_argument("--seeds", default="1-10", help="scenario seeds for messages (never 0); the last is val")
     ap.add_argument("--voice", choices=["gemini", "template"], default="gemini",
                     help="reply: who writes the reply text")
@@ -513,7 +614,9 @@ def main() -> None:
     ap.add_argument("--handbook", type=Path, default=Path("data/handbook.md"))
     ap.add_argument("--compiler-dir", type=Path, default=Path("data/compiler"))
     ap.add_argument("--out", type=Path, default=Path("data/multitask"))
-    ap.add_argument("--max-per-task", type=int, default=800)
+    ap.add_argument("--max-per-task", type=int, default=900)
+    ap.add_argument("--extra-denials", type=int, default=150,
+                    help="denials: generated requests (as language.compiler --extra-denials; same seed, same requests)")
     ap.add_argument("--files", type=Path, nargs="+", default=None,
                     help="check: files named <task>.jsonl (default: data/distill/{reply,explain,policy}.jsonl); "
                          "the checked rows replace data/distill/<task>.jsonl")
@@ -538,6 +641,13 @@ def main() -> None:
         rows, reasons = policy_samples([load_jsonl(p, instance) for p in args.corpus], instance, args.handbook,
                                        _teacher(args.teacher_model), workers=args.workers, limit=args.limit)
         print(f"wrote {_write(DIR / 'policy.jsonl', rows)} policy examples; outcomes: {dict(reasons)}")
+    elif args.stage == "denials":
+        instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
+        corpora = [load_jsonl(p, instance) for p in args.corpus]
+        held = [e for c in corpora for e in c if e.split in ("val", "test")]
+        extra = extra_denials(instance, args.extra_denials, seed=1, exclude=held, near_miss=0.35)
+        rows, reasons = denial_samples(extra, corpora, instance, args.handbook, canonical_answers(_read(DIR / "policy.jsonl")))
+        print(f"wrote {_write(DIR / 'denials.jsonl', rows)} policy examples; {dict(reasons)}")
     elif args.stage == "check":
         instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
         corpus = _corpus_index(args.corpus, instance)
@@ -549,7 +659,9 @@ def main() -> None:
                   f"({dict(Counter(r['split'] for r in rows))}); {dict(why)}")
             _write(DIR / f"{task}.jsonl", rows)
     else:
-        report = export(args.out, compiler_dir=args.compiler_dir, max_per_task=args.max_per_task)
+        instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
+        report = export(args.out, compiler_dir=args.compiler_dir, max_per_task=args.max_per_task,
+                        held=held_out(load_jsonl(p, instance) for p in args.corpus))
         print(json.dumps(report, indent=1))
         print(f"upload {args.out}/ as a Kaggle dataset and train with notebooks/train_compiler_kaggle.ipynb")
 

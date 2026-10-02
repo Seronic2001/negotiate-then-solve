@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agents.documents import load_corpus, ocr_backend
 from agents.negotiation import Message, Negotiator, Reply
-from agents.policy import RulePolicyAgent
+from agents.policy import RulePolicyAgent, embedder
 from agents.priority import PriorityModel
 from agents.simulators import Profile, Simulator, Window
 from core.generator import generate_department
@@ -141,11 +141,18 @@ def _profiles(instance: Instance, seed: int) -> dict[str, Profile]:
 
 
 class World:
-    def __init__(self, parser_mode: str | None = None, seed_history: bool = True, deadline: float | None = None) -> None:
+    def __init__(self, parser_mode: str | None = None, seed_history: bool = True, deadline: float | None = None,
+                 test_data: int | None = None) -> None:
         self.parser_mode = parser_mode or os.environ.get("NTS_PARSER", "offline")
-        self.instance = generate_department(seed=1, n_faculty=8, n_groups=4, courses_per_group=4,
-                                            n_lecture_rooms=4, n_labs=3)
-        self.instance.name = "CSE department (demo)"
+        # test_data > 0: the benchmark department, replaying that many held-out test requests
+        self.test_data = test_data if test_data is not None else int(os.environ.get("NTS_TEST_DATA", "0"))
+        self.test_run: dict | None = None
+        if self.test_data:
+            self.instance = Instance.model_validate_json((ROOT / "data" / "synthetic-cse-s0.json").read_text(encoding="utf-8"))
+        else:
+            self.instance = generate_department(seed=1, n_faculty=8, n_groups=4, courses_per_group=4,
+                                                n_lecture_rooms=4, n_labs=3)
+            self.instance.name = "CSE department (demo)"
         self.store = Store()
         self.directory = Directory.from_instance(self.instance)
         self.intake = Intake(self.directory, self.store)
@@ -170,14 +177,15 @@ class World:
             self.instance, self.store, parser=self.parser, negotiator=self._negotiator(),
             negotiator_factory=self._negotiator, system_one=self.system_one, tau=self.tau,
             fast_parser=RuleParser(self.instance), policy_agent=self.policy,
-            responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER)
+            responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER,
+            swap_reader=self._swap_reader())
         self.orch.bootstrap(policy_constraints(self.instance), approved_by=COORDINATOR)
         self.started = datetime.now(UTC)
         self.threads: dict[str, threading.Thread] = {}
         self.seeding = False
         if seed_history:
             self.seeding = True
-            threading.Thread(target=self._seed, daemon=True).start()
+            threading.Thread(target=self._seed_test if self.test_data else self._seed, daemon=True).start()
 
     def reload_policies(self) -> None:
         """Re-read the policy documents (OCR is cached) and hand the new corpus to the policy agent."""
@@ -189,9 +197,11 @@ class World:
     def _negotiator(self) -> Negotiator:
         from agents.explainer import Explainer
 
+        # the benchmark department (202 sessions) needs presolve and a longer limit; the demo one is faster without
+        big = bool(self.test_data)
         return Negotiator(self.instance, priority=PriorityModel(self.instance, semester=SEMESTER),
-                          explainer=Explainer(self.instance), semester=SEMESTER, time_limit=10, mcs_limit=3,
-                          presolve=False)
+                          explainer=Explainer(self.instance), semester=SEMESTER, time_limit=60 if big else 10,
+                          mcs_limit=3, presolve=big)
 
     def _train_system_one(self):
         from language.system_one import SystemOne, tune_tau
@@ -211,25 +221,51 @@ class World:
         acc = mean([d.action == e.expected_action for d, e in zip(decisions, val, strict=True)])
         return model, tau, {"trained_on": len(train), "val_action_accuracy": acc, "tau": tau}
 
+    def _swap_reader(self):
+        """Gemini reads swaps from both timetables; the offline and local modes
+        use the rule reader (the fine-tuned model was not trained on swaps)."""
+        from agents.swap import LLMSwapReader, RuleSwapReader
+
+        if self.parser_mode == "gemini":
+            self.models["swaps"] = self.parser.client.model
+            return LLMSwapReader(self.instance, self.parser.client)
+        self.models["swaps"] = "rules"
+        return RuleSwapReader(self.instance)
+
+    def _retriever_kind(self) -> str:
+        """``NTS_RETRIEVER`` (default hybrid: BM25 + embeddings). Without the
+        embedding model (first run offline) retrieval falls back to BM25."""
+        kind = os.environ.get("NTS_RETRIEVER", "hybrid")
+        if kind != "bm25":
+            try:
+                embedder()
+            except Exception as e:  # noqa: BLE001 - any load failure means lexical only
+                print(f"[retrieval] embedding model unavailable ({type(e).__name__}: {e}); using BM25", flush=True)
+                return "bm25"
+        return kind
+
     def _components(self):
+        kind = self.retriever_kind = self._retriever_kind()
         if self.parser_mode == "gemini":
             from agents.policy import PolicyAgent
             from language.llm import GeminiClient, default_model
             from language.parsing import SystemTwoParser
 
             client = GeminiClient(default_model("agent"))
-            return (SystemTwoParser(self.instance, client), PolicyAgent(self.rules, client, self.instance),
-                    {"parser": client.model, "policy": client.model})
+            return (SystemTwoParser(self.instance, client), PolicyAgent(self.rules, client, self.instance, retriever=kind),
+                    {"parser": client.model, "policy": client.model, "retrieval": kind})
         if self.parser_mode == "local":
-            # the fine-tuned compiler only parses; policy stays on the offline rules
+            # the multi-task model parses (compiler prompt) and reviews (policy prompt), as in eval_policy --local
+            from agents.policy import PolicyAgent
             from language.compiler import CompilerParser
             from language.local import LocalClient
 
-            client = LocalClient(base_url=os.environ.get("NTS_LOCAL_URL", "http://localhost:8080/v1"))
-            return (CompilerParser(self.instance, client), RulePolicyAgent(self.rules, self.instance),
-                    {"parser": f"{client.model} (fine-tuned compiler)", "policy": "offline rules (BM25 retrieval)"})
-        return (RuleParser(self.instance), RulePolicyAgent(self.rules, self.instance),
-                {"parser": "offline rules", "policy": "offline rules (BM25 retrieval)"})
+            client = LocalClient(base_url=os.environ.get("NTS_LOCAL_URL", "http://localhost:8080/v1"), timeout=600)
+            return (CompilerParser(self.instance, client), PolicyAgent(self.rules, client, self.instance, retriever=kind),
+                    {"parser": f"{client.model} (fine-tuned)", "policy": f"{client.model} (fine-tuned)",
+                     "retrieval": kind})
+        return (RuleParser(self.instance), RulePolicyAgent(self.rules, self.instance, retriever=kind),
+                {"parser": "offline rules", "policy": f"offline rules ({kind} retrieval)", "retrieval": kind})
 
     # -- names ----------------------------------------------------------------------------
 
@@ -304,4 +340,56 @@ class World:
                 self.autopilot[f.id] = False
             self.seeding = False
             self.store.log(None, "seeded", cases=len(self.orch.cases))
+
+    def outcome_action(self, case_id: str) -> str | None:
+        """The action the pipeline took, in the corpus's terms (``expected_action``)."""
+        case = self.orch.cases.get(case_id)
+        if case is None:
+            return None
+        if case.status == RequestStatus.REFUSED:
+            return "refuse"
+        if case.status == RequestStatus.DENIED:
+            return "deny"
+        return case.parse.action.value if case.parse else None
+
+    def _seed_test(self) -> None:
+        """Replay held-out test requests (``split == "test"``, never trained on) through
+        the real pipeline, each scored against its gold action."""
+        corpus = [e for e in load_jsonl(ROOT / "data" / "requests-para.jsonl") if e.split == "test"]
+        # round-robin over the gold actions, so a short run still covers each of them
+        by_action: dict[str, list] = {}
+        for e in corpus:
+            by_action.setdefault(e.expected_action.value, []).append(e)
+        picked = []
+        while len(picked) < min(self.test_data, len(corpus)):
+            for rows in by_action.values():
+                if rows and len(picked) < self.test_data:
+                    picked.append(rows.pop(0))
+        self.test_run = {"n": len(picked), "rows": []}
+        for f in self.instance.faculty:
+            self.autopilot[f.id] = True
+        try:
+            for e in picked:
+                r = self.intake.from_portal(e.request.sender_id, e.request.raw_text)
+                if r is None:
+                    continue
+                self.submit(r, wait=True)
+                got = self.outcome_action(r.id)
+                errors = [ev.get("error") for ev in self.store.events(r.id, kind="error")]
+                row = {"case": r.id, "corpus_id": e.id, "sender": e.request.sender_id, "text": e.request.raw_text,
+                       "expected": e.expected_action.value, "got": got, "match": got == e.expected_action.value,
+                       "status": self.orch.cases[r.id].status.value, "error": errors[-1] if errors else None}
+                self.test_run["rows"].append(row)
+                self.store.log(r.id, "test_scored", expected=row["expected"], got=got, match=row["match"])
+                print(f"[test {len(self.test_run['rows'])}/{len(picked)}] {e.id} expected={row['expected']:<12} "
+                      f"got={got!s:<12} {'OK' if row['match'] else 'MISS'}  {row['status']}"
+                      + (f"  error: {row['error']}" if row["error"] else ""), flush=True)
+        finally:
+            for f in self.instance.faculty:
+                self.autopilot[f.id] = False
+            self.seeding = False
+            rows = self.test_run["rows"]
+            self.store.log(None, "seeded", cases=len(self.orch.cases),
+                           test_matches=sum(r["match"] for r in rows), test_total=len(rows))
+            print(f"[test] done: {sum(r['match'] for r in rows)}/{len(rows)} match the gold action", flush=True)
 

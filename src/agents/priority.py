@@ -8,6 +8,10 @@ and a correction option M (a set of constraints to relax) costs
 
     cost(M) = sum_{k in M} pi_k + l1 disruption(M) + l2 dGini(M).
 
+A higher pi_k means a greater cost of relaxing constraint k, and dGini is
+computed over weighted concession burden (``ledger.burden``). The same
+cost, with hidden flexibility known, is the oracle's objective.
+
 The negotiator asks the owner of the cheapest option first. ``flat=True``
 is ablation A2: every constraint scores the same and the ledger is ignored.
 """
@@ -21,7 +25,7 @@ from core.instance import Instance
 from core.schemas import Constraint, Justification, Placement, Role
 from core.semantics import PLACEMENT_TYPES, sessions_in_scope, violates
 
-from .ledger import ConcessionLedger
+from .ledger import ConcessionLedger, burden
 
 ROLE_AUTHORITY = {
     Role.DEAN: 1.0, Role.COORDINATOR: 0.9, Role.HOD: 0.8, Role.EXAM_CELL: 0.7,
@@ -115,9 +119,10 @@ class PriorityModel:
         return {c.id: 1 + max(0, round(100 * self.score(c))) for c in constraints}
 
     def option_cost(self, drop: Iterable[Constraint], moved: int, stakeholders: Iterable[str]) -> float:
+        """cost(M): a higher score means a constraint is dearer to relax; the
+        fairness term is the rise in burden dispersion if M's owners concede."""
         drop = list(drop)
         base = sum(self.score(c) for c in drop) + self.w.moved * moved
         if self.flat:
             return base
-        conceders = {c.owner: 1.0 for c in drop if c.owner}
-        return base + self.w.fairness * self.ledger.delta_gini(stakeholders, conceders, self.semester)
+        return base + self.w.fairness * self.ledger.delta_gini(stakeholders, burden(drop), self.semester)

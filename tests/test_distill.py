@@ -94,3 +94,24 @@ def test_check_rows_resplits_policy_and_filters_replies():
         return {"id": "r", "messages": distill._chat(distill.REPLY_PROMPT, user, label)}
     kept, why = distill.check_rows("reply", [reply('{"decision":"accept","choice":"B"}')])
     assert not kept and why["accepts a letter not offered"] == 1
+
+
+def test_denials_come_from_the_message_whatever_the_parse():
+    instance = Instance.model_validate_json(Path("data/synthetic-cse-s0.json").read_text(encoding="utf-8"))
+    corpus = load_jsonl(Path("data/requests.jsonl"), instance)
+    held = [e for e in corpus if e.split in ("val", "test")]
+    extra = distill.extra_denials(instance, 40, seed=1, exclude=held, near_miss=0.35)
+    deny = PolicyOutput(verdict="forbidden", cited_rules=["P-LUNCH"], explanation="lunch")
+    answers = {"P-LUNCH": deny.model_dump_json(), "P-MAXCONSEC": deny.model_copy(update={"cited_rules": ["P-MAXCONSEC"]}).model_dump_json(),
+               "allowed": PolicyOutput(verdict="allowed", explanation="ok").model_dump_json()}
+    rows, reasons = distill.denial_samples(extra, [corpus], instance, Path("data/handbook.md"), answers)
+    assert rows and all(r["split"] == "train" and r["task"] == "policy" for r in rows)
+    held_text = {e.request.raw_text for e in held}
+    for r in rows:
+        prompt, out = r["messages"][1]["content"], PolicyOutput.model_validate_json(r["messages"][2]["content"])
+        assert distill._MESSAGE.search(prompt).group(1) not in held_text
+        if out.verdict == "forbidden":  # the rule it cites was shown
+            assert f"[{out.cited_rules[0]}]" in prompt.split("# Calendar")[0]
+    shown = {k.split("(")[1] for k in reasons if "(" in k}
+    assert {"gold parse)", "misread parse)", "none parse)"} <= shown
+    assert any(k.startswith("allowed") for k in reasons)

@@ -110,7 +110,10 @@ export const api = {
   documents: () => call<PolicyDocuments>("/handbook/documents"),
   uploadDocument: (name: string, data: string) => post<PolicyDocument & { rules: Rule[] }>("/handbook/documents", { name, data }),
   removeDocument: (name: string) => call<{ removed: string }>(`/handbook/documents/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  search: (q: string) => call<{ query: string; tokens: string[]; results: Rule[] }>(`/handbook/search?q=${encodeURIComponent(q)}`),
+  search: (q: string, mode?: string) =>
+    call<{ query: string; tokens: string[]; mode: string; results: Rule[] }>(
+      `/handbook/search?q=${encodeURIComponent(q)}${mode ? `&mode=${mode}` : ""}`,
+    ),
   semester: () => call<SemesterOverview>("/semester"),
   semesterPublic: () => call<SemesterOverview>("/semester/public"),
   loadOfferings: (body: { sample: true } | { name: string; data: string }) =>

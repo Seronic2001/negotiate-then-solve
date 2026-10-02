@@ -26,12 +26,15 @@ from agents.explainer import describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
 from agents.negotiation import Negotiator, Outcome, Responder
 from agents.policy import PolicyAgent, PolicyDecision, Verdict
+from agents.swap import RuleSwapReader, SwapPlan, consent_message, looks_like_swap, swap_constraints
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import Instance
-from core.schemas import Constraint, Request, RequestStatus, TimetableVersion
+from core.schemas import Constraint, Request, RequestStatus, Role, TimetableVersion
 from core.solver import TimetableSolver
-from language.corpus import ExpectedAction
+from core.validator import validate_constraint
+from language.corpus import ExpectedAction, RequestType
 from language.parsing import ParseResult
+from language.rule_parser import RuleParser
 
 from .store import Store
 
@@ -82,6 +85,7 @@ class Orchestrator:
         approvers: Iterable[str] = ("C-TT",),
         semester: str = "current",
         negotiator_factory: Callable[[], Negotiator] | None = None,
+        swap_reader=None,
     ) -> None:
         self.instance = instance
         self.store = store
@@ -95,6 +99,7 @@ class Orchestrator:
         self.approvers = set(approvers)
         self.semester = semester
         self.negotiator_factory = negotiator_factory
+        self.swap_reader = swap_reader or RuleSwapReader(instance)
         self.cases: dict[str, Case] = {}
 
     # -- setup -------------------------------------------------------------------
@@ -147,6 +152,8 @@ class Orchestrator:
                       routing=case.routing, seconds=round(case.timings["parse"], 3))
         action = case.parse.action
 
+        if self._is_swap(case):
+            return self._swap(case)
         if action == ExpectedAction.REFUSE:
             case.reply = f"Your request was not processed: {case.parse.refusal}. The timetable coordinator has been informed."
             self._advance(case, S.REFUSED, reason=case.parse.refusal)
@@ -194,6 +201,85 @@ class Orchestrator:
         self.store.add_constraints(case.constraints, request_id=case.id)
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
                       obligations=case.policy.obligations if case.policy else [], superseded=superseded)
+        return self._solve(case)
+
+    # -- swaps (P-SWAP) ------------------------------------------------------------------
+
+    def _is_swap(self, case: Case) -> bool:
+        """The parser says swap, or (for parsers never trained on swaps) the
+        message has a swap word and names a colleague. Students keep their
+        refusal; questions about the swap rule stay questions."""
+        if case.request.role == Role.STUDENT or case.parse.action in (
+                ExpectedAction.ANSWER, ExpectedAction.INVESTIGATE, ExpectedAction.OUT_OF_SCOPE):
+            return False
+        return case.parse.request_type == RequestType.SWAP or looks_like_swap(self.instance, case.request)
+
+    def _swap(self, case: Case) -> Case:
+        r = case.request
+        case.route += "+swap"
+        weeks_hint = RuleParser(self.instance).weeks(r.raw_text)
+        base = (self.store.current_version(weeks_hint[0]) if weeks_hint else None) or self.store.current_version()
+        reading = self.swap_reader.read(r, base.assignment if base else {})
+        if reading.refusal:
+            case.reply = f"Your request was not processed: {reading.refusal}."
+            self._advance(case, S.REFUSED, reason=reading.refusal)
+            return case
+        plan = reading.plan
+        pins = swap_constraints(self.instance, plan, r) if plan else []
+        if errors := [e for c in pins for e in validate_constraint(c, self.instance)]:
+            plan, pins = None, []
+            reading.question, reading.missing = f"That swap cannot be written as a timetable change ({errors[0]}).", ["session"]
+        if plan and self.policy is not None:
+            t = time.perf_counter()
+            view = ParseResult(request=r, output=case.parse.output, constraints=pins)
+            case.policy = self.policy.review(r.raw_text, view)
+            case.timings["policy"] = time.perf_counter() - t
+        self._advance(case, S.POLICY_CHECKED, verdict=case.policy.verdict.value if case.policy else "not_checked",
+                      swap=_plan_view(plan) if plan else None)
+        if plan is None:
+            case.reply = reading.question or "Which two classes would you like to swap?"
+            self._advance(case, S.CLARIFICATION, missing=reading.missing)
+            return case
+        rule = next((f"§{x.number} {x.title}" for x in getattr(self.policy, "rules", {}).values()
+                     if x.id == "P-SWAP"), None) if self.policy else None
+        # P-SWAP itself asks for consent and for the coordinator to be informed: that
+        # is this step and the approval below. A verdict under any other rule stands.
+        other_rules = set(case.policy.cited) - {"P-SWAP"} if case.policy else set()
+        if case.policy and case.policy.verdict == Verdict.FORBIDDEN and other_rules:
+            case.reply = (f"Your request cannot be granted: {case.policy.explanation}"
+                          + (f" Alternative: {case.policy.alternative}" if case.policy.alternative else ""))
+            self._advance(case, S.DENIED, cited=case.policy.cited)
+            return case
+        if case.policy and case.policy.verdict != Verdict.ALLOWED and other_rules:
+            case.reply = f"Your request needs approval and has been sent up: {case.policy.explanation}"
+            self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
+            return case
+
+        responder = self.responders.get(plan.counterpart)
+        if responder is None:
+            case.reply = "Your colleague cannot be reached through the system; the coordinator has been informed."
+            self._advance(case, S.ESCALATED, to="coordinator", reason=f"no inbox for {plan.counterpart}")
+            return case
+        message = consent_message(self.instance, plan, rule)
+        self.store.log(case.id, "swap_consent_requested", to=plan.counterpart, message=message.model_dump())
+        reply = responder.respond(message)
+        if reply.decision is None and self.negotiator.reply_parser is not None:
+            reply = self.negotiator.reply_parser.parse(message, reply.text)
+        agreed = reply.decision == "accept" and (reply.choice or "A").strip().upper() == "A"
+        self.store.log(case.id, "swap_consent", by=plan.counterpart, agreed=agreed,
+                       reply=reply.model_dump(exclude_none=True))
+        if not agreed:
+            who = self.instance.faculty_by_id[plan.counterpart].name
+            why = "did not reply in time" if reply.decision == "no_reply" else "did not agree"
+            case.reply = f"{who} {why}, so the swap was not made. A swap needs the consent of both of you."
+            self._advance(case, S.DENIED, reason=f"swap declined by {plan.counterpart}", cited=["P-SWAP"])
+            return case
+
+        case.constraints = pins
+        superseded = self._supersede(case)
+        self.store.add_constraints(case.constraints, request_id=case.id)
+        self._advance(case, S.COMPILED, constraints=[c.id for c in pins], superseded=superseded,
+                      consent=plan.counterpart)
         return self._solve(case)
 
     def _supersede(self, case: Case) -> list[str]:
@@ -311,6 +397,11 @@ class Orchestrator:
                     f"{session_name(self.instance, s)} is now on {placement_text(self.instance, v.assignment[s])}"
                     for s in mine)
         return out
+
+
+def _plan_view(plan: SwapPlan) -> dict:
+    return {"requester": plan.requester, "counterpart": plan.counterpart, "mine": plan.mine, "theirs": plan.theirs,
+            "mine_at": plan.mine_at.model_dump(), "theirs_at": plan.theirs_at.model_dump(), "weeks": plan.weeks}
 
 
 def explain_constraint(instance: Instance, c: Constraint) -> str:

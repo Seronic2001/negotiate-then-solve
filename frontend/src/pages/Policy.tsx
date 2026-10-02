@@ -9,6 +9,7 @@ import { useApi, useDebounced } from "../lib/hooks";
 import { how } from "../lib/meta";
 import type { Rule } from "../lib/types";
 
+const MODES = ["bm25", "dense", "hybrid"];
 const SAMPLES = ["Can I teach at 1pm?", "Move my lecture to week 8", "Shift my practical to another lab", "Guest lecturer wants a different day", "Book the auditorium"];
 
 function where(r: Rule): string {
@@ -21,7 +22,8 @@ export default function Policy() {
   const { data: rules } = useApi(() => api.handbook(), []);
   const [q, setQ] = useState("Move my lecture to week 8");
   const dq = useDebounced(q, 220);
-  const { data: hits } = useApi(() => (dq.trim() ? api.search(dq) : Promise.resolve(null)), [dq]);
+  const [mode, setMode] = useState<string | undefined>(undefined); // undefined: the policy agent's retriever
+  const { data: hits } = useApi(() => (dq.trim() ? api.search(dq, mode) : Promise.resolve(null)), [dq, mode]);
   const maxScore = Math.max(0.001, ...(hits?.results.map((r) => r.score ?? 0) ?? [0]));
   const [open, setOpen] = useState<string | null>(null);
   const bySource = new Map<string, Rule[]>();
@@ -46,7 +48,17 @@ export default function Policy() {
           <div className="flex items-center gap-3 rounded-md border border-line bg-panel px-3.5 focus-within:border-brand/60">
             <Search size={18} className="text-ink-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask like a faculty member would…" className="h-11 flex-1 bg-transparent text-[14.5px] outline-none" />
-            <span className="text-[12px] text-ink-3">BM25</span>
+            <div className="flex rounded border border-line text-[12px]" title="BM25 matches words; dense matches meanings; hybrid fuses both (reciprocal rank fusion)">
+              {MODES.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={clsx("px-2 py-1", (mode ?? hits?.mode) === m ? "bg-panel-2 text-ink" : "text-ink-3 hover:text-ink-2")}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {SAMPLES.map((s) => (
@@ -63,7 +75,7 @@ export default function Policy() {
                   {t}
                 </span>
               ))}
-              <span className="ml-1">(clock times become h13, h14…)</span>
+              <span className="ml-1">(clock times become h13, h14…; used by BM25)</span>
             </p>
           )}
         </div>
@@ -81,7 +93,7 @@ export default function Policy() {
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
                     <div className="h-full bg-brand" style={{ width: `${((r.score ?? 0) / maxScore) * 100}%` }} />
                   </div>
-                  <span className="w-9 text-right font-mono text-[11px] text-ink-3">{r.score?.toFixed(2)}</span>
+                  <span className="w-9 text-right font-mono text-[11px] text-ink-3">{r.score?.toFixed(hits?.mode === "bm25" ? 2 : 3)}</span>
                 </div>
               </div>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{r.text}</p>

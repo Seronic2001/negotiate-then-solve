@@ -7,7 +7,8 @@ parsing and the fine-tuned compiler (L2), the policy agent (L3), CP-SAT with
 conflict analysis (L4), the interpretation layer with the resolution ladder,
 grounded explanations and the concession ledger (L5), and human approval
 before publishing (L6). The evaluation harness covers the negotiation
-benchmark (baselines B1–B4, ablations A1–A3), parsing, policy and the safety set.
+benchmark (baselines B1–B4 and the oracle, ablations A1–A3), the reply-action
+benchmark, parsing, policy and the safety set.
 
 Every LLM-backed component has a deterministic path (template explanations,
 scripted simulators, stub parsers), so the whole system can be developed and
@@ -24,6 +25,43 @@ uv run pytest                 # includes a full department-size solve
 uv run python -m evaluation.demo     # generate a department, solve it, run UC3
 uv run nts-web                # web app on http://127.0.0.1:8000 (build the frontend first, see below)
 ```
+
+## Running the project
+
+The web app runs on Windows; llama.cpp (for the fine-tuned local model) runs
+in WSL. WSL forwards `localhost`, so the app reaches `llama-server` at the
+default `http://localhost:8080/v1` without extra setup.
+
+**1. Start the local model in WSL** (skip this for the offline or Gemini
+parser). The fine-tuned weights from the latest training run are in
+`qwen3.5-2b-nts-gguf/` next to this repository (Qwen3.5-2B, Q5_K_M GGUF). From a WSL terminal, with llama.cpp built (adjust the path to your
+`llama-server` binary):
+
+```sh
+~/llama-bin/llama.cpp/llama-server \
+  -m "/mnt/c/Users/Shubh/Desktop/LMA Major Project/qwen3.5-2b-nts-gguf/Qwen3.5-2B.Q5_K_M-mutitask-finetune.gguf" \
+  --jinja -ngl 99 -c 4096 --cache-ram 1024 --host 0.0.0.0 --port 8080
+```
+
+`--cache-ram 1024` caps llama.cpp's prompt cache in RAM (default 8 GB); without
+it the server grows past WSL's memory during long evaluations and is killed.
+Check it from Windows with `curl http://localhost:8080/v1/models`. If
+`localhost` does not reach WSL, use the WSL address (`wsl hostname -I`) and set
+`NTS_LOCAL_URL=http://<wsl-ip>:8080/v1`.
+
+**2. Build the front end and start the app** (Windows, PowerShell, from
+`negotiate-then-solve/`):
+
+```powershell
+uv sync
+cd frontend; npm install; npm run build; cd ..
+uv run nts-web --parser local        # fine-tuned model via llama-server in WSL
+# uv run nts-web                     # offline rule-based parser, no model needed
+# uv run nts-web --parser gemini     # Gemini (keys in .env)
+```
+
+Open http://127.0.0.1:8000. For UI development, also run `npm run dev` in
+`frontend/` and use http://localhost:5173 (it proxies `/api` to :8000).
 
 ## Layout
 
@@ -117,10 +155,18 @@ train System One on templates and test it on paraphrases.
 (`data/handbook.md`, **a synthetic stand-in**: replace it with the
 institute's handbook, one `## <number> <title> [RULE-ID]` heading per rule).
 
-1. BM25 retrieves the top 5 rules. Clock times are normalised ("1pm" and
-   "13:00" match), and the query is extended with what the parse implies
-   (a one-off absence adds "make-up", a run of more hours than the limit adds
-   "consecutive").
+1. Retrieval returns the top 5 rules. The query is extended with what the
+   parse implies (a one-off absence adds "make-up", a run of more hours than
+   the limit adds "consecutive"). Three retrievers (`--retriever`, or
+   `NTS_RETRIEVER` in the web app):
+   - `bm25`: words; clock times are normalised ("1pm" and "13:00" match).
+     The recorded evaluation runs used it.
+   - `dense`: sentence embeddings (BAAI/bge-small-en-v1.5 through fastembed,
+     ONNX, no torch; 65 MB, downloaded to `runs/embed_models/` on first use),
+     cosine similarity. With one handbook and a few documents a matrix
+     product replaces a vector index (FAISS/Chroma in the proposal).
+   - `hybrid` (the web app's default): both rankings fused by reciprocal
+     rank. Falls back to BM25 if the embedding model cannot be loaded.
 2. The LLM returns `allowed`, `needs_approval` or `forbidden`, cited rules,
    obligations (e.g. a make-up class), an explanation and a compliant
    alternative; for policy questions, an answer.
@@ -133,11 +179,31 @@ citations, make-up obligations and retrieval recall against the corpus
 `rules` labels. Use `--policy-model gemini-3.1-flash-lite` for development
 when the agent model's daily quota is spent.
 
+`uv run python -m evaluation.retrieval` compares the three retrievers with
+no API calls, over the handbook and the policy documents (32 rules): corpus
+requests (test split) as sent, the same with the parse's hints (what the
+agent searches with), and `data/retrieval-queries.jsonl`, 40 questions
+worded differently from the rules (written for this comparison, not by
+the team). Recall@5, `runs/retrieval-20260929.json`:
+
+| | BM25 | Dense | Hybrid |
+|---|---|---|---|
+| Corpus + hints (106) | 87.7% | 91.5% | **93.4%** |
+| Paraphrased questions (40) | 65.8% | **87.8%** | 82.9% |
+| Corpus, raw text only (106) | **77.4%** | 45.3% | 75.5% |
+
+Dense alone misses requests whose rule is implied rather than said ("I'm at
+a conference in week 7" → P-MAKEUP); hybrid keeps BM25 there and gains most
+of the dense retriever's reach on paraphrases. Most remaining misses are
+vague absences ("away for a few days soon") that the parser sends back for
+clarification, so no absence hint is added.
+
 | Module | Proposal | What it does |
 |---|---|---|
-| `src/agents/policy.py` | L3, UC2, UC4 | Handbook loader, BM25, policy agent with citation checks |
+| `src/agents/policy.py` | L3, UC2, UC4 | Handbook loader, BM25, dense and hybrid retrieval, policy agent with citation checks |
 | `src/agents/documents.py` | L3 | Policy documents in any form: PDF, scans, photos, HTML, Markdown → rules with provenance |
 | `src/evaluation/policy.py` | Table 11 (RAG) | Parse-then-policy evaluation |
+| `src/evaluation/retrieval.py` | Table 11 (RAG) | BM25 vs dense vs hybrid: recall@1/3/5, MRR |
 
 ### Policy documents: PDF, HTML, scans and photos
 
@@ -186,17 +252,29 @@ the Handbook page the coordinator can add or remove documents, and every rule
 and search hit shows the document, page and method it came from.
 
 Known limits: OCR can misread single letters ("ciasses"), which the confidence
-shown per document hints at. BM25 matches words, not meanings: "shift my
-practical to another lab" does not reach "moved into a different laboratory"
-(the dense half of the proposal's hybrid retriever is not built).
+shown per document hints at. BM25 alone matches words, not meanings: "shift
+my practical to another lab" does not reach "moved into a different
+laboratory"; the dense and hybrid retrievers do (the Handbook page's search
+can switch between the three).
 
 ## Fine-tuned compiler (local model)
 
 `uv run python -m language.compiler` writes `data/compiler/{train,val,test}.jsonl`:
 chat examples (short system prompt, compact directory, message) with the gold
-`ParseOutput` JSON as the answer. `deny`/`refuse` requests are left out, since
-those are decided after parsing. Templated and paraphrased versions of a
-request share a split.
+`ParseOutput` JSON as the answer. `refuse` requests are left out (the
+authority check decides them). Rule-breaking (`deny`) requests are kept as
+`compile` with the constraint they ask for, 1 pm being the lunch slot; the
+policy agent denies them from that parse. `--extra-denials 150` (default)
+adds generated rule-breaking requests in wider wording, and legal look-alikes
+(12 pm, 2 pm, a run at the limit), to train; none shares its text, or its
+sender, day and rule, with a val or test request. Templated and paraphrased
+versions of a request share a split. A train or val request whose text, greeting and
+sign-off aside, repeats a request of a later split is dropped (the templates
+and the fixed policy questions repeat across splits); the evaluation splits
+are unchanged. `training.distill export` applies the same rule to policy rows. `--min-per-action 50` (default) then tops up
+the answer, out-of-scope and clarify examples in train with new wordings
+(40 policy questions, 40 out-of-scope messages, vague absences and
+preferences), none repeating a corpus request.
 
 `notebooks/train_compiler_kaggle.ipynb` trains it on a Kaggle T4 with LoRA
 (Unsloth advises against QLoRA for Qwen3.5), loss on the answer only, then
@@ -207,10 +285,12 @@ defaults to **Qwen3.5-2B**. For 4B, use a GPU with bf16 or set
 `load_in_4bit = True` (QLoRA, with Unsloth's caveat). Run it with
 `TRIAL = True` first.
 
-Evaluate the downloaded model locally with the same harness as Gemini:
+Evaluate the downloaded model locally with the same harness as Gemini (the
+latest run's weights are in `../qwen3.5-2b-nts-gguf/`; start `llama-server` in
+WSL as in [Running the project](#running-the-project)):
 
 ```sh
-llama-server -m qwen3.5-4b-nts.Q5_K_M.gguf --jinja -ngl 99 -c 4096 --port 8080
+llama-server -m ../qwen3.5-2b-nts-gguf/Qwen3.5-2B.Q5_K_M-mutitask-finetune.gguf --jinja -ngl 99 -c 4096 --port 8080
 uv run python -m evaluation.parsing --local --corpus data/requests-para.jsonl --split val --limit 100 --workers 1
 ```
 
@@ -226,7 +306,7 @@ the deployed system makes: reading negotiation replies, grounded explanations
 and the policy agent. Each example uses the system prompt and user message the
 system sends at run time (the same code builds them), so the trained model
 drops into every `--local` path unchanged. The stakeholder simulators, the
-judge, the paraphraser and the LLM baselines (A1, A3, B1, B3) stay on Gemini:
+judge, the paraphraser and the LLM baselines (B1, B3, B4) stay on Gemini:
 they test or grade the system, or measure an untuned LLM.
 
 ```sh
@@ -234,7 +314,8 @@ uv run python -m training.distill messages --seeds 1-10   # negotiations on new 
 uv run python -m training.distill reply                   # simulator model voices accept/counter/reject replies
 uv run python -m training.distill explain                 # agent model as teacher
 uv run python -m training.distill policy                  # agent model as teacher
-uv run python -m training.distill export                  # data/multitask/{train,val}.jsonl, ≤800 per task
+uv run python -m training.distill denials                 # more denials from the policy stage's answers; no API
+uv run python -m training.distill export                  # data/multitask/{train,val}.jsonl, ≤900 per task
 ```
 
 - **Scenarios** come from benchmark seeds 1-10; seed 0 (the evaluation set) is
@@ -245,6 +326,13 @@ uv run python -m training.distill export                  # data/multitask/{trai
 - **Explanations:** a teacher output is kept only if every claim cites known
   fact IDs (brackets stripped) and passes the claim checker, every option is
   cited, and nothing private leaks. The stage prints why the rest were dropped.
+- **Denials:** the first model trained on this data never wrote slot 4 (the
+  compiler data had no request for 1 pm), so it misread lunch-hour requests
+  and the policy agent could not deny them from its parse. `denials` adds the
+  generated rule-breaking requests and their look-alikes, and corpus denials
+  shown with a misread parse (lunch moved an hour, a run cut to the limit,
+  or none), so the verdict comes from the message. Its targets are the
+  teacher's answers from `policy`.
 - **Policy:** input parses come from the rule parser (no API). The verdict and
   citations must match the corpus label and cite only rules that were shown.
   The make-up obligation, which the teacher often leaves out, is set from the
@@ -258,8 +346,16 @@ folder (it reports validation per task), then score the model with
 ## Data
 
 `uv run python -m language.corpus` regenerates `data/requests.jsonl` (600 requests,
-400/50/150 train/val/test, stratified) and pins the instance it was built
-against in `data/synthetic-cse-s0.json`. Each line is a `CorpusExample`:
+400/50/150 train/val/test, plus 30 test-only multi-constraint requests; `--multi 0`
+leaves them out) and pins the instance it was built against in
+`data/synthetic-cse-s0.json`. Splits are made by wording template, not by
+request: every request built from one template (`template`, e.g.
+`unav_conference:1`) is in the same split, so no test request has a
+re-dressed or paraphrased twin in training. Each builder's largest template
+stays in train; its smallest goes to test where there is room. Val and test
+requests carry `slices` (`unseen_wording`, `unseen_combination`, `ambiguous`,
+`adversarial`, `multi_constraint`), and `evaluation.parsing` reports each.
+Each line is a `CorpusExample`:
 
 - `request`: the raw message as it arrives (sender, role, channel, text);
 - `request_type`, `authorised`, `expected_action` (`compile`, `clarify`,
@@ -288,41 +384,86 @@ stability are not modelled.
 
 | Module | Proposal | What it does |
 |---|---|---|
-| `src/agents/priority.py` | §8.4 | π_k = auth + impact + justification + lead + credit − disruption; option cost = Σπ + λ1·moved + λ2·ΔGini; `flat=True` for ablation A2 |
-| `src/agents/ledger.py` | §8.6 | Concession ledger with semester decay; Gini coefficient |
-| `src/agents/explainer.py` | §8.7 | Conflict → numbered facts (MUS constraints, rules, rooms, options, ledger). Template, grounded (claims cite facts; a checker drops claims whose days, numbers or names are not in the cited facts) and free (A3) modes; private-reason leak check |
-| `src/agents/negotiation.py` | §8.6 | Resolution ladder: auto-substitute → auto-relax (notices) → negotiate over MCS options (2–3 solver-verified alternatives per message, cheapest owner first, lowest credit on ties, one extra probe after a refusal) → escalate with a brief. Replies: accept / counter / reject / no reply |
-| `src/agents/simulators.py` | §12.1 | Stakeholders with hidden flexibility (acceptable windows, room flexibility, whether they volunteer it, whether they reply); scripted or LLM-voiced replies |
-| `src/evaluation/benchmark.py` | §12.1 | 60 scenarios: contention, substitute, deadlock, Tier 3 vs 4 squeeze, capacity shortfall, preference trade-off, policy; the oracle (B4) tries every hidden-flexibility combination |
-| `src/evaluation/negotiation.py` | §12.2–12.5 | Runs ours / A1–A3 / B1–B4; validity, correct outcome, rounds, cost vs oracle, escalation P/R, concession Gini, faithfulness, leaks; McNemar, Wilcoxon, bootstrap CIs |
+| `src/agents/priority.py` | §8.4 | π_k = auth + impact + justification + lead + credit − disruption (higher = dearer to relax); option cost = Σπ + λ1·moved + λ2·ΔGini over weighted burden; `flat=True` for ablation A1 |
+| `src/agents/ledger.py` | §8.6 | Concession ledger with semester decay; each concession weighs importance (tier × justification) × magnitude (1 dropped, 0.5 counter-offer); burden dispersion: Gini, max, CV |
+| `src/agents/explainer.py` | §8.7 | Conflict → numbered facts (MUS constraints, rules, rooms, options, ledger). Template, grounded (claims cite facts; a checker drops claims whose days, numbers or names are not in the cited facts) and free (A2) modes; private-reason leak check |
+| `src/agents/negotiation.py` | §8.6 | Resolution ladder: auto-substitute → auto-relax (notices) → negotiate over MCS options (2–3 solver-verified alternatives per message, cheapest owner first, lowest credit on ties, one extra probe after a refusal) → escalate with a brief. Each reply becomes one typed tool call: accept, apply_reply, counter_propose (offered onward only if CP-SAT verifies it), ask_clarification (one follow-up per round), decline, escalate; a bad call gets its typed error back, and after two retries the reply goes to the coordinator. `RuleReplyParser` is the regex handler of ablation A3. Option sources: MCS (ours), LLM-invented unchecked (B3), LLM-invented filtered by CP-SAT with up to 3 regenerations (B4) |
+| `src/agents/simulators.py` | §12.1 | Stakeholders with hidden flexibility (acceptable windows, room flexibility, whether they volunteer it, whether they reply); four policy families (strict, flexible, cost-sensitive, history-sensitive) with seeded random refusals and silences; scripted or LLM-voiced replies |
+| `src/evaluation/benchmark.py` | §12.1 | 60 scenarios: contention, substitute, deadlock, Tier 3 vs 4 squeeze, capacity shortfall, preference trade-off, policy; families cycle within each kind. The oracle tries every hidden-flexibility combination and minimises the negotiator's own objective (tiers given up, then option cost); `objective()` scores any outcome the same way |
+| `src/evaluation/negotiation.py` | brief §5 | Runs ours / B1–B4 / oracle / A1–A3 (B2 = same objective, cheapest correction imposed; B4 = primary baseline). `--plan` runs the reduced plan: ours-llm, B3, B4 on all 60 × 3 seeds; ablations on a stratified 30 and B1 on a stratified 20, seed 0 (650 LLM runs); invalid candidates, invention calls and filtered inventions (H1), tool calls, retries; validity, correct outcome, resolution rate, rounds per resolved conflict, distance to the oracle objective, escalation P/R and reasons, weighted burden (Gini, max, CV), faithfulness, leaks; pooled and per family; McNemar, Wilcoxon, bootstrap CIs |
+| `src/evaluation/replies.py` | brief §5.1 D | 100 replies to a real UC3 message with gold tool calls (accept, partial, counter-proposal, vague, refusal, injected); tool and argument accuracy, valid first calls, recovery, unsafe-action rate; `--parser llm` or `rule` (A3) |
 | `src/evaluation/judge.py`, `src/evaluation/stats.py` | §12.5 | Batched LLM judge (clarity, acceptability) and quadratic-weighted Cohen's κ against human raters |
 
 ```sh
 uv run python -m evaluation.benchmark                                  # data/scenarios.jsonl (about 30 s)
-uv run python -m evaluation.negotiation --offline                 # ours, A2, B2, B4: no API calls (about 6 min)
-uv run python -m evaluation.negotiation --configs ours-llm,A1,A3,B1,B3   # Gemini; spread over days
+uv run python -m evaluation.negotiation --offline                 # ours, A1-offline, B2, oracle: no API calls
+uv run python -m evaluation.negotiation --plan --local --sim-local   # the reduced plan on the local model
+uv run python -m evaluation.negotiation --configs ours-llm,B4 --subset 20   # Gemini check of the main comparison
+uv run python -m evaluation.replies --parser llm --local           # reply tool calls (Benchmark D); --parser rule is A3
 uv run python -m evaluation.judge runs/negotiation-XXXX.json           # LLM judge (batched, Flash-Lite)
 uv run python -m evaluation.judge --kappa data/human_ratings.csv       # judge vs human raters
 ```
 
 Offline results so far (60 scenarios; `runs/negotiation-offline.json`,
-`runs/negotiation-ours-probe.json`):
+`runs/negotiation-ours-probe.json`). These predate the policy families, the
+oracle objective, weighted burden, the new B2 and the brief's relabelling
+(old A2 = new A1, old A3 = new A2, old A1 = new B3, old B4 = oracle);
+regenerate `data/scenarios.jsonl` and rerun before reporting:
 
 | | Correct outcome | Valid timetables | Rounds (agreements) | Within 10% of oracle | Escalation P / R | Concession Gini |
 |---|---|---|---|---|---|---|
 | Ours (MCS, tiers, ledger, probing) | 95% | 100% | 1.56 | 100% | 0.85 / 1.00 | 0.23 |
-| A2: flat weights, no ledger | 93% | 100% | 1.53 | 100% | 0.81 / 1.00 | 0.27 |
+| A1: flat weights, no ledger | 93% | 100% | 1.53 | 100% | 0.81 / 1.00 | 0.27 |
 | B2: solver imposes, no negotiation | 18% | 100% | 0 | – | 1.00 / 0.47 | – |
-| B4: oracle | 100% | 100% | 0 | 100% | 1.00 / 1.00 | – |
+| Oracle | 100% | 100% | 0 | 100% | 1.00 / 1.00 | – |
 
-The A2 row is from the run before probing was added; rerun it for a
+The A1 row is from the run before probing was added; rerun it for a
 like-for-like comparison. Under B2 only 4% of imposed changes would have been
 acceptable to their owners. The three scenarios ours escalates although the
 oracle agrees are stakeholders who accept only one narrow window and never
-say so; six offered alternatives missed it. LLM configurations (ours-llm, A1,
-A3, B1, B3) need the API; a 3-scenario smoke run already shows the free
-explanation (A3) leaking a private reason, and the LLM-only timetable (B1)
+say so; six offered alternatives missed it. LLM configurations (ours-llm,
+B1, B3, B4, A1–A3) need a model; a 3-scenario smoke run already shows the free
+explanation (now A2) leaking a private reason, and the LLM-only timetable (B1)
 silently breaking requesters' hard constraints.
+
+## Swap requests
+
+"Could I swap my Tuesday 10 am lecture with Dr. Rao's Thursday 2 pm one in
+week 7?" names sessions by where they are now, so it is read against the
+published timetable, not compiled from the message (`src/agents/swap.py`):
+
+1. **Recognised** when the parser says `swap`, or by a deterministic
+   backstop (a swap word, or "take my … and I take their …", plus a
+   colleague named) for parsers never trained on swaps. The parser prompt and
+   schema are unchanged, so every cached parse stays valid. Questions about
+   the swap rule stay questions; students are refused.
+2. **Read**: the message is cut at "my" and at "<name>'s"/"their"/"his"/"her";
+   each part is matched against that person's sessions by day, time, course
+   and kind (`RuleSwapReader`; in Gemini mode `LLMSwapReader` shows the model
+   both timetables). Code then checks the sender owns the first session, the
+   colleague the second, and that each fits in the other's slot. If the
+   message fits more than one pair it asks which, listing the candidates.
+3. **Policy**: the policy agent sees the two moves; a lunch-hour or other
+   rule still denies. P-SWAP itself is satisfied by the next two steps.
+4. **Consent** (P-SWAP, "with the consent of both"): the colleague gets one
+   option in their negotiation inbox. Declined or no reply → denied, nothing
+   compiled.
+5. **Compile and solve**: each session gets a hard time pin (Tier 4, owned by
+   its teacher) at the other's slot, for the weeks named or the semester;
+   rooms are the solver's. Then the usual repair, negotiation, fairness audit
+   and the coordinator's approval ("informed before the swap takes effect").
+
+`uv run python -m evaluation.swaps --e2e 10` generates 120 swap requests on
+the benchmark department's timetable (five phrasings; days, times, course
+names, surnames, colleague first, weeks) with exact gold: if the stated
+clues fit more than one session, the right answer is a question. Rule
+reader, `runs/swaps-rules-20260929.json`: 51/51 answerable pairs and weeks
+right, 69/69 vague requests answered with a question, 0 wrong pairs
+committed; through the orchestrator 10/10 agreed swaps handled (9 swapped in
+the proposal, 1 correctly denied for crossing the lunch hour) and 5/5
+declined swaps denied. The phrasings are templated by the same author as the
+reader, so this checks the logic, not coverage of real wording;
+`--reader gemini` or `--reader local` runs the model reader on the same set.
 
 ## Orchestrator, channels and approval (L0, L1, L6)
 
@@ -433,7 +574,8 @@ faculty member in the text).
 cd frontend && npm install && npm run build && cd ..
 uv run nts-web                       # API + built UI on http://127.0.0.1:8000
 NTS_PARSER=gemini uv run nts-web     # System Two + policy agent on Gemini instead of offline rules
-NTS_PARSER=local uv run nts-web      # System Two on the fine-tuned compiler (llama-server; NTS_LOCAL_URL, default http://localhost:8080/v1)
+NTS_PARSER=local uv run nts-web      # parser and policy agent on the fine-tuned model (llama-server; NTS_LOCAL_URL, default http://localhost:8080/v1)
+uv run nts-web --parser local --test-data 20   # benchmark department; replays 20 held-out test requests (NTS_TEST_DATA)
 
 cd frontend && npm run dev           # hot-reloading UI on :5173, /api proxied to :8000
 ```
@@ -446,6 +588,12 @@ vague request (clarification), a policy question (answered) and a lab outage
 that only Tier 0-2 changes could fix (escalated). Requests run in background
 threads and the UI follows them through the event log.
 
+- **Test data (`--test-data N`, or `NTS_TEST_DATA=N`).** Loads the benchmark
+  department (`data/synthetic-cse-s0.json`: 30 faculty, 202 sessions) instead of
+  the demo one and replays N requests from the held-out test split of
+  `data/requests-para.jsonl` (round-robin over the gold actions) instead of the
+  demo history. Each case is scored against its gold action; the dashboard
+  shows the run and the server prints one line per request.
 - **Auth is mocked.** Sign in by picking a person; the client sends `X-User`.
   Every permission is enforced server-side (only the coordinator approves,
   people see their own cases, replies only from the addressee). `?as=F-101`
@@ -497,10 +645,13 @@ experiments (results from `runs/`). Dark and light themes; Ctrl+K palette.
 
 - **Experiment runs (API quota, spread over days):** parsing test split on the
   paraphrased corpus; policy test split; negotiation LLM configurations
-  (ours-llm, A1, A3, B1, B3) on all 60 scenarios; the safety set with Gemini;
+  (`evaluation.negotiation --plan`) and the reply benchmark; the safety set with Gemini;
   judge ratings. Each run resumes from the cache after a daily-quota stop.
 - **Team:** 100 hand-written requests and two annotators; the institute's
   real handbook; human pilot ratings (`data/human_ratings.csv`) for judge κ.
 - **Local model:** generate the multi-task data (`training.distill`), train it, and score it with the `--local` evaluations.
-- Not built yet: swap requests, and a dense retriever for the BM25 +
-  embedding hybrid.
+- **Swaps and hybrid retrieval with the models:** `evaluation.swaps --reader
+  gemini`, and `evaluation.policy --retriever hybrid` (Gemini and `--local`)
+  to see whether better recall changes the verdicts. The fine-tuned model has
+  no swap training data yet; swaps and retrieval-queries.jsonl are
+  author-written and should be joined by the team's hand-written requests.

@@ -6,12 +6,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
+from agents.negotiation import _ParsedReply
+from agents.policy import PolicyOutput
 from core.generator import generate_department
 from evaluation.metrics import exact_match
 from language.compiler import CompilerParser, completion, gold_output
 from language.corpus import ExpectedAction, generate_corpus
 from language.llm import LLMError
-from language.local import LocalClient
+from language.local import LocalClient, grammar_schema
+from language.parsing import ParseOutput
 
 
 class FakeServer:
@@ -72,6 +75,14 @@ def test_compiler_parser_through_local_client(server, tmp_path):
 
     CompilerParser(instance, client).parse(ex.request)  # second time from the cache
     assert len(server.requests) == 1 and client.usage.cache_hits == 1
+
+
+def test_grammar_keeps_training_key_order():
+    # llama.cpp writes required keys first; cited_rules must stay before explanation
+    policy = grammar_schema(PolicyOutput.model_json_schema())
+    assert policy["required"] == ["verdict", "cited_rules", "obligations", "explanation"]
+    for schema in (ParseOutput, _ParsedReply):  # already in order: unchanged
+        assert grammar_schema(schema.model_json_schema()) == schema.model_json_schema()
 
 
 def test_unreachable_server_is_a_clear_error(tmp_path):

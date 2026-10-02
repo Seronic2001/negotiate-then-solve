@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from agents.policy import PolicyAgent, load_handbook
+from agents.policy import RETRIEVERS, PolicyAgent, load_handbook
 from core.instance import Instance
 from language.corpus import CorpusExample, ExpectedAction, Variant, load_jsonl
 from language.llm import DailyQuotaReached, GeminiClient, LLMError, default_model
@@ -88,6 +88,7 @@ def eval_policy(
     gold_total = sum(len(r["gold_rules"]) for r in reviewed)
     return {
         "model": agent.client.model,
+        "retriever": agent.retriever_kind,
         "split": split,
         "n": len(rows),
         "reviewed": len(reviewed),
@@ -124,6 +125,8 @@ def main() -> None:
     ap.add_argument("--parser-model", default=None, help="default: the agent model")
     ap.add_argument("--policy-model", default=None, help="default: the agent model")
     ap.add_argument("--k", type=int, default=5, help="rules retrieved per request")
+    ap.add_argument("--retriever", default="bm25", choices=RETRIEVERS,
+                    help="bm25 (the recorded runs), dense, or hybrid (BM25 + embeddings, reciprocal rank fusion)")
     ap.add_argument("--local", action="store_true",
                     help="the fine-tuned local model parses (compiler prompt) and reviews (policy prompt)")
     ap.add_argument("--local-url", default="http://localhost:8080/v1")
@@ -141,7 +144,7 @@ def main() -> None:
     else:
         parser = SystemTwoParser(instance, GeminiClient(args.parser_model or default_model()))
         policy_client = GeminiClient(args.policy_model or default_model())
-    agent = PolicyAgent(load_handbook(args.handbook), policy_client, instance, k=args.k)
+    agent = PolicyAgent(load_handbook(args.handbook), policy_client, instance, k=args.k, retriever=args.retriever)
     report = eval_policy(corpus, instance, parser, agent, split=args.split, limit=args.limit, workers=args.workers)
     print("Policy:", json.dumps({k: v for k, v in report.items() if k != "rows"}, indent=1))
     out = args.out or Path("runs") / f"policy-{datetime.now():%Y%m%d-%H%M%S}.json"

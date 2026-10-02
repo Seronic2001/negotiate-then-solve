@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from core.instance import Instance
 from core.schemas import Constraint, ConstraintType, Placement, Tier
-from language.corpus import FULL_DAY, hour
+from language.corpus import FIRST_SLOT_HOUR, FULL_DAY, hour
 from language.llm import LLMError
 from language.paraphrase import FidelityCheck
 
@@ -221,6 +221,27 @@ class ClaimChecker:
         if not (days or nums or ents):
             return None
         return self.supported(sentence, facts)
+
+
+_AT = re.compile(r"\b(" + "|".join(FULL_DAY.values()) + r")s?\b[^.;!?]{0,30}?\bat\s+h(\d+)\b")
+
+
+def times_at(text: str) -> set[tuple[str, int]]:
+    """Every "<day> ... at <time>" in ``text``, as (day, hour)."""
+    return {(m[1], int(m[2])) for m in _AT.finditer(_canon(text))}
+
+
+def option_mismatches(text: str, options: Iterable[Mapping[str, Placement]], facts: Iterable[Fact],
+                      raw_requests: Iterable[str] = ()) -> tuple[int, int]:
+    """Does the prose agree with the options listed under it? Returns
+    (invented, omitted): day-and-time mentions that are neither an offered
+    placement nor a time in the conflict facts or requests, and offered
+    options the prose never mentions."""
+    offered = [{(FULL_DAY[p.day], FIRST_SLOT_HOUR + p.slot) for p in o.values()} for o in options]
+    known = set().union(*offered, *(times_at(f.text) for f in facts if not f.id.startswith("OPT-")),
+                        *(times_at(r) for r in raw_requests))
+    said = times_at(text)
+    return len(said - known), sum(not (o & said) for o in offered)
 
 
 def leaks(text: str, private: Iterable[str] = ()) -> list[str]:
