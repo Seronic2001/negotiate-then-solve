@@ -139,7 +139,7 @@ class _ParsedReply(BaseModel):
     counter_slots: list[int] | None = Field(None, description="counter: slot indices they say would work")
     propose_day: str | None = Field(None, description="propose: day of their own alternative")
     propose_slot: int | None = Field(None, description="propose: start slot of their own alternative")
-    propose_room: str | None = Field(None, description="propose: room ID of their own alternative")
+    propose_room: str | None = Field(None, description="propose: room of their own alternative, as named")
     question: str | None = Field(None, description="clarify: the one follow-up question to ask")
     reason: str | None = Field(None, description="reject or escalate: why, in a few words")
 
@@ -150,7 +150,7 @@ accept: they agree to one of the lettered options (give the letter).
 counter: they decline the options but say which days/times would work
   (map times to slot indices with the slot table).
 propose: they ask for one specific alternative of their own: a day, a time
-  and a room (give the room ID from the options or the reply).
+  and a room (the room as the options or the reply name it).
 clarify: the reply is too vague to act on ("depends on my TA", "maybe");
   give one short follow-up question.
 reject: they decline and offer nothing else.
@@ -189,6 +189,13 @@ def call_errors(reply: Reply, message: Message, instance: Instance) -> list[str]
     return errs
 
 
+def retry_prompt(prompt: str, errors: list[str]) -> str:
+    """The parse prompt, with the typed errors of the rejected call if any."""
+    if not errors:
+        return prompt
+    return f"{prompt}\n\nYour previous call was rejected: {'; '.join(errors)}. Call one tool again."
+
+
 class ReplyParser:
     """System Two parsing of a free-text reply (LLM) into one typed tool call.
     A bad call gets its typed error back and is retried; after
@@ -214,9 +221,7 @@ class ReplyParser:
         prompt = self.build_prompt(message, text)
         errors: list[str] = []
         for attempt in range(self.max_retries + 1):
-            ask = prompt if not errors else (
-                f"{prompt}\n\nYour previous call was rejected: {'; '.join(errors)}. Call one tool again.")
-            got = self.client.generate(REPLY_PROMPT, ask, _ParsedReply)
+            got = self.client.generate(REPLY_PROMPT, retry_prompt(prompt, errors), _ParsedReply)
             reply = _to_reply(got, text)
             if reply.proposal and reply.proposal.room not in self.instance.room_by_id:
                 # names resolve to IDs deterministically, as in the validator ("Lab 3" -> L-3)

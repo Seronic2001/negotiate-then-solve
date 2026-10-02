@@ -311,7 +311,9 @@ they test or grade the system, or measure an untuned LLM.
 
 ```sh
 uv run python -m training.distill messages --seeds 1-10   # negotiations on new scenarios; no API (~30 min)
-uv run python -m training.distill reply                   # simulator model voices accept/counter/reject replies
+uv run python -m training.distill reply                   # simulator model voices replies for all six tools
+uv run python -m training.distill reply --voice template --kinds propose,clarify,escalate --per-message 1 --name reply-tools
+                                                          # only the newer tools, beside the existing reply.jsonl; no API
 uv run python -m training.distill explain                 # agent model as teacher
 uv run python -m training.distill policy                  # agent model as teacher
 uv run python -m training.distill denials                 # more denials from the policy stage's answers; no API
@@ -320,9 +322,15 @@ uv run python -m training.distill export                  # data/multitask/{trai
 
 - **Scenarios** come from benchmark seeds 1-10; seed 0 (the evaluation set) is
   refused, and the last seed is the validation split.
-- **Replies:** the decision is drawn first (accept a random option, counter
-  with a window, reject), then the simulator model (or `--voice template`,
-  no API) writes the text, so labels are exact.
+- **Replies:** the tool call is drawn first (accept a random option, counter
+  with a window, propose a day, time and room, clarify, reject, escalate),
+  then the simulator model (or `--voice template`, no API) writes the text,
+  so labels are exact. Escalate replies (injected instructions, policy
+  exceptions, out-of-scope asks) always keep their template text. 15% of the
+  fixable ones show the retry turn: the typed errors of a rejected call, with
+  the corrected call as target. The templates are worded apart from the reply
+  benchmark (`evaluation.replies`). Rows made with the older three-decision
+  prompt (`reply.jsonl`) get the current prompt in `check` and `export`.
 - **Explanations:** a teacher output is kept only if every claim cites known
   fact IDs (brackets stripped) and passes the claim checker, every option is
   cited, and nothing private leaks. The stage prints why the rest were dropped.
