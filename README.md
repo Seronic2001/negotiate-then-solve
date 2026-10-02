@@ -312,7 +312,7 @@ they test or grade the system, or measure an untuned LLM.
 ```sh
 uv run python -m training.distill messages --seeds 1-10   # negotiations on new scenarios; no API (~30 min)
 uv run python -m training.distill reply                   # simulator model voices replies for all six tools
-uv run python -m training.distill reply --voice template --kinds propose,clarify,escalate --per-message 1 --name reply-tools
+uv run python -m training.distill reply --voice template --kinds propose,clarify,escalate --per-message 1 --fraction 0.55 --name reply-tools
                                                           # only the newer tools, beside the existing reply.jsonl; no API
 uv run python -m training.distill explain                 # agent model as teacher
 uv run python -m training.distill policy                  # agent model as teacher

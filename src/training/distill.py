@@ -33,7 +33,7 @@ split. Policy examples use the corpus train/val splits.
     uv run python -m training.distill messages --seeds 1-10       # negotiations, solver only (no API)
     uv run python -m training.distill reply                       # simulator model voices replies
     uv run python -m training.distill reply --voice template      # no API
-    uv run python -m training.distill reply --voice template --kinds propose,clarify,escalate         --per-message 1 --name reply-tools                         # only the newer tools, beside reply.jsonl
+    uv run python -m training.distill reply --voice template --kinds propose,clarify,escalate         --per-message 1 --fraction 0.55 --name reply-tools         # only the newer tools, beside reply.jsonl
     uv run python -m training.distill explain                     # teacher: agent model
     uv run python -m training.distill policy                      # teacher: agent model
     uv run python -m training.distill denials                     # more policy denials, no API
@@ -689,6 +689,8 @@ def main() -> None:
     ap.add_argument("--per-message", type=int, default=3, help="reply: samples per message (at most one per kind)")
     ap.add_argument("--kinds", default=",".join(KINDS), help="reply: tools to sample, comma-separated")
     ap.add_argument("--name", default="reply", help="reply: writes data/distill/<name>.jsonl")
+    ap.add_argument("--fraction", type=float, default=1.0,
+                    help="reply: share of the messages used (a fixed random sample, both splits)")
     ap.add_argument("--teacher-model", default=None, help="explain/policy: default the agent model")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=None, help="reply/explain/policy: first N items (smoke test)")
@@ -716,7 +718,10 @@ def main() -> None:
         kinds = [k for k in args.kinds.split(",") if k]
         if unknown := set(kinds) - set(KINDS):
             ap.error(f"unknown kinds {sorted(unknown)}; choose from {KINDS}")
-        rows = reply_samples(_read(DIR / "messages.jsonl")[: args.limit], voice_client=client,
+        messages = _read(DIR / "messages.jsonl")[: args.limit]
+        if args.fraction < 1:
+            messages = random.Random(0).sample(messages, round(len(messages) * args.fraction))
+        rows = reply_samples(messages, voice_client=client,
                              per_message=args.per_message, kinds=kinds)
         print(f"wrote {_write(DIR / f'{args.name}.jsonl', rows)} reply examples; "
               f"labels {dict(Counter(json.loads(r['messages'][2]['content'])['decision'] for r in rows))}, "
