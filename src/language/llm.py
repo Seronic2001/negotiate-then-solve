@@ -394,6 +394,11 @@ class LLMError(RuntimeError):
     pass
 
 
+class InvalidOutput(LLMError):
+    """The model answered, but not with an instance of the schema (cut off at
+    the token limit, say). Callers may treat it as a failed call and retry."""
+
+
 class DailyQuotaReached(LLMError):
     """This run would exceed the per-day request budget. Cached responses
     mean a rerun tomorrow resumes where this one stopped."""

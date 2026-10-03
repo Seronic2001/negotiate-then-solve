@@ -48,6 +48,7 @@ from core.schemas import (
 )
 from core.semantics import PLACEMENT_TYPES, sessions_in_scope, violates
 from core.solver import SolveResult, TimetableSolver
+from language.llm import InvalidOutput
 
 from .explainer import (
     Explainer,
@@ -221,7 +222,11 @@ class ReplyParser:
         prompt = self.build_prompt(message, text)
         errors: list[str] = []
         for attempt in range(self.max_retries + 1):
-            got = self.client.generate(REPLY_PROMPT, retry_prompt(prompt, errors), _ParsedReply)
+            try:
+                got = self.client.generate(REPLY_PROMPT, retry_prompt(prompt, errors), _ParsedReply)
+            except InvalidOutput as e:  # cut off or malformed: a failed call, retried like an invalid one
+                errors = [f"no valid call ({e}): answer with the call only and keep text fields short"]
+                continue
             reply = _to_reply(got, text)
             if reply.proposal and reply.proposal.room not in self.instance.room_by_id:
                 # names resolve to IDs deterministically, as in the validator ("Lab 3" -> L-3)

@@ -451,3 +451,27 @@ def test_reply_benchmark_has_100_cases_with_gold_calls():
     assert len(cases) == 100 and len({c.id for c in cases}) == 100
     assert Counter(c.category for c in cases) == {"accept": 20, "partial": 20, "counter": 15, "vague": 15,
                                                   "refusal": 15, "injected": 15}
+
+
+def test_cut_off_output_is_retried_then_handed_to_the_coordinator():
+    from agents.negotiation import MAX_RETRIES, ReplyParser, _ParsedReply
+    from evaluation.replies import message
+    from language.llm import InvalidOutput
+
+    inst, msg = message()
+
+    class Rambler:  # e.g. a base model that writes until the token limit
+        def __init__(self, then):
+            self.calls, self.then = 0, then
+
+        def generate(self, system, user, schema):
+            self.calls += 1
+            if self.then is None or self.calls == 1:
+                raise InvalidOutput("invalid _ParsedReply (finish_reason=length, 1956 chars)")
+            return self.then
+
+    got = ReplyParser(Rambler(_ParsedReply(decision="accept", choice="A")), inst).parse(msg, "A is fine")
+    assert got.decision == "accept" and got.retries == 1 and "finish_reason=length" in got.errors[0]
+    stuck = Rambler(None)
+    got = ReplyParser(stuck, inst).parse(msg, "A is fine")
+    assert got.decision == "escalate" and stuck.calls == MAX_RETRIES + 1 and got.errors
