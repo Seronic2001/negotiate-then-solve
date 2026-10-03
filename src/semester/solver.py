@@ -187,7 +187,7 @@ class Preference(BaseModel):
 
 
 def faculty_key(name: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"\(.*?\)|^(dr|prof)\.?\s+", "", name, flags=re.I)).strip().lower()
+    return re.sub(r"\s+", " ", re.sub(r"\(.*?\)|^(dr|prof)\.?\s+", "", name, flags=re.IGNORECASE)).strip().lower()
 
 
 def components(doc: OfferingDoc, sizes: dict[str, int], rooms: list[Room], cal: SemesterCalendar) -> tuple[list[Component], list[str]]:
@@ -204,7 +204,7 @@ def components(doc: OfferingDoc, sizes: dict[str, int], rooms: list[Room], cal: 
         half = c.half if c.half in ("H1", "H2") else "full"
         fac = [faculty_key(f) for f in c.faculty if f and "coordinator" not in f.lower()] or \
               [faculty_key(f) for f in c.faculty]
-        base = dict(course=c.code, half=half, cohorts=list(c.cohorts), faculty=fac)
+        base = {"course": c.code, "half": half, "cohorts": list(c.cohorts), "faculty": fac}
         once = c.half == "H" or c.L in (1, 2)
         if c.L > 0 or (c.half == "H" and c.T > 0):
             # the fewest parallel sections whose size fits that many halls
@@ -451,7 +451,7 @@ class SemesterSolver:
                         vs = [v for c in cs if half in c.halves for v in covering(c, d, t)]
                         if len(vs) > 1:
                             m.add(sum(vs) <= 1)
-                    for rtype, caps in ({} if "rooms" in without else by_type).items():
+                    for rtype in ({} if "rooms" in without else by_type):
                         # rooms needed with capacity >= k never exceed rooms available with capacity >= k
                         demand = [(c, k) for c in comps if c.room_type == rtype
                                   and half in c.halves for k, o in enumerate(c.options) if _covers(o, d, t)]

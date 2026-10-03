@@ -558,9 +558,9 @@ def denial_samples(extra: list[CorpusExample], corpora: list[list[CorpusExample]
 SYSTEM = {"explain": (GROUNDED_PROMPT, ExplanationOut), "reply": (REPLY_PROMPT, _ParsedReply),
           "policy": (POLICY_PROMPT, PolicyOutput)}
 _FACT = re.compile(r"^\[([^\]]+)\] (.*)$")
-_REPLY = re.compile(r"Options offered:\n(.*?)\n\nReply:\n<reply>\n(.*)\n</reply>$", re.S)
-_MESSAGE = re.compile(r"<message>\n(.*)\n</message>", re.S)
-_SHOWN = re.compile(r"^\[([A-Z0-9-]+)\] §", re.M)
+_REPLY = re.compile(r"Options offered:\n(.*?)\n\nReply:\n<reply>\n(.*)\n</reply>$", re.DOTALL)
+_MESSAGE = re.compile(r"<message>\n(.*)\n</message>", re.DOTALL)
+_SHOWN = re.compile(r"^\[([A-Z0-9-]+)\] §", re.MULTILINE)
 _ROOM = re.compile(r"\b(?:Lab|Room|Hall|LH) ?[A-Z]?-?\d+\b")
 
 
@@ -685,7 +685,7 @@ def export(out_dir: Path, *, compiler_dir: Path, max_per_task: int, seed: int = 
     splits: dict[str, list[dict]] = {"train": [], "val": []}
     counts: dict[str, dict[str, int]] = {}
     for task, rows in by_task.items():
-        for split in splits:
+        for split, out in splits.items():
             part = [r for r in rows if r["split"] == split]
             if held is not None:
                 keep = [r for r in part if not ((g := _MESSAGE.search(r["messages"][1]["content"]))
@@ -696,7 +696,7 @@ def export(out_dir: Path, *, compiler_dir: Path, max_per_task: int, seed: int = 
             rng.shuffle(part)
             if split == "train":
                 part = part[:max_per_task]
-            splits[split].extend(part)
+            out.extend(part)
             counts.setdefault(task, {})[split] = len(part)
     for split, rows in splits.items():
         rng.shuffle(rows)

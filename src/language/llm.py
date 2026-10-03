@@ -17,16 +17,18 @@ follow Google's current Flash releases without code changes.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseModel
@@ -240,14 +242,12 @@ class ApiKeyPool:
                     continue
                 qpath = self.cache_dir / f"_quota-{self.model}-{today_str}-{k.key_hash}.txt"
                 if qpath.exists():
-                    try:
+                    with contextlib.suppress(OSError, ValueError):
                         used = int(qpath.read_text(encoding="utf-8"))
                         if used >= self.rpd:
                             k.exhausted_today = True
                             k.daily_used = used
                             continue
-                    except Exception:
-                        pass
                 return True
         return False
 
@@ -268,15 +268,13 @@ class ApiKeyPool:
                 if not k.exhausted_today:
                     qpath = self.cache_dir / f"_quota-{self.model}-{today_str}-{k.key_hash}.txt"
                     if qpath.exists():
-                        try:
+                        with contextlib.suppress(OSError, ValueError):
                             used = int(qpath.read_text(encoding="utf-8"))
                             if used >= self.rpd:
                                 k.exhausted_today = True
                                 k.daily_used = used
                                 continue
                             k.daily_used = used
-                        except Exception:
-                            pass
                     candidates.append(k)
 
             if not candidates:
@@ -292,10 +290,8 @@ class ApiKeyPool:
                 stamp_path = self.cache_dir / f"_last-{self.model}-{k.key_hash}.txt"
                 disk_last = 0.0
                 if stamp_path.exists():
-                    try:
+                    with contextlib.suppress(OSError, ValueError):
                         disk_last = float(stamp_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        pass
                 last_call = max(k.last_call_time, disk_last)
                 ready_at = last_call + self.min_interval
                 if ready_at <= now:
@@ -322,7 +318,7 @@ class ApiKeyPool:
             selected.last_call_time = scheduled_time
 
             # Record reservations on disk for cross-process coordination
-            try:
+            with contextlib.suppress(OSError, ValueError):
                 stamp_path = self.cache_dir / f"_last-{self.model}-{selected.key_hash}.txt"
                 stamp_path.write_text(repr(scheduled_time), encoding="utf-8")
 
@@ -331,8 +327,6 @@ class ApiKeyPool:
                 used += 1
                 qpath.write_text(str(used), encoding="utf-8")
                 selected.daily_used = used
-            except Exception:
-                pass
 
             return selected, wait_seconds
 
@@ -341,22 +335,18 @@ class ApiKeyPool:
         with self._lock:
             key.exhausted_today = True
             key.disable_reason = reason
-            try:
+            with contextlib.suppress(OSError, ValueError):
                 qpath = self.cache_dir / f"_quota-{self.model}-{today_str}-{key.key_hash}.txt"
                 qpath.write_text(str(self.rpd), encoding="utf-8")
                 key.daily_used = self.rpd
-            except Exception:
-                pass
 
     def mark_rate_limited(self, key: PooledKey, penalty_seconds: float = 5.0) -> None:
         now = time.time()
         with self._lock:
             key.last_call_time = max(key.last_call_time, now) + penalty_seconds
-            try:
+            with contextlib.suppress(OSError, ValueError):
                 stamp_path = self.cache_dir / f"_last-{self.model}-{key.key_hash}.txt"
                 stamp_path.write_text(repr(key.last_call_time), encoding="utf-8")
-            except Exception:
-                pass
 
     def mark_disabled(self, key: PooledKey, reason: str = "") -> None:
         with self._lock:
@@ -527,7 +517,7 @@ class GeminiClient:
                 latency = time.monotonic() - started
             except errors.APIError as e:
                 details_str = json.dumps(e.details or {}) if getattr(e, "details", None) is not None else ""
-                err_text = f"{e.message or ''} {str(e)} {details_str}".lower()
+                err_text = f"{e.message or ''} {e!s} {details_str}".lower()
 
                 is_daily = e.code == 429 and ("perday" in err_text or "daily" in err_text)
                 if is_daily:
@@ -591,8 +581,6 @@ class GeminiClient:
 
     def _pace(self) -> None:
         """Legacy helper maintained for backward compatibility."""
-        pass
 
     def _count_today(self) -> None:
         """Legacy helper maintained for backward compatibility."""
-        pass

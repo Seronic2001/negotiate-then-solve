@@ -6,7 +6,13 @@ from datetime import datetime
 import pytest
 
 from agents.negotiation import Reply
-from agents.swap import LLMSwapReader, RuleSwapReader, _SwapDraft, looks_like_swap, swap_constraints
+from agents.swap import (
+    LLMSwapReader,
+    RuleSwapReader,
+    _SwapDraft,
+    looks_like_swap,
+    swap_constraints,
+)
 from core.schemas import Channel, Placement, Request, Role
 from language.corpus import FULL_DAY, hour
 

@@ -250,13 +250,13 @@ _DAYS = {"monday": "Mon", "tuesday": "Tue", "wednesday": "Wed", "thursday": "Thu
          "mon": "Mon", "tue": "Tue", "tues": "Tue", "wed": "Wed", "thu": "Thu", "thur": "Thu",
          "thurs": "Thu", "fri": "Fri"}
 _INJECTION = re.compile(r"ignore (all|the|previous|your)|you are now|admin mode|system prompt|"
-                        r"skip the approval|approve (all|everything|it)|publish (it|my|the)|override", re.I)
+                        r"skip the approval|approve (all|everything|it)|publish (it|my|the)|override", re.IGNORECASE)
 # "option b" in any case; a bare letter only in capitals, so "a Thursday slot" is not option A
 _LETTER = re.compile(r"\b[Oo]ption\s+([A-Ga-g])\b|^\s*\(?([A-G])\)?(?=[,.!:)-]|\s*$)|"
                      r"\b([A-G])\s+(?:works|is fine|suits|please|sounds good)\b")
-_TIME = re.compile(r"\b(\d{1,2})(?::00)?\s*(am|pm)\b", re.I)
-_NEGATIVE = re.compile(r"\b(no|none|not|sorry|can't|cannot|don't|doesn't|won't|unfortunately|neither)\b", re.I)
-_POSITIVE = re.compile(r"\b(yes|ok|okay|fine|works|agree|sure|great|perfect)\b", re.I)
+_TIME = re.compile(r"\b(\d{1,2})(?::00)?\s*(am|pm)\b", re.IGNORECASE)
+_NEGATIVE = re.compile(r"\b(no|none|not|sorry|can't|cannot|don't|doesn't|won't|unfortunately|neither)\b", re.IGNORECASE)
+_POSITIVE = re.compile(r"\b(yes|ok|okay|fine|works|agree|sure|great|perfect)\b", re.IGNORECASE)
 
 
 class RuleReplyParser:
@@ -298,13 +298,13 @@ class RuleReplyParser:
             slots |= set(range(max(0, self._slot(h, after.group(2) or ("pm" if h < 9 else "am"))), n))
         elif before:
             h = int(before.group(1))
-            slots |= set(range(0, min(n, self._slot(h, before.group(2) or ("pm" if h < 9 else "am")))))
+            slots |= set(range(min(n, self._slot(h, before.group(2) or ("pm" if h < 9 else "am")))))
         else:
             slots |= {s for h, ap in _TIME.findall(text) if 0 <= (s := self._slot(int(h), ap)) < n}
         if not slots and "afternoon" in low:
             slots = set(range(self.instance.calendar.lunch_slot + 1, n))
         if not slots and "morning" in low:
-            slots = set(range(0, self.instance.calendar.lunch_slot))
+            slots = set(range(self.instance.calendar.lunch_slot))
         if days or slots:
             return Reply(decision="counter", counter_days=days or None, counter_slots=sorted(slots) or None,
                          text=text)

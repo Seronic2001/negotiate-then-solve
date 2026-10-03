@@ -21,10 +21,10 @@ from .offerings import OfferingDoc
 from .solver import Preference, Room, Window, faculty_key
 
 DAYS = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat"}
-DAY_RE = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday|s)?s?\b", re.I)
-HARD = re.compile(r"\b(can'?t|cannot|unavailable|not available|away|must|on leave|closed|shut)\b", re.I)
+DAY_RE = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday|s)?s?\b", re.IGNORECASE)
+HARD = re.compile(r"\b(can'?t|cannot|unavailable|not available|away|must|on leave|closed|shut)\b", re.IGNORECASE)
 AVOID = re.compile(r"\b(no|not|avoid|without|free|don'?t|never|rather not|can'?t|cannot|unavailable|away|"
-                   r"on leave|closed|shut)\b", re.I)
+                   r"on leave|closed|shut)\b", re.IGNORECASE)
 YEAR = {"1": "I", "2": "II", "3": "III", "4": "IV", "5": "V", "first": "I", "second": "II", "third": "III",
         "fourth": "IV", "fifth": "V"}
 BRANCHES = ("CSE", "CSD", "ECE", "ECD", "CND", "CLD", "CHD", "CGD")
@@ -80,7 +80,7 @@ def _days(text: str) -> list[str] | None:
         d = DAYS.get(m[1][:3].lower())
         if d and d not in found:
             found.append(d)
-    if re.search(r"\bweekends?\b", text, re.I):
+    if re.search(r"\bweekends?\b", text, re.IGNORECASE):
         found.append("Sat")
     return found or None
 
@@ -138,7 +138,7 @@ def parse(text: str, doc: OfferingDoc, rooms: list[Room], source: str = "") -> P
     hard = bool(HARD.search(text))
     room_ids = {r.id.lower(): r.id for r in rooms}
     room = next((room_ids[w.lower()] for w in re.findall(r"[A-Za-z0-9-]+", text) if w.lower() in room_ids), None)
-    if room and re.search(r"\b(closed|shut|unavailable|renovation|maintenance|out of service)\b", text, re.I):
+    if room and re.search(r"\b(closed|shut|unavailable|renovation|maintenance|out of service)\b", text, re.IGNORECASE):
         w = Window(days=days or ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], start=start or "00:00", end=end or "23:59",
                    reason=text)
         out.closures.append((room, w))

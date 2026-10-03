@@ -74,7 +74,7 @@ def req(rid, sender, text, role=Role.FACULTY):
 
 
 def test_lifecycle_negotiates_and_waits_for_approval(world):
-    sc, orch, store, owners = world
+    _sc, orch, store, owners = world
     a = orch.submit(req("R-1", owners["R-A"], "REQUEST-A"))
     assert a.status == S.AWAITING_APPROVAL and a.route == "system_two"
     orch.approve("R-1", "C-TT")
