@@ -181,3 +181,14 @@ def test_old_reply_prompt_rows_take_the_current_prompt(tmp_path, monkeypatch):
     distill.export(tmp_path / "out", compiler_dir=tmp_path / "none", max_per_task=5)
     train = [json.loads(line) for line in (tmp_path / "out" / "train.jsonl").read_text().splitlines()]
     assert train[0]["messages"][0]["content"] == distill.REPLY_PROMPT
+
+
+def test_half_day_counters_name_every_slot_before_or_after_lunch(monkeypatch):
+    _, _, rows = _uc3_rows(monkeypatch)
+    out = distill.reply_samples(rows * 5, per_message=1, kinds=["counter"], blocks=1.0, retry=0)
+    bench = {json.loads(line)["text"] for line in Path("data/replies.jsonl").read_text(encoding="utf-8").splitlines()}
+    for r in out:
+        label = _ParsedReply.model_validate_json(r["messages"][2]["content"])
+        text = r["messages"][1]["content"].split("<reply>\n")[1].split("\n</reply>")[0]
+        assert label.counter_slots in ([0, 1, 2, 3], [5, 6, 7]) and text not in bench
+        assert ("morning" in text.lower() or "before lunch" in text) == (label.counter_slots == [0, 1, 2, 3])
