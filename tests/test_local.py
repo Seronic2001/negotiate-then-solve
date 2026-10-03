@@ -22,6 +22,7 @@ class FakeServer:
 
     def __init__(self) -> None:
         self.reply = "{}"
+        self.models = ["/models/qwen3.5-4b-nts.Q5_K_M.gguf"]
         self.requests: list[dict] = []
         fake = self
 
@@ -38,7 +39,7 @@ class FakeServer:
                 self.wfile.write(data)
 
             def do_GET(self):
-                self._send({"data": [{"id": "/models/qwen3.5-4b-nts.Q5_K_M.gguf"}]})
+                self._send({"data": [{"id": m} for m in fake.models]})
 
             def do_POST(self):
                 fake.requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
@@ -88,3 +89,18 @@ def test_grammar_keeps_training_key_order():
 def test_unreachable_server_is_a_clear_error(tmp_path):
     with pytest.raises(LLMError, match="not reachable"):
         LocalClient(base_url="http://127.0.0.1:9/v1", cache_dir=tmp_path, timeout=2)
+
+
+def test_router_mode_needs_a_model_and_names_it(server, tmp_path, monkeypatch):
+    monkeypatch.delenv("NTS_LOCAL_MODEL", raising=False)
+    server.models = ["qwen3.5-2b-v2.Q5_K_M", "qwen3.5-4b-nts.Q8_0"]
+    with pytest.raises(LLMError, match="router mode"):
+        LocalClient(base_url=server.url, cache_dir=tmp_path)
+    with pytest.raises(LLMError, match="not served"):
+        LocalClient(base_url=server.url, cache_dir=tmp_path, server_model="qwen3.5-9b")
+    monkeypatch.setenv("NTS_LOCAL_MODEL", "qwen3.5-4b-nts.Q8_0.gguf")  # the file name works too
+    client = LocalClient(base_url=server.url, cache_dir=tmp_path)
+    assert client.model == "local:qwen3.5-4b-nts.Q8_0.gguf"  # as with one model
+    server.reply = '{"verdict": "allowed", "explanation": "x"}'
+    client.generate("s", "p", PolicyOutput)
+    assert server.requests[-1]["model"] == "qwen3.5-4b-nts.Q8_0"
