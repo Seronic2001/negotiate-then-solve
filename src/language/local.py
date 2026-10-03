@@ -8,13 +8,19 @@ so parsers and evaluations take either.
   JSON schema; llama.cpp turns it into a grammar), so it always parses.
   ``grammar_schema`` keeps the grammar's key order that of the training data.
 * Thinking is switched off through ``chat_template_kwargs``, as in training.
-* Responses are cached like Gemini's; there is no quota to track.
+* Responses are cached like Gemini's; there is no quota to track. The cache
+  key holds the model file name, so give each model file its own name.
+* A server in router mode (``llama-server --models-dir <dir> --models-max 1``)
+  lists every GGUF in the folder and loads the one a request names: choose it
+  with ``server_model`` or ``NTS_LOCAL_MODEL`` (the name, the file name or the
+  path the server lists).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -45,6 +51,12 @@ def grammar_schema(schema: dict) -> dict:
     return schema
 
 
+def _name(model_id: str) -> str:
+    """The model's name in reports and cache keys: its file name, whether the
+    server lists the path (one model) or the name without .gguf (router)."""
+    return "local:" + Path(model_id).name.removesuffix(".gguf") + ".gguf"
+
+
 class LocalClient:
     def __init__(
         self,
@@ -55,11 +67,13 @@ class LocalClient:
         timeout: float = 120.0,
         max_tokens: int = 512,
         thinking: bool = False,
+        server_model: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_tokens = max_tokens
         self.thinking = thinking
+        self.server_model = server_model or os.environ.get("NTS_LOCAL_MODEL") or None
         self.model = model or self._served_model()
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -80,10 +94,20 @@ class LocalClient:
             raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
 
     def _served_model(self) -> str:
-        models = self._request("/models").get("data", [])
-        if not models:
+        ids = [m["id"] for m in self._request("/models").get("data", [])]
+        if not ids:
             raise LLMError(f"no model served at {self.base_url}")
-        return "local:" + Path(models[0]["id"]).name
+        if self.server_model:
+            want = self.server_model.removesuffix(".gguf")
+            hits = [i for i in ids if want in (i, Path(i).name, Path(i).name.removesuffix(".gguf"))]
+            if not hits:
+                raise LLMError(f"{self.server_model!r} is not served at {self.base_url}; it serves {ids}")
+            self.server_model = hits[0]  # the id the server knows it by
+            return _name(hits[0])
+        if len(ids) > 1:
+            raise LLMError(f"{self.base_url} serves {len(ids)} models (router mode): choose one with "
+                           f"NTS_LOCAL_MODEL or --local-model: {ids}")
+        return _name(ids[0])
 
     def generate(
         self,
@@ -112,6 +136,8 @@ class LocalClient:
                                 "json_schema": {"name": schema.__name__, "schema": schema_json, "strict": True}},
             "chat_template_kwargs": {"enable_thinking": self.thinking},
         }
+        if self.server_model:
+            payload["model"] = self.server_model
         started = time.monotonic()
         resp = self._request("/chat/completions", payload)
         latency = time.monotonic() - started

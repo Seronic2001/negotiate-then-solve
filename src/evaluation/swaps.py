@@ -208,6 +208,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--reader", default="rules", choices=["rules", "gemini", "local"])
     ap.add_argument("--local-url", default="http://localhost:8080/v1")
+    ap.add_argument("--local-model", default=None, help="model to run on a router-mode server (default NTS_LOCAL_MODEL)")
     ap.add_argument("--e2e", type=int, default=0, metavar="N", help="also run N agreed swaps through the orchestrator")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
@@ -223,7 +224,7 @@ def main() -> None:
     elif args.reader == "local":
         from language.local import LocalClient
 
-        reader = LLMSwapReader(inst, LocalClient(base_url=args.local_url, timeout=600))
+        reader = LLMSwapReader(inst, LocalClient(base_url=args.local_url, timeout=600, server_model=args.local_model))
     else:
         from language.llm import GeminiClient, default_model
 

@@ -130,6 +130,7 @@ def main() -> None:
     ap.add_argument("--local", action="store_true",
                     help="the fine-tuned local model parses (compiler prompt) and reviews (policy prompt)")
     ap.add_argument("--local-url", default="http://localhost:8080/v1")
+    ap.add_argument("--local-model", default=None, help="model to run on a router-mode server (default NTS_LOCAL_MODEL)")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
 
@@ -139,7 +140,7 @@ def main() -> None:
         from language.compiler import CompilerParser
         from language.local import LocalClient
 
-        local = LocalClient(base_url=args.local_url, timeout=600)
+        local = LocalClient(base_url=args.local_url, timeout=600, server_model=args.local_model)
         parser, policy_client = CompilerParser(instance, local), local
     else:
         parser = SystemTwoParser(instance, GeminiClient(args.parser_model or default_model()))

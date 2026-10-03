@@ -191,6 +191,7 @@ def main() -> None:
     ap.add_argument("--parser", choices=["llm", "rule"], default="rule")
     ap.add_argument("--local", action="store_true", help="LLM parser on the local model (llama-server)")
     ap.add_argument("--local-url", default="http://localhost:8080/v1")
+    ap.add_argument("--local-model", default=None, help="model to run on a router-mode server (default NTS_LOCAL_MODEL)")
     ap.add_argument("--agent-model", default=None)
     ap.add_argument("--cases", type=Path, default=Path("data/replies.jsonl"), help="written if missing")
     ap.add_argument("--out", type=Path, default=None)
@@ -210,7 +211,7 @@ def main() -> None:
         if args.local:
             from language.local import LocalClient
 
-            client = LocalClient(base_url=args.local_url, timeout=600)
+            client = LocalClient(base_url=args.local_url, timeout=600, server_model=args.local_model)
         else:
             from language.llm import GeminiClient, default_model
 

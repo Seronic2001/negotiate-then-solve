@@ -49,6 +49,14 @@ Check it from Windows with `curl http://localhost:8080/v1/models`. If
 `localhost` does not reach WSL, use the WSL address (`wsl hostname -I`) and set
 `NTS_LOCAL_URL=http://<wsl-ip>:8080/v1`.
 
+**Several models on one server (router mode).** Start `llama-server` with
+`--models-dir <folder> --models-max 1` instead of `-m`: it lists every GGUF in
+the folder and loads the one a request names, unloading the previous one.
+Choose it with `NTS_LOCAL_MODEL=<name>` (the web app) or `--local-model <name>`
+(the evaluations); `curl <url>/models` lists the names. Answers are cached by
+model file name, so give every model file its own name (e.g.
+`qwen3.5-2b-v2.Q5_K_M.gguf`).
+
 **2. Build the front end and start the app** (Windows, PowerShell, from
 `negotiate-then-solve/`):
 
