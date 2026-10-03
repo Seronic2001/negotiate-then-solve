@@ -75,7 +75,7 @@ class _Batch(BaseModel):
 # Fidelity check
 # ---------------------------------------------------------------------------
 
-_DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.I)
+_DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.IGNORECASE)
 _NUM = re.compile(r"\d+")
 _IGNORED_NUMBERS = {"0", "00"}  # "9 am" -> "9:00 am"
 
@@ -219,7 +219,7 @@ def paraphrase_corpus(
         "model": paraphraser.client.model,
         "n": len(corpus),
         "paraphrased": len(accepted),
-        "kept_template": sorted(set(ex.id for ex in corpus) - set(accepted)),
+        "kept_template": sorted({ex.id for ex in corpus} - set(accepted)),
         "rejections": rejected,
         "rejection_log": log,
         "stopped": stopped,

@@ -190,7 +190,7 @@ def _pct(xs: list[float], q: float) -> float | None:
     xs = sorted(x for x in xs if x is not None)
     if not xs:
         return None
-    return xs[min(len(xs) - 1, int(round(q / 100 * (len(xs) - 1))))]
+    return xs[min(len(xs) - 1, round(q / 100 * (len(xs) - 1)))]
 
 
 def _llm_usage() -> list[dict]:

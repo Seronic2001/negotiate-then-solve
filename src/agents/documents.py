@@ -199,8 +199,8 @@ def layout(boxes: list[tuple[float, float, float, float, str, float]]) -> str:
     return "\n".join(out)
 
 
-_REF = re.compile(r"<\|ref\|>(.*?)<\|/ref\|>", re.S)
-_DET = re.compile(r"<\|det\|>.*?<\|/det\|>", re.S)
+_REF = re.compile(r"<\|ref\|>(.*?)<\|/ref\|>", re.DOTALL)
+_DET = re.compile(r"<\|det\|>.*?<\|/det\|>", re.DOTALL)
 _SPECIAL = re.compile(r"<\|[^|>]{1,40}\|>")
 
 
@@ -327,7 +327,7 @@ def extract(path: Path, ocr: OCRBackend | None = None, dpi: int = 220) -> list[P
 
 
 _DROP_TAGS = ("script", "style", "noscript", "nav", "header", "footer", "aside", "form", "button", "svg", "iframe")
-_DROP_CLASS = re.compile(r"cookie|banner|breadcrumb|menu|sidebar|share|social|skip", re.I)
+_DROP_CLASS = re.compile(r"cookie|banner|breadcrumb|menu|sidebar|share|social|skip", re.IGNORECASE)
 
 
 def html_text(html: str) -> str:
@@ -370,7 +370,7 @@ _MD_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*$")
 _NUMBERED = re.compile(r"^(?:§\s*)?(?P<num>\d+(?:\.\d+)+\.?|\d+[.)])(?:\s+|(?=[A-Z]))(?P<rest>\S.*)$")  # OCR: "1.Fixed"
 _ID = re.compile(r"\s*\[(?P<id>[A-Z][A-Z0-9-]{1,30})\]\s*$")
 _INLINE_TITLE = re.compile(r"^(?P<title>[A-Z][^.:]{2,60}?)[.:]\s+(?P<body>\S.*)$")
-_PAGE_NO = re.compile(r"^(page\s*)?\d+(\s*(of|/)\s*\d+)?$", re.I)
+_PAGE_NO = re.compile(r"^(page\s*)?\d+(\s*(of|/)\s*\d+)?$", re.IGNORECASE)
 _STRAY_DOT = re.compile(r"\b([a-z]{2,})\.(?=[a-z]{2,}\b)")  # OCR: "moved.only" -> "moved only"
 
 
@@ -408,9 +408,8 @@ def _heading(line: str, markdown: bool) -> tuple[str, str, str | None, str] | No
     if not n:
         return ("", text.strip(), rule_id, "") if markdown else None
     num, rest = n["num"].rstrip(".)"), n["rest"].strip()
-    if m := _INLINE_TITLE.match(rest):
-        if len(m["title"].split()) <= 7:
-            return num, m["title"].strip(), rule_id, m["body"]
+    if (m := _INLINE_TITLE.match(rest)) and len(m["title"].split()) <= 7:
+        return num, m["title"].strip(), rule_id, m["body"]
     if len(rest.split()) <= 9 and not rest.endswith((".", ",", ";")):
         return num, rest, rule_id, ""
     if markdown:
@@ -502,7 +501,7 @@ def ingest(path: Path, ocr: OCRBackend | None = None) -> DocumentReport:
     try:
         report.pages = extract(path, ocr)
         report.rules = segment(path.name, report.pages)
-    except Exception as e:  # one unreadable file must not take the handbook down
+    except Exception as e:  # noqa: BLE001 - one unreadable file must not take the handbook down
         report.error = f"{type(e).__name__}: {e}"
     report.seconds = time.perf_counter() - t
     return report

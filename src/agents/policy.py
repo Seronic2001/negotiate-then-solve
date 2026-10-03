@@ -37,8 +37,7 @@ from language.parsing import ParseResult
 
 _HEADING = re.compile(r"^##\s+(?P<num>[\d.]+)\s+(?P<title>.+?)\s+\[(?P<id>[A-Z0-9-]+)\]\s*$")
 _TOKEN = re.compile(r"[a-z0-9]+")
-_STOP = frozenset("a an and are as at be by can do for from i if in is it may me my no not of on or "
-                  "our so that the their them then there these this to we with you your".split())
+_STOP = frozenset(["a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for", "from", "i", "if", "in", "is", "it", "may", "me", "my", "no", "not", "of", "on", "or", "our", "so", "that", "the", "their", "them", "then", "there", "these", "this", "to", "we", "with", "you", "your"])
 
 
 @dataclass(frozen=True)
@@ -77,7 +76,7 @@ def load_handbook(path: Path | str) -> list[Rule]:
     return rules
 
 
-_CLOCK = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b", re.I)
+_CLOCK = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b", re.IGNORECASE)
 
 
 def _clock(m: re.Match) -> str:
@@ -432,7 +431,7 @@ class RulePolicyAgent:
                 run = run + 1 if i and s == slots[i - 1] + 1 else 1
                 best = max(best, run)
             if (c.type.value == "prefer" and c.hard and pol.max_consecutive and best > pol.max_consecutive
-                    and re.search(r"back.to.back|in a row|straight|consecutive|without (any )?breaks?", text, re.I)
+                    and re.search(r"back.to.back|in a row|straight|consecutive|without (any )?breaks?", text, re.IGNORECASE)
                     and "P-MAXCONSEC" in self.rules):
                 return decision(Verdict.FORBIDDEN, ["P-MAXCONSEC"],
                                 f"No more than {pol.max_consecutive} consecutive teaching hours "

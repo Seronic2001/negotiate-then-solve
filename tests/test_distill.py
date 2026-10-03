@@ -45,7 +45,7 @@ def test_random_windows_are_contiguous_and_skip_lunch():
 
 
 def test_policy_filter():
-    inst = Instance.model_validate_json(open("data/synthetic-cse-s0.json", encoding="utf-8").read())
+    inst = Instance.model_validate_json(Path("data/synthetic-cse-s0.json").read_text(encoding="utf-8"))
     corpus = load_jsonl(Path("data/requests.jsonl"), inst)
     deny = next(ex for ex in corpus if ex.expected_action.value == "deny" and ex.rules)
     shown = set(deny.rules) | {"P-OTHER"}
@@ -75,7 +75,7 @@ def test_export_balances_and_keeps_splits(tmp_path, monkeypatch):
 
 
 def test_check_rows_resplits_policy_and_filters_replies():
-    inst = Instance.model_validate_json(open("data/synthetic-cse-s0.json", encoding="utf-8").read())
+    inst = Instance.model_validate_json(Path("data/synthetic-cse-s0.json").read_text(encoding="utf-8"))
     corpus = distill._corpus_index([Path("data/requests.jsonl")], inst)
     by_split = {}
     for ex in corpus.values():

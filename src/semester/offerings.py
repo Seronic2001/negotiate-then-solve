@@ -40,11 +40,11 @@ AD = re.compile(r"^([A-Z]{2})\s+(?=[A-Z]{2}\d\.\d{3}|[A-Z][a-z])")
 HALF = re.compile(r"\((H1|H2|H)\)")
 CAP = re.compile(r"\((\d{2,3})\)")
 COHORT = re.compile(r"^(B\.?\s?Tech|M\.?\s?Tech|M\.?\s?S\b|MS\b|Ph\.?\s?D|LE-|Dual|Integrated|M\.?\s?Sc|MBA|PG|UG)\b.*"
-                    r"(Semester|year)", re.I)
-POOL = re.compile(r"(Stream|Electives?\b|Bouquet)", re.I)
-POOL_CAP = re.compile(r"(?:Max\.?\s*no\.?\s*of\s*students.*?|Registration\s+Limit:?\s*)(\d{2,3})", re.I)
+                    r"(Semester|year)", re.IGNORECASE)
+POOL = re.compile(r"(Stream|Electives?\b|Bouquet)", re.IGNORECASE)
+POOL_CAP = re.compile(r"(?:Max\.?\s*no\.?\s*of\s*students.*?|Registration\s+Limit:?\s*)(\d{2,3})", re.IGNORECASE)
 SKIP = re.compile(r"^(CD AD|Code\b|Course No|Total\b|\d+ of \d+|Sd/-|Date:|Dean|CD -|AD -|L-T-P-C:|H1-1st|"
-                  r"Course offerings in|UG Programmes|PG Programmes|\*)", re.I)
+                  r"Course offerings in|UG Programmes|PG Programmes|\*)", re.IGNORECASE)
 
 
 class Offering(BaseModel):
@@ -307,7 +307,7 @@ def parse_rows(rows: list[str], source: str = "") -> OfferingDoc:
     for c in doc.courses.values():
         if any("physical education" in f.lower() for f in c.faculty):
             c.scheduled, c.note = False, "run by the Physical Education Centre"
-        elif not c.faculty and (c.P >= 6 or re.search(r"honou?rs|project|BTP", c.name, re.I)):
+        elif not c.faculty and (c.P >= 6 or re.search(r"honou?rs|project|BTP", c.name, re.IGNORECASE)):
             c.scheduled, c.note = False, "project work, no class meetings"
     doc.cohorts = [c for c in doc.cohorts if c.courses or c.electives]
     doc.pools = [p for p in doc.pools if p.courses]
@@ -373,7 +373,7 @@ def elective_pools(doc: OfferingDoc, cohort: Cohort) -> list[tuple[str, list[str
 
     out = [(slot, rule(slot)) for slot in cohort.electives]
     # pools written for one programme ("Electives for CHD Students") belong to it as a whole
-    own = [p.id for p in doc.pools if (m := re.search(r"for (\w+) students", p.name, re.I))
+    own = [p.id for p in doc.pools if (m := re.search(r"for (\w+) students", p.name, re.IGNORECASE))
            and re.search(rf"\b{m[1].lower()}\b", name)]
     if own:
         out.append(("Programme electives", own))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections import Counter
 from collections.abc import Iterable, Sequence
 
@@ -19,7 +20,7 @@ def ece(confidences: Sequence[float], correct: Sequence[bool], bins: int = 10) -
         return 0.0
     edges = np.linspace(0, 1, bins + 1)
     total = 0.0
-    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+    for lo, hi in itertools.pairwise(edges):
         mask = (conf > lo) & (conf <= hi) if lo > 0 else (conf >= lo) & (conf <= hi)
         if mask.any():
             total += mask.mean() * abs(conf[mask].mean() - ok[mask].mean())

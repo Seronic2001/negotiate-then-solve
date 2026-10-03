@@ -51,9 +51,9 @@ from .negotiation import Message, Offer
 
 SWAPPERS = (Role.FACULTY, Role.HOD, Role.GUEST_FACULTY)
 _KIND_WORDS = {
-    SessionKind.PRACTICAL: re.compile(r"\b(practical|lab|labs|laboratory)\b", re.I),
-    SessionKind.TUTORIAL: re.compile(r"\btutorials?\b", re.I),
-    SessionKind.LECTURE: re.compile(r"\blectures?\b", re.I),
+    SessionKind.PRACTICAL: re.compile(r"\b(practical|lab|labs|laboratory)\b", re.IGNORECASE),
+    SessionKind.TUTORIAL: re.compile(r"\btutorials?\b", re.IGNORECASE),
+    SessionKind.LECTURE: re.compile(r"\blectures?\b", re.IGNORECASE),
 }
 
 
@@ -114,8 +114,8 @@ def _check(instance: Instance, request: Request, mine: str | None, theirs: str |
                                      mine_at=timetable[mine], theirs_at=timetable[theirs], weeks=weeks))
 
 
-_MINE = re.compile(r"\b(my|mine)\b", re.I)
-_THEIRS = re.compile(r"\b(their|theirs|his|her|hers)\b", re.I)
+_MINE = re.compile(r"\b(my|mine)\b", re.IGNORECASE)
+_THEIRS = re.compile(r"\b(their|theirs|his|her|hers)\b", re.IGNORECASE)
 
 
 class RuleSwapReader:
@@ -128,10 +128,10 @@ class RuleSwapReader:
 
     def _segments(self, text: str, name: str) -> tuple[str, str]:
         mine = _MINE.search(text)
-        possessive = re.search(rf"({re.escape(name)}|\b{re.escape(surname(name))})\s*[’']s\b", text, re.I)
+        possessive = re.search(rf"({re.escape(name)}|\b{re.escape(surname(name))})\s*[’']s\b", text, re.IGNORECASE)
         pronouns = list(_THEIRS.finditer(text))
         if mine is None:  # "swap Tuesday's lecture with Dr. Rao's": split at the name
-            m = re.search(re.escape(name), text, re.I) or re.search(rf"\b{re.escape(surname(name))}\b", text, re.I)
+            m = re.search(re.escape(name), text, re.IGNORECASE) or re.search(rf"\b{re.escape(surname(name))}\b", text, re.IGNORECASE)
             return text[: m.start()], text[m.end():]
         cands = [x.start() for x in ([possessive] if possessive else []) + pronouns]
         after = [c for c in cands if c > mine.end()]
@@ -147,7 +147,7 @@ class RuleSwapReader:
         self.rules = RuleParser(instance)
 
     def _clues(self, text: str) -> dict:
-        slots = self.rules.slots(text) if re.search(r"\d\s*(am|pm)", text, re.I) else None
+        slots = self.rules.slots(text) if re.search(r"\d\s*(am|pm)", text, re.IGNORECASE) else None
         kinds = [k for k, pat in _KIND_WORDS.items() if pat.search(text)]
         return {"days": self.rules.days(text), "slots": slots, "kinds": kinds, "low": text.lower()}
 

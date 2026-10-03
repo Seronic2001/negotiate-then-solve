@@ -219,7 +219,7 @@ def main() -> None:
                        if gold is not None and ex.split == "train")
         need = {a: max(0, args.min_per_action - have[a]) for a in ("answer", "out_of_scope", "clarify")}
         corpora.append(extra_parser_examples(instance, seed=2, exclude=[e for c in corpora for e in c], **need))
-        print(f"train had {dict((a, have[a]) for a in need)}; added {need}")
+        print(f"train had { {a: have[a] for a in need} }; added {need}")
     counts = export(corpora, instance, args.out)
     print(f"wrote {counts} to {args.out}/ (upload this folder as a Kaggle dataset)")
 

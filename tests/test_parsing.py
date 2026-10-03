@@ -44,8 +44,8 @@ def parse(instance, req, *drafts, action="compile"):
 
 
 def draft(**kw) -> DraftConstraint:
-    base = dict(type="unavailable", hard=True, scope_kind="faculty", scope_id="F-105",
-                days=["Tue", "Wed"], weeks=[7], justification="stated")
+    base = {"type": "unavailable", "hard": True, "scope_kind": "faculty", "scope_id": "F-105",
+                "days": ["Tue", "Wed"], "weeks": [7], "justification": "stated"}
     return DraftConstraint(**{**base, **kw})
 
 

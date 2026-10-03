@@ -42,3 +42,18 @@ markers = [
 
 [project.scripts]
 nts-web = "web.app:run"
+
+[tool.ruff]
+# Kaggle notebooks: shell lines, and imports in the order they must run (unsloth first)
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+# Times are the department's wall-clock times: the timetable, the request log
+# and the file stamps carry no time zone, so naive datetimes are intended.
+ignore = ["DTZ"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/web/*.py" = ["B008"]  # FastAPI declares dependencies as defaults: Depends(view("semester"))
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["agents.priority.Weights"]  # a frozen dataclass

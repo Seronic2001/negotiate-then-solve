@@ -222,13 +222,13 @@ def contention(rng: random.Random, sid: str, *, substitute: bool = False, deadlo
                   f"afternoon. {names[fa]}",
            "R-B": f"The {_title(inst, pb)} lab needs routers; {full} afternoon is the only time I can do. "
                   f"{names[fb]}"}
-    return dict(inst=inst, planted=planted, profiles=profiles, ledger=ledger, raw=raw)
+    return {"inst": inst, "planted": planted, "profiles": profiles, "ledger": ledger, "raw": raw}
 
 
 def squeeze(rng: random.Random, sid: str) -> dict:
     inst = _department(rng, sid, [_lab("L-1", 1, ["gpu", "routers"]), _lab("L-2", 2, [])])
     a, b = rng.sample([1, 2, 3, 4], 2)
-    pa, pb = _practical(inst, a), _practical(inst, b, equipment=["routers"])
+    pa, _pb = _practical(inst, a), _practical(inst, b, equipment=["routers"])
     inst.sessions = [s for s in inst.sessions if not (s.faculty == f"F-30{b}" and s.kind == SessionKind.LECTURE)]
     day = rng.choice(DAYS)
     fa, fb = f"F-30{a}", f"F-30{b}"
@@ -251,7 +251,7 @@ def squeeze(rng: random.Random, sid: str) -> dict:
     full = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday"}[day]
     raw = {"R-B": f"Because of {reason} I can only teach on {full} afternoons this semester. {names[fb]}",
            "R-A": f"I need my {_title(inst, pa)} practical on {full} afternoon in the GPU lab. {names[fa]}"}
-    return dict(inst=inst, planted=planted, profiles=profiles, raw=raw, private=[reason])
+    return {"inst": inst, "planted": planted, "profiles": profiles, "raw": raw, "private": [reason]}
 
 
 def capacity(rng: random.Random, sid: str) -> dict:
@@ -274,7 +274,7 @@ def capacity(rng: random.Random, sid: str) -> dict:
     ]
     raw = {"R-LAB": f"Lab 1 is closed for maintenance in week {week}.",
            "R-EXAM": f"Lab 2 is reserved for lab exams on {', '.join(blocked)} of week {week}."}
-    return dict(inst=inst, planted=planted, profiles=[], raw=raw, week=week)
+    return {"inst": inst, "planted": planted, "profiles": [], "raw": raw, "week": week}
 
 
 def tradeoff(rng: random.Random, sid: str) -> dict:
@@ -288,7 +288,7 @@ def tradeoff(rng: random.Random, sid: str) -> dict:
         for f in (1, 4)
     ]
     profiles = [Profile(owner="F-301"), Profile(owner="F-304")]
-    return dict(inst=inst, planted=planted, profiles=profiles, raw={})
+    return {"inst": inst, "planted": planted, "profiles": profiles, "raw": {}}
 
 
 def policy(rng: random.Random, sid: str) -> dict:
@@ -313,7 +313,7 @@ def policy(rng: random.Random, sid: str) -> dict:
         windows = [Window(days=[day, rng.choice(other)], slots=[0, 1, 2, 3, 5, 6, 7])]
     flexible = rng.random() < 0.7
     profiles = [Profile(owner=fa, windows=windows if flexible else [], reveal=True)]
-    return dict(inst=inst, planted=planted, profiles=profiles, raw=raw)
+    return {"inst": inst, "planted": planted, "profiles": profiles, "raw": raw}
 
 
 # ---------------------------------------------------------------------------

@@ -17,25 +17,25 @@ from .corpus import INJECTIONS
 from .parsing import DraftConstraint, ParseOutput, ParseResult, postprocess
 
 DAY_WORDS = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"}
-_DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.I)
-_RANGE = re.compile(r"\b(mon|tue|wed|thu|fri)\w*\s*(?:to|-|–|through|till|until)\s*(mon|tue|wed|thu|fri)\w*", re.I)
-_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|and)\s*(\d{1,2}))?", re.I)
-_TIME = re.compile(r"\b(\d{1,2})(?::\d\d)?\s*(am|pm)\b", re.I)
+_DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.IGNORECASE)
+_RANGE = re.compile(r"\b(mon|tue|wed|thu|fri)\w*\s*(?:to|-|–|through|till|until)\s*(mon|tue|wed|thu|fri)\w*", re.IGNORECASE)
+_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|and)\s*(\d{1,2}))?", re.IGNORECASE)
+_TIME = re.compile(r"\b(\d{1,2})(?::\d\d)?\s*(am|pm)\b", re.IGNORECASE)
 _INJECTION = re.compile(r"(?im)^.*(ignore (all |previous )|system:|admin mode|assistant[,:]|approve all|"
                         r"publish (it |immediately|now)|override|</message>).*$")
 UNAVAILABLE = re.compile(r"\b(conference|away|leave|unavailable|can't|cannot|can not|won't be|not be available|"
-                         r"appointment|duty|out of station|travelling|traveling|not available)\b", re.I)
-WISH = re.compile(r"\b(prefer|rather|if possible|would like|avoid|try to|keep .* free|where possible)\b", re.I)
-ONLY = re.compile(r"\b(only|limit(ed)? to|restrict|keep my (lectures|classes|teaching) to|all my teaching on)\b", re.I)
-AVOID = re.compile(r"\b(no classes|not teach|avoid|free|nothing before|don't schedule|do not schedule|rather not)\b", re.I)
+                         r"appointment|duty|out of station|travelling|traveling|not available)\b", re.IGNORECASE)
+WISH = re.compile(r"\b(prefer|rather|if possible|would like|avoid|try to|keep .* free|where possible)\b", re.IGNORECASE)
+ONLY = re.compile(r"\b(only|limit(ed)? to|restrict|keep my (lectures|classes|teaching) to|all my teaching on)\b", re.IGNORECASE)
+AVOID = re.compile(r"\b(no classes|not teach|avoid|free|nothing before|don't schedule|do not schedule|rather not)\b", re.IGNORECASE)
 QUESTION = re.compile(r"\b(rule|allowed|permitted|permissible|policy|who (has|needs) to approve|how many|"
-                      r"can classes|is it ok)\b", re.I)
-OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.I)
-VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.I)
+                      r"can classes|is it ok)\b", re.IGNORECASE)
+OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.IGNORECASE)
+VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.IGNORECASE)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
 SWAP = re.compile(r"\b(swap|swapp\w*|exchange|trade|switch)\b|"
-                  r"\btake my\b.*\b(and )?I (take|teach|cover) (their|his|her)\b", re.I)
-_TITLE_WORD = re.compile(r"^(dr|prof|professor|mr|ms|mrs)\.?$", re.I)
+                  r"\btake my\b.*\b(and )?I (take|teach|cover) (their|his|her)\b", re.IGNORECASE)
+_TITLE_WORD = re.compile(r"^(dr|prof|professor|mr|ms|mrs)\.?$", re.IGNORECASE)
 
 
 def surname(name: str) -> str:
@@ -79,7 +79,7 @@ class RuleParser:
         low = text.lower()
         spd = self.instance.calendar.slots_per_day
         if m := re.search(r"before\s+(\d{1,2})(?::\d\d)?\s*(am|pm)", low):
-            return list(range(0, max(1, _slot(int(m[1]), m[2]))))
+            return list(range(max(1, _slot(int(m[1]), m[2]))))
         if m := re.search(r"after\s+(\d{1,2})(?::\d\d)?\s*(am|pm)", low):
             return list(range(min(spd - 1, _slot(int(m[1]), m[2])), spd))
         if re.search(r"after lunch|afternoon", low):

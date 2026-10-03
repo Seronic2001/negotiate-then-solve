@@ -26,7 +26,13 @@ from agents.explainer import describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
 from agents.negotiation import Negotiator, Outcome, Responder
 from agents.policy import PolicyAgent, PolicyDecision, Verdict
-from agents.swap import RuleSwapReader, SwapPlan, consent_message, looks_like_swap, swap_constraints
+from agents.swap import (
+    RuleSwapReader,
+    SwapPlan,
+    consent_message,
+    looks_like_swap,
+    swap_constraints,
+)
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import Instance
 from core.schemas import Constraint, Request, RequestStatus, Role, TimetableVersion

@@ -41,7 +41,7 @@ def test_mock_auth(client):
 
 
 def test_request_to_publication(client):
-    c, world = client
+    c, _world = client
     rid = c.post("/api/requests", json={"text": "I'm at a conference in week 7, Tuesday and Wednesday."},
                  headers=as_("F-104")).json()["id"]
     d = wait_for(c, rid, {"awaiting_approval"})

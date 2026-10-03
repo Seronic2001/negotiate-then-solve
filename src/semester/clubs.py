@@ -180,7 +180,7 @@ class ClubDesk:
         out: list[dict] = []
         on = datetime.strptime(req.date, "%Y-%m-%d").date()
         length = max(30, minutes(req.end) - minutes(req.start))
-        for shift in range(0, 8):
+        for shift in range(8):
             d = on + timedelta(days=shift)
             if (d - today).days < self.notice_days:
                 continue

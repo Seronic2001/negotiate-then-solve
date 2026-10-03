@@ -161,7 +161,7 @@ class SemesterPlanner:
             self.state.versions.append(v)
             self.save()
             self.job.update(running=False, version=v.version)
-        except Exception as e:  # surfaced in the UI
+        except Exception as e:  # noqa: BLE001 - surfaced in the UI
             self.job.update(running=False, error=f"{type(e).__name__}: {e}")
 
     def status(self) -> dict:

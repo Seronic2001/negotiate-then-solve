@@ -54,7 +54,7 @@ def test_priority_prefers_verified_and_rewards_past_concessions():
 
 
 def test_claim_checker_rejects_facts_not_cited():
-    inst, cons = uc3_lab_contention()
+    inst, _cons = uc3_lab_contention()
     check = ClaimChecker(inst)
     fact = Fact("C-KHAN-TIME", "Dr. Khan needs the ML practical (ML-P) on Tuesday from 2 pm to 5 pm.")
     assert check.supported("Dr. Khan needs Tuesday afternoon from 2 pm.", [fact])
@@ -107,7 +107,7 @@ def _negotiate(profiles, ledger=None):
 
 def test_uc3_agreement_is_valid_and_recorded():
     past = ConcessionLedger([ConcessionEntry(stakeholder="F-202", constraint_id="old", semester="2025-2")])
-    inst, cons, out = _negotiate([Profile(owner="F-201", windows=[Window(days=["Thu"], slots=[5, 6, 7])]),
+    inst, _cons, out = _negotiate([Profile(owner="F-201", windows=[Window(days=["Thu"], slots=[5, 6, 7])]),
                                   Profile(owner="F-202")], past)
     assert out.status == "agreed" and out.rounds == 1
     assert out.messages[0].to == "F-201"  # Dr. Das conceded last semester, so Dr. Khan is asked first
@@ -175,7 +175,7 @@ def test_oracle_uses_hidden_flexibility():
 
 
 def test_concessions_are_weighted_by_importance_and_magnitude():
-    inst, cons = uc3_lab_contention()
+    _inst, cons = uc3_lab_contention()
     by_id = {c.id: c for c in cons}
     pref = by_id["C-KHAN-TIME"].model_copy(update={"tier": Tier.PREFERENCE, "justification": Justification.NONE})
     verified = by_id["C-KHAN-TIME"].model_copy(update={"tier": Tier.VERIFIED_UNAVAILABILITY,
@@ -234,7 +234,7 @@ def _profile():
 
 
 def test_families_reshape_hidden_flexibility():
-    kw = dict(stated_slots=[5, 6, 7], all_slots=list(range(8)), conceded_recently=False)
+    kw = {"stated_slots": [5, 6, 7], "all_slots": list(range(8)), "conceded_recently": False}
     strict = apply_family(_profile(), "strict", **kw)
     assert [w.days for w in strict.windows] == [["Wed"]] and not strict.reveal
     flexible = apply_family(_profile(), "flexible", **kw)

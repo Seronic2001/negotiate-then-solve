@@ -469,8 +469,8 @@ def rule_lunch(ctx: _Ctx) -> CorpusExample | None:
     s = ctx.rng.choice(ctx.sessions_of(fac.id))
     day = ctx.days(1)[0]
     text = ctx.pick([
-        f"Could you schedule my {ctx.instance.course_title(s.course)} lecture at {hour(ctx.cal.lunch_slot)} "
-        f"on {FULL_DAY[day]}? It's the only time that works for me.",
+        (f"Could you schedule my {ctx.instance.course_title(s.course)} lecture at {hour(ctx.cal.lunch_slot)} "
+        f"on {FULL_DAY[day]}? It's the only time that works for me."),
         f"Please move one of my classes into the {hour(ctx.cal.lunch_slot)} lunch slot on {FULL_DAY[day]}s.",
     ])
     return _faculty_request(ctx, text, fac, rid, variant=Variant.RULE_BREAKING,
@@ -500,8 +500,8 @@ def unauthorised_student(ctx: _Ctx) -> CorpusExample | None:
     fac, group = inst.faculty_by_id[s.faculty], inst.group_by_id[s.groups[0]]
     day = ctx.days(1)[0]
     text = ctx.pick([
-        f"Please move {fac.name}'s {inst.course_title(s.course)} class on {FULL_DAY[day]} to the afternoon, "
-        "it clashes with our club meeting.",
+        (f"Please move {fac.name}'s {inst.course_title(s.course)} class on {FULL_DAY[day]} to the afternoon, "
+        "it clashes with our club meeting."),
         f"Can you cancel {fac.name}'s {FULL_DAY[day]} lecture this week? Most of us have a quiz.",
     ])
     return ctx.make(rid=rid, sender=f"ST-{group.id}", role=Role.STUDENT, text=text, variant=Variant.UNAUTHORISED,
@@ -616,9 +616,9 @@ def extra_denials(instance: Instance, n: int, seed: int, exclude: Iterable[Corpu
         t = ctx.constraint(rid, 1, type=ConstraintType.PREFER, hard=hard, owner=fac.id,
                            tier=Tier.OPERATIONAL if hard else Tier.PREFERENCE,  # as parsing.assign_tier
                            scope=scope, when=When(days=[day], slots=slots))
-        labels = (dict(variant=Variant.CLEAN, expected_action=ExpectedAction.COMPILE) if legal else
-                  dict(variant=Variant.RULE_BREAKING, expected_action=ExpectedAction.DENY, violates_rule=rule,
-                       rules=[rule]))
+        labels = ({"variant": Variant.CLEAN, "expected_action": ExpectedAction.COMPILE} if legal else
+                  {"variant": Variant.RULE_BREAKING, "expected_action": ExpectedAction.DENY, "violates_rule": rule,
+                       "rules": [rule]})
         ex = _faculty_request(ctx, text, fac, rid, request_type=RequestType.PREFERENCE, authorised=True,
                               targets=[t], **labels)
         if ex is None:
@@ -942,8 +942,8 @@ def tag_slices(examples: list[CorpusExample]) -> None:
         ex.slices = tags
 
 
-_DRESS_OPEN = re.compile(r"^(hi|hello|dear timetable office),\s*", re.I)
-_DRESS_CLOSE = re.compile(r"\s*(thanks\.|thank you!)?\s*(regards,[\s\S]*)?$", re.I)
+_DRESS_OPEN = re.compile(r"^(hi|hello|dear timetable office),\s*", re.IGNORECASE)
+_DRESS_CLOSE = re.compile(r"\s*(thanks\.|thank you!)?\s*(regards,[\s\S]*)?$", re.IGNORECASE)
 MULTI_BUILDERS: tuple[Builder, ...] = (pref_no_early, pref_days, pref_free_afternoon, unav_conference,
                                        unav_appointment, unav_recurring, room_equipment)
 
