@@ -30,7 +30,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from .llm import LLMError, Usage
+from .llm import InvalidOutput, LLMError, Usage
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -149,7 +149,7 @@ class LocalClient:
             result = schema.model_validate_json(text)
         except ValidationError as e:  # the grammar guarantees valid JSON unless output was cut off
             finish = resp["choices"][0].get("finish_reason")
-            raise LLMError(f"invalid {schema.__name__} (finish_reason={finish}, {len(text)} chars)") from e
+            raise InvalidOutput(f"invalid {schema.__name__} (finish_reason={finish}, {len(text)} chars)") from e
         usage = resp.get("usage") or {}
         with self._lock:
             self.usage.calls += 1
