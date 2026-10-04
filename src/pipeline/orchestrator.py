@@ -35,9 +35,10 @@ from agents.swap import (
 )
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import Instance
-from core.schemas import Constraint, Request, RequestStatus, Role, Tier, TimetableVersion
+from core.schemas import Constraint, ConstraintType, Request, RequestStatus, Role, Tier, TimetableVersion
+from core.semantics import PLACEMENT_TYPES, room_compatible, sessions_in_scope, violates
 from core.solver import TimetableSolver
-from core.validator import validate_constraint
+from core.validator import validate_constraint, verify_timetable
 from language.corpus import ExpectedAction, RequestType
 from language.parsing import ParseResult
 from language.rule_parser import RuleParser
@@ -75,6 +76,26 @@ class Case:
     @property
     def status(self) -> RequestStatus:
         return self.request.status
+
+
+def closures(instance: Instance, constraints: Iterable[Constraint], week: int | None) -> tuple[set[str], list[str]]:
+    """Classes a room closure leaves nowhere to go in ``week``, and the closed rooms. A lab in-charge
+    reporting "Lab 3 is closed in week 9" states a fact, not a request anyone can turn down: when every
+    room a class can use is closed for that whole week, the class is cancelled for the week (a make-up is
+    owed) rather than left in a closed room or the closure escalated."""
+    if week is None:
+        return set(), []
+    closed = {c.scope.room for c in constraints
+              if c.hard and c.type == ConstraintType.UNAVAILABLE and c.scope.room and c.active_in(week)
+              and (c.when.weeks is None or week in c.when.weeks) and not c.when.days and not c.when.slots}
+    if not closed:
+        return set(), []
+    out = set()
+    for s in instance.sessions:
+        rooms = [r.id for r in instance.rooms if room_compatible(instance, s, r)]
+        if rooms and set(rooms) <= closed:
+            out.add(s.id)
+    return out, sorted(instance.room_by_id[r].name for r in closed)
 
 
 class Orchestrator:
@@ -136,10 +157,11 @@ class Orchestrator:
         r = case.request
         if self.system_one is not None:
             d = self.system_one.decide(r)
-            fast = d.fast_path(self.tau) and self.fast_parser is not None
-            case.routing = {"request_type": d.request_type.value, "type_p": round(d.type_p, 4),
-                            "action": d.action.value, "action_p": round(d.action_p, 4),
-                            "tau": self.tau, "fast_path": fast, "latency_ms": round(d.latency_ms, 2)}
+            # plain Python values: numpy scalars from System One cannot be sent as JSON
+            fast = bool(d.fast_path(self.tau)) and self.fast_parser is not None
+            case.routing = {"request_type": d.request_type.value, "type_p": round(float(d.type_p), 4),
+                            "action": d.action.value, "action_p": round(float(d.action_p), 4),
+                            "tau": float(self.tau), "fast_path": fast, "latency_ms": round(float(d.latency_ms), 2)}
             if fast:
                 case.route = "fast"
                 return self.fast_parser.parse(r)
@@ -316,6 +338,17 @@ class Orchestrator:
         neg.ledger = ledger
         neg.priority.ledger = ledger
         neg.priority.baseline = dict(baseline or {})
+        cancelled, closed = closures(self.instance, self.store.constraints(), week)
+        neg.skip = frozenset(cancelled)
+        if base is not None and set(cancelled) == set(base.cancelled) and self._already_met(case, base, week):
+            # checked directly, not by the solver: a solve cut short by its time limit could move
+            # classes nobody asked to move
+            case.reply = ("Your request already fits the timetable, so nothing needed to move. "
+                          "It is recorded, and later changes will keep to it.")
+            self._advance(case, S.SOLVED, feasible=True, already_met=True)
+            self._advance(case, S.FAIRNESS_AUDITED)
+            self._advance(case, S.PUBLISHED, version=None, moved=[])
+            return case
 
         def on_event(kind: str, data: dict) -> None:
             if kind == "message" and case.status == S.COMPILED:
@@ -350,11 +383,25 @@ class Orchestrator:
         case.fairness = self._audit(outcome)
         self._advance(case, S.FAIRNESS_AUDITED, **case.fairness)
 
-        case.proposal = self.store.propose_version(outcome.result.assignment, case.id, week=week)
         moved = moved_sessions(baseline or {}, outcome.result.assignment)
+        if not moved and not cancelled and not outcome.notices.get(case.request.sender_id):
+            # the timetable already meets it: nothing to approve or publish, but it stays in force
+            case.reply = ("Your request already fits the timetable, so nothing needed to move. "
+                          "It is recorded, and later changes will keep to it.")
+            self._advance(case, S.PUBLISHED, version=None, moved=[])
+            return case
+        case.proposal = self.store.propose_version(outcome.result.assignment, case.id, week=week,
+                                                   cancelled=sorted(cancelled))
         case.reply = ("Your request can be met. The change is waiting for the coordinator's approval."
                       if not outcome.notices.get(case.request.sender_id) else
                       " ".join(outcome.notices[case.request.sender_id]))
+        if cancelled:
+            others = len(set(moved) - cancelled)
+            case.reply = (f"Recorded: {' and '.join(closed)} closed in week {week}. "
+                          f"{len(cancelled)} {'class has' if len(cancelled) == 1 else 'classes have'} no other room "
+                          "that week and will be cancelled, with a make-up owed"
+                          + (f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else "")
+                          + ". Their teachers and sections are told once the timetable office approves the change.")
         self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=moved)
         return case
 
@@ -442,13 +489,82 @@ class Orchestrator:
         if case.status != S.AWAITING_APPROVAL or case.proposal is None:
             raise ValueError(f"case {case_id} is not awaiting approval ({case.status.value})")
         before = self.store.current_version(case.proposal.week) or self.store.current_version()
+        if before is not None and case.proposal.parent != before.version:
+            case.proposal = self._rebase(case, before)
         v = self.store.publish_version(case.proposal.version, approver)
         moved = moved_sessions(before.assignment if before else {}, v.assignment)
         g = build_graph(self.instance)
         add_change(g, f"V{v.version}", moved)
         case.notices = self._notices(g, f"V{v.version}", moved, v)
+        for person, text in self._cancel_notices(v).items():
+            case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
         self._advance(case, S.PUBLISHED, version=v.version, approver=approver, notified=sorted(case.notices))
+        if v.week is None:
+            self.carry_into_weeks(v, approver)
         return v
+
+    def carry_into_weeks(self, v: TimetableVersion, approver: str) -> list[TimetableVersion]:
+        """A week with its own repair (an absence in week 7) shows that repair, not the semester
+        timetable; a semester change published later must reach it too. Each such week is solved
+        again on top of ``v`` with that week's constraints, and published with ``v``'s approval."""
+        out = []
+        weeks = sorted({x["week"] for x in self.store.versions() if x["published"] and x["week"] is not None})
+        for week in weeks:
+            cancelled, _ = closures(self.instance, self.store.constraints(), week)
+            result = TimetableSolver(self.instance, self.store.constraints(), week=week, baseline=v.assignment,
+                                     time_limit=30, skip=cancelled).solve()
+            if not result.ok:
+                self.store.log(None, "carry_failed", version=v.version, week=week, status=result.status)
+                continue
+            w = self.store.propose_version(result.assignment, case_id=f"carry-{v.version}", week=week,
+                                           cancelled=sorted(cancelled))
+            out.append(self.store.publish_version(w.version, approver))
+            self.store.log(None, "carried", version=v.version, week=week, into=w.version)
+        return out
+
+    def _rebase(self, case: Case, base: TimetableVersion) -> TimetableVersion:
+        """Another change was published after this proposal was made. Publishing the proposal as it is
+        would put back the timetable it was built on and undo that change, so solve it again from the
+        live version, with every constraint in force (this request's included)."""
+        week = case.proposal.week
+        cancelled, _ = closures(self.instance, self.store.constraints(), week)
+        result = TimetableSolver(self.instance, self.store.constraints(), week=week, baseline=base.assignment,
+                                 time_limit=30, skip=cancelled).solve()
+        if not result.ok:
+            raise ValueError("the timetable has changed since this proposal and it no longer fits; "
+                             "reject it and ask the requester to send it again")
+        v = self.store.propose_version(result.assignment, case.id, week=week, cancelled=sorted(cancelled))
+        self.store.log(case.id, "rebased", stale=case.proposal.version, on=base.version, version=v.version)
+        return v
+
+    def _already_met(self, case: Case, base: TimetableVersion, week: int | None) -> bool:
+        """The live timetable keeps every hard rule in force and this request's own wishes too."""
+        if verify_timetable(self.instance, base.assignment, self.store.constraints(), week):
+            return False
+        for c in case.constraints:
+            if c.type not in PLACEMENT_TYPES:
+                return False  # not checked directly: let the solver decide
+            for s in sessions_in_scope(self.instance, c.scope):
+                p = base.assignment.get(s.id)
+                if p is not None and violates(self.instance, c, s, self.instance.day_index(p.day), p.slot,
+                                              self.instance.room_by_id[p.room]):
+                    return False
+        return True
+
+    def _cancel_notices(self, v: TimetableVersion) -> dict[str, str]:
+        """Teachers and sections whose class is not held in ``v``'s week, and why."""
+        if not v.cancelled:
+            return {}
+        _, closed = closures(self.instance, self.store.constraints(), v.week)
+        where = " and ".join(closed) or "its room"
+        out: dict[str, list[str]] = {}
+        for sid in v.cancelled:
+            s = self.instance.session_by_id[sid]
+            for person in [s.faculty, *(f"ST-{g}" for g in s.groups)]:
+                out.setdefault(person, []).append(session_name(self.instance, sid))
+        return {person: f"Week {v.week}: {', '.join(names)} {'is' if len(names) == 1 else 'are'} cancelled, "
+                        f"because {where} is closed and no other room has what it needs. A make-up class is owed."
+                for person, names in out.items()}
 
     def reject(self, case_id: str, approver: str, reason: str = "") -> None:
         if approver not in self.approvers:

@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { AlertTriangle, CheckCircle2, Download, FileUp, Hammer, Loader2, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { SemesterGrid } from "../components/SemesterGrid";
 import { Badge, Button, Card, CardHeader, Collapse, EmptyState, Label, PageHeader, Skeleton, Tabs, Toast } from "../components/ui";
 import { api, currentWorld } from "../lib/api";
@@ -760,6 +760,7 @@ function Changes({
         </div>
         <p className="mt-3 text-[12px] text-ink-3">Every session keeps its time unless it has to move; moving one costs more than any preference.</p>
       </Card>
+      <FromRequests />
       {proposal && tt && (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -815,5 +816,54 @@ function Changes({
         </>
       )}
     </div>
+  );
+}
+
+/** What requests changed in the weekly timetable, for reference beside the semester plan. */
+function FromRequests() {
+  const { data } = useApi(() => api.weeklyChanges(), [], 10000);
+  const where = (d: { day: string; time: string; room: string } | null) => (d ? `${d.day} ${d.time} · ${d.room}` : "");
+  return (
+    <Card>
+      <CardHeader
+        title="Changes made through requests"
+        subtitle="Published in the weekly timetable (This week). They do not change this semester plan, which runs on its own 85-minute grid; re-solve above if one should."
+      />
+      {!data ? (
+        <Skeleton className="m-5 h-16" />
+      ) : !data.length ? (
+        <p className="px-5 pb-5 text-[13px] text-ink-3">No request has changed the weekly timetable yet.</p>
+      ) : (
+        <ul className="divide-y divide-line/60">
+          {data.map((c) => (
+            <li key={c.case} className="px-5 py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <Link to={`/requests/${c.case}`} className="font-mono text-[12px] text-brand hover:underline">
+                  {c.case}
+                </Link>
+                <span className="text-[13px] font-medium">{c.sender_name}</span>
+                <Badge tone={c.week ? "info" : "muted"}>{c.week ? `week ${c.week}` : "every week"}</Badge>
+                {c.version ? <span className="text-[11.5px] text-ink-3">v{c.version}{c.decided_by ? ` · approved by ${c.decided_by}` : ""}</span> : <span className="text-[11.5px] text-ink-3">recorded · nothing had to move</span>}
+              </div>
+              <p className="mt-1 text-[13px] text-ink-2">“{c.text}”</p>
+              {(c.moved.length > 0 || c.cancelled.length > 0) && (
+                <ul className="mt-1.5 space-y-0.5 text-[12px]">
+                  {c.moved.map((d) => (
+                    <li key={d.session} className="text-ink-3">
+                      {d.session_name.replace(/^the /, "")}: <span className="line-through decoration-bad/50">{where(d.before)}</span> → <span className="text-ok">{where(d.after)}</span>
+                    </li>
+                  ))}
+                  {c.cancelled.map((d) => (
+                    <li key={d.session} className="text-bad">
+                      {d.session_name.replace(/^the /, "")}: cancelled ({where(d.before)}), make-up owed
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

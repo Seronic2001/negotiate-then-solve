@@ -23,13 +23,22 @@ export default function SemesterPreferences() {
   const cat = pub?.catalog ?? [];
   const teachers = [...new Set(cat.flatMap((c) => c.faculty))];
   const groups = pub?.cohorts.map((c) => c.name) ?? [];
+  // a teacher's examples are about themselves and their courses, a class rep's about their section
+  const mineCourses = cat.filter((c) => user && c.faculty.includes(user.name));
+  const mySection = student && user ? pub?.cohorts.find((c) => c.id === user.id.replace(/^ST-/, ""))?.name : undefined;
   const examples = student
-    ? [`${groups[0] ?? "Section 1"} students would like no classes after 4 pm on Friday`, `${groups[1] ?? groups[0] ?? "Section 2"} wants Tuesday afternoons free`]
-    : [
-        `${teachers[0] ?? "Dr. Menon"} prefers not to teach before 10 am`,
-        `${teachers[1] ?? teachers[0] ?? "Dr. Iyer"} is unavailable on Fridays`,
-        `${cat[0]?.code ?? "CS1.101"} should be in the morning`,
-      ];
+    ? [`${mySection ?? groups[0] ?? "Section 1"} students would like no classes after 4 pm on Friday`, `${mySection ?? groups[0] ?? "Section 1"} wants Tuesday afternoons free`]
+    : mineCourses.length && user
+      ? [
+          `${user.name} prefers not to teach before 10 am`,
+          `${user.name} is unavailable on Fridays`,
+          `${mineCourses[0].code} should be in the morning`,
+        ]
+      : [
+          `${teachers[0] ?? "Dr. Menon"} prefers not to teach before 10 am`,
+          `${teachers[1] ?? teachers[0] ?? "Dr. Iyer"} is unavailable on Fridays`,
+          `${cat[0]?.code ?? "CS1.101"} should be in the morning`,
+        ];
 
   const check = async (t: string) => {
     setText(t);

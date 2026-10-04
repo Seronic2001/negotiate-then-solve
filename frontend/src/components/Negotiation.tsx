@@ -1,6 +1,5 @@
 import clsx from "clsx";
 import { ArrowRight, BadgeCheck, Check, CircleSlash, Clock, MapPin, ShieldCheck } from "lucide-react";
-import { useState } from "react";
 import { pct } from "../lib/meta";
 import type { ConstraintView, DiffRow, MessageView, OfferView } from "../lib/types";
 import { Avatar, Badge, Mark, TierBadge } from "./ui";
@@ -29,66 +28,66 @@ export function ConstraintCard({ c, highlight, index = 0 }: { c: ConstraintView;
   );
 }
 
-/** A grounded explanation: each claim with the facts it cites. Hovering a
- * claim highlights its facts; unsupported claims are struck through. */
+const norm = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim();
+
+/** A grounded explanation: each sentence of the message with the facts it rests on. Where a sentence
+ * is its fact word for word (template messages) the fact is not repeated; where the model put it in
+ * its own words the fact is shown under it, to compare. Sentences with no fact behind them are struck
+ * through; facts the message did not use are listed at the end. */
 export function GroundedExplanation({ m }: { m: MessageView }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const active = hover !== null ? new Set(m.claims[hover]?.facts ?? []) : null;
   const supported = m.claims.filter((c) => c.supported).length;
+  const byId = Object.fromEntries(m.facts.map((f) => [f.id, f]));
+  const used = new Set(m.claims.flatMap((c) => c.facts));
+  const unused = m.facts.filter((f) => !used.has(f.id));
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <div>
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <p className="text-xs font-medium uppercase tracking-wider text-ink-3">Claims</p>
-          <Badge tone={m.faithfulness >= 0.999 ? "ok" : "warn"}>
-            <BadgeCheck size={12} /> {supported}/{m.claims.length} traced · {pct(m.faithfulness)}
-          </Badge>
-          <Badge tone="muted">{m.explanation_mode}</Badge>
-          {m.leaks.length > 0 && <Badge tone="bad">leak: {m.leaks.join(", ")}</Badge>}
-        </div>
-        <div className="space-y-1.5">
-          {m.claims.map((c, i) => (
-            <div
-              key={i}
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-              className={clsx(
-                "cursor-default rounded-md border px-3 py-2 text-[13px] leading-relaxed transition-colors",
-                hover === i ? "border-brand/40 bg-brand/[0.06]" : "border-transparent",
-                !c.supported && "text-ink-3 line-through decoration-bad/60",
-              )}
-            >
-              {c.text}
-              {c.facts.length > 0 && (
-                <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Badge tone={m.faithfulness >= 0.999 ? "ok" : "warn"}>
+          <BadgeCheck size={12} /> {supported} of {m.claims.length} sentences traced to a fact · {pct(m.faithfulness)}
+        </Badge>
+        <Badge tone="muted">{m.explanation_mode === "template" ? "written from a template" : m.explanation_mode}</Badge>
+        {m.leaks.length > 0 && <Badge tone="bad">leak: {m.leaks.join(", ")}</Badge>}
+      </div>
+      <ol className="space-y-1">
+        {m.claims.map((c, i) => {
+          const facts = c.facts.map((id) => byId[id]).filter(Boolean);
+          const reworded = facts.filter((f) => !norm(c.text).includes(norm(f.text)) && !norm(f.text).includes(norm(c.text)));
+          return (
+            <li key={i} className="flex gap-2.5 rounded-md px-2 py-1.5 text-[13px] leading-relaxed">
+              {c.supported ? <Check size={14} className="mt-1 shrink-0 text-ok" /> : <CircleSlash size={14} className="mt-1 shrink-0 text-bad" />}
+              <div className="min-w-0">
+                <p className={clsx(!c.supported && "text-ink-3 line-through decoration-bad/60")}>
+                  {c.text}
                   {c.facts.map((f) => (
-                    <span key={f} className="rounded bg-panel-2 px-1 font-mono text-[10px] text-ink-3">
+                    <span key={f} className="ml-1.5 rounded bg-panel-2 px-1 align-middle font-mono text-[10px] text-ink-3">
                       {f}
                     </span>
                   ))}
-                </span>
-              )}
-            </div>
-          ))}
+                </p>
+                {!c.supported && <p className="text-[12px] text-bad">No fact behind this sentence.</p>}
+                {reworded.map((f) => (
+                  <p key={f.id} className="mt-0.5 border-l-2 border-line pl-2 text-[12px] text-ink-3">
+                    fact: {f.text}
+                  </p>
+                ))}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {unused.length > 0 && (
+        <div className="mt-3 border-t border-line pt-2">
+          <p className="mb-1 text-[11.5px] uppercase tracking-wider text-ink-3">Available but not used in the message</p>
+          <ul className="space-y-0.5">
+            {unused.map((f) => (
+              <li key={f.id} className="text-[12px] text-ink-3">
+                <span className="mr-1.5 font-mono text-[10.5px]">{f.id}</span>
+                {f.text}
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-      <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-3">Facts the explainer may use</p>
-        <div className="space-y-1.5">
-          {m.facts.map((f) => (
-            <div
-              key={f.id}
-              className={clsx(
-                "rounded-md border px-3 py-2 text-[12.5px] transition-opacity",
-                active?.has(f.id) ? "border-brand/50 bg-brand/[0.06]" : active ? "border-line opacity-40" : "border-line",
-              )}
-            >
-              <span className="mr-1.5 font-mono text-[10.5px] text-ink-3">{f.id}</span>
-              {f.text}
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -223,7 +222,9 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
               <td className="py-2.5 pr-3 text-ink-3">
                 <ArrowRight size={14} />
               </td>
-              <td className="py-2.5 font-medium text-ok">{r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : "—"}</td>
+              <td className={clsx("py-2.5 font-medium", r.after || !r.before ? "text-ok" : "text-bad")}>
+                {r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : r.before ? "Cancelled this week (make-up owed)" : "—"}
+              </td>
             </tr>
           ))}
         </tbody>

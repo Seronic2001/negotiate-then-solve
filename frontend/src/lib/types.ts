@@ -264,6 +264,34 @@ export interface Timetable {
   parent: number | null;
   entries: TimetableEntry[];
   changed: string[];
+  weeks: number[]; // weeks with their own changes
+  cancelled: { session: string; session_name: string; faculty_name: string; groups: string[] }[]; // not held this week
+}
+
+export interface WeeklyChange {
+  case: string;
+  sender_name: string;
+  text: string;
+  received_at: string;
+  version: number | null; // null: recorded, nothing had to move
+  week: number | null; // null: every week
+  moved: DiffRow[];
+  cancelled: DiffRow[];
+  decided_by: string | null;
+}
+
+export interface CalendarView {
+  days: string[];
+  day_names: Record<string, string>;
+  current_week: number;
+  weeks: {
+    week: number;
+    monday: string;
+    own_changes: boolean;
+    class_days: string[];
+    cancelled_days: string[];
+    classes: { day: string; slot: number; time: string; room: string; session: string; title: string; kind: string; cancelled: boolean }[];
+  }[];
 }
 
 export interface VersionRow {
@@ -275,6 +303,7 @@ export interface VersionRow {
   case: string | null;
   created_at: string;
   week: number | null;
+  carried: { version: number; week: number }[]; // the same change applied to weeks with their own repair
 }
 
 export interface InstanceView {

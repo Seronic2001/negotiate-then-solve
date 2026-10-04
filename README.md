@@ -612,8 +612,12 @@ sessions) and replays a short history at start-up through it: a conference
 absence, preferences, a lab contention that is negotiated, a student's
 injection attempt (refused), a lunch-slot request (denied with a citation), a
 vague request (clarification), a policy question (answered) and a lab outage
-that only Tier 0-2 changes could fix (escalated). Requests run in background
-threads and the UI follows them through the event log.
+(Lab 3, the only electronics lab, closed in week 9). A room closure is a fact,
+not a request: classes that have no other suitable room that week are
+cancelled for the week (a make-up is owed), the rest are repaired, and on
+approval each affected teacher and section is told
+(`pipeline.orchestrator.closures`). Requests run in background threads and the
+UI follows them through the event log.
 
 - **Test data (`--test-data N`, or `NTS_TEST_DATA=N`).** Loads the benchmark
   department (`data/synthetic-cse-s0.json`: 30 faculty, 202 sessions) instead of

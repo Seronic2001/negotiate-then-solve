@@ -108,8 +108,10 @@ class _Model:
         soft: list[Constraint],
         baseline: Mapping[str, Placement] | None,
         disruption_weight: int,
+        skip: frozenset[str] = frozenset(),
     ) -> None:
         self.instance = instance
+        self.skip = skip  # sessions not held this week (cancelled): they get no placement
         self.model = cp_model.CpModel()
         self.x: dict[str, dict[Key, cp_model.IntVar]] = {}
         self._fac_cov: dict[tuple[str, int, int], list[cp_model.IntVar]] = defaultdict(list)
@@ -139,6 +141,8 @@ class _Model:
         n_days, spd = len(inst.calendar.days), inst.calendar.slots_per_day
         room_cov: dict[tuple[str, int, int], list[cp_model.IntVar]] = defaultdict(list)
         for s in inst.sessions:
+            if s.id in self.skip:
+                continue
             cands: dict[Key, cp_model.IntVar] = {}
             rooms = [r for r in inst.rooms if room_compatible(inst, s, r)]
             for d in range(n_days):
@@ -166,7 +170,7 @@ class _Model:
         return [
             v
             for s in sessions_in_scope(inst, c.scope)
-            for (d, p, r), v in self.x[s.id].items()
+            for (d, p, r), v in self.x.get(s.id, {}).items()
             if violates(inst, c, s, d, p, inst.room_by_id[r])
         ]
 
@@ -216,6 +220,7 @@ class TimetableSolver:
         seed: int = 0,
         disruption_weight: int = 1,
         presolve: bool = True,
+        skip: Iterable[str] = (),
     ) -> None:
         active = [c for c in constraints if c.active_in(week)]
         ids = [c.id for c in active]
@@ -233,6 +238,7 @@ class TimetableSolver:
         # CP-SAT presolve dominates on department-size models (about 2 of 3 s
         # per feasibility check); interactive use turns it off.
         self.presolve = presolve
+        self.skip = frozenset(skip)  # sessions cancelled this week (pipeline.orchestrator.closures)
         self._feas: _Model | None = None
 
     # -- building and running -------------------------------------------------
@@ -240,7 +246,7 @@ class TimetableSolver:
     def build(self) -> _Model:
         hard = [c for c in self.constraints.values() if c.hard]
         soft = [c for c in self.constraints.values() if not c.hard]
-        return _Model(self.instance, hard, soft, self.baseline, self.disruption_weight)
+        return _Model(self.instance, hard, soft, self.baseline, self.disruption_weight, self.skip)
 
     def run(self, m: _Model) -> tuple[str, cp_model.CpSolver | _Replay]:
         path = None

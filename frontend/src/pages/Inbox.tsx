@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Check, Clock3, Inbox as InboxIcon, MessageSquareDashed, Undo2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ClarifyForm } from "../components/Clarify";
 import { GroundedExplanation, OfferCard } from "../components/Negotiation";
 import { Avatar, Button, Card, CardHeader, Collapse, EmptyState, LiveDot, PageHeader, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
@@ -17,6 +18,8 @@ import { RatingForm } from "../components/Rating";
 export default function Inbox() {
   const { user } = useAuth();
   const { data, refresh } = useApi(() => api.inbox(), [], 2000);
+  const { data: mineCases, refresh: refreshMine } = useApi(() => api.cases("mine"), [], 4000);
+  const questions = (mineCases ?? []).filter((c) => c.status === "clarification_requested");
   const { data: inst } = useApi(() => api.instance(), []);
   const { data: auto, refresh: refreshAuto } = useApi(() => api.autopilot(), []);
   const [sel, setSel] = useState<string | null>(null);
@@ -54,6 +57,19 @@ export default function Inbox() {
           )
         }
       />
+      {questions.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader title="Questions about your requests" subtitle="The timetable office needs more detail before it can act on these." />
+          <div className="space-y-4 px-5 pb-5">
+            {questions.map((q) => (
+              <div key={q.id}>
+                <p className="text-[13px] text-ink-2">“{q.text}” <span className="text-ink-3">· {ago(q.received_at)}</span></p>
+                <QuestionFor id={q.id} onSent={() => void refreshMine().then(() => setToast("Answer sent; your request is being looked at again."))} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <div className="border-b border-line p-3">
@@ -427,4 +443,11 @@ function RateMessage({ item }: { item: InboxItem }) {
       </div>
     </Card>
   );
+}
+
+/** The question a request of yours was sent back with, and the box to answer it. */
+function QuestionFor({ id, onSent }: { id: string; onSent: () => void }) {
+  const { data: c } = useApi(() => api.case(id), [id]);
+  if (!c) return null;
+  return <ClarifyForm caseId={c.id} sender={c.sender} question={c.reply || "Could you give more detail?"} onSent={onSent} />;
 }

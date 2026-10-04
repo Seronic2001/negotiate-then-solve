@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Lifecycle } from "../components/Lifecycle";
 import { MyClasses } from "../components/MyClasses";
+import { WeekCalendar } from "../components/WeekCalendar";
 import { Button, Card, Kbd, Label, LiveDot, PageHeader, StatusBadge } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -64,7 +65,7 @@ export default function NewRequest() {
   const mention = (phrase: string) => (mentions(text, phrase) ? edit(removeMention(text, phrase)) : mentionInto(box.current, text, phrase, edit));
 
   return (
-    <div className="grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0">
         <PageHeader title="New request" subtitle="Write it the way you would write an email to the timetable office." />
 
@@ -101,6 +102,8 @@ export default function NewRequest() {
               </div>
               {error && <p className="mt-3 text-[13px] text-bad">{error}</p>}
             </Card>
+
+            <WeekCalendar text={text} onPick={(p) => mentionInto(box.current, text, p, edit)} onRemove={edit} />
 
             {examples.length > 0 && (
               <div className="mt-6">

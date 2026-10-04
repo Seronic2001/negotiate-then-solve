@@ -33,6 +33,12 @@ QUESTION = re.compile(r"\b(rule|allowed|permitted|permissible|policy|who (has|ne
 # "it has to be on Wednesday at 2 pm": where a class should be, not when the teacher is free
 PLACE = re.compile(r"\b(must|has to|have to|needs? to|should|would like (it|them) to|want (it|them) to)\s+be\s+(on|at|in)\b",
                    re.IGNORECASE)
+# "I want a 2 pm slot on Monday": a wish *for* a time; without it an unclassified time reads as one to avoid
+WANT = re.compile(r"\b(i want|i'd like|i would like|i need|give me|can i (have|get)|could i (have|get)|"
+                  r"(a|an) \S+ slot)\b", re.IGNORECASE)
+# an extra hour the weekly timetable has no session for: the coordinator arranges it
+EXTRA = re.compile(r"\b(extra|additional|revision|remedial|doubt.clearing)\s+(class|classes|lecture|lectures|session|sessions)\b",
+                   re.IGNORECASE)
 OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.IGNORECASE)
 VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.IGNORECASE)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
@@ -144,6 +150,9 @@ class RuleParser:
         if "?" in text and QUESTION.search(low) and not re.search(r"\b(could you|can you|please)\b", low):
             return ParseOutput(request_type="policy_question", action="answer")
 
+        if role != "student" and EXTRA.search(low) and not UNAVAILABLE.search(low):
+            return ParseOutput(request_type="preference", action="investigate")
+
         if role != "student" and SWAP.search(low) and self.mentioned(text, sender):
             # which two sessions is decided against the timetable (agents.swap), not here
             return ParseOutput(request_type="swap", action="compile")
@@ -178,7 +187,7 @@ class RuleParser:
                                               days=days, slots=slots, weeks=weeks))
             return self._compile("room_issue", drafts)
 
-        if VAGUE.search(low) or (UNAVAILABLE.search(low) and not days and not weeks):
+        if (VAGUE.search(low) and not days and not weeks) or (UNAVAILABLE.search(low) and not days and not weeks):
             missing = [m for m, v in (("days", days), ("weeks", weeks), ("slots", slots)) if v is None][:2]
             return self._clarify("unavailability" if UNAVAILABLE.search(low) else "preference", missing or ["days"],
                                  "Could you tell me which " + " and ".join(missing or ["days"]) + " you mean?")
@@ -204,7 +213,8 @@ class RuleParser:
                     slots=slots or self.morning)])
             target = ("session", sessions[0]) if sessions else (scope_kind, scope_id)
             return self._compile("preference", [DraftConstraint(
-                type="prefer", hard=True, scope_kind=target[0], scope_id=target[1], days=days, slots=slots)])
+                type="prefer", hard=True, scope_kind=target[0], scope_id=target[1], days=days, slots=slots,
+                weeks=weeks)])
 
         if days or slots:
             hard = not WISH.search(low) and bool(re.search(r"\b(must|need|has to|have to|cannot)\b", low))
@@ -212,12 +222,15 @@ class RuleParser:
                 sessions = self.sessions_named(text, scope_id)
                 target = ("session", sessions[0]) if sessions else (scope_kind, scope_id)
                 return self._compile("preference", [DraftConstraint(
-                    type="prefer", hard=hard, scope_kind=target[0], scope_id=target[1], days=days, slots=slots)])
-            if ONLY.search(low) and days and not AVOID.search(low):
+                    type="prefer", hard=hard, scope_kind=target[0], scope_id=target[1], days=days, slots=slots,
+                    weeks=weeks)])
+            if (ONLY.search(low) or WANT.search(low)) and days and not AVOID.search(low):
                 return self._compile("preference", [DraftConstraint(
-                    type="prefer", hard=hard, scope_kind=scope_kind, scope_id=scope_id, days=days, slots=slots)])
+                    type="prefer", hard=hard, scope_kind=scope_kind, scope_id=scope_id, days=days, slots=slots,
+                    weeks=weeks)])
             return self._compile("preference", [DraftConstraint(
-                type="avoid", hard=hard, scope_kind=scope_kind, scope_id=scope_id, days=days, slots=slots)])
+                type="avoid", hard=hard, scope_kind=scope_kind, scope_id=scope_id, days=days, slots=slots,
+                weeks=weeks)])
 
         return self._clarify("preference", ["days", "slots"],
                              "Could you tell me which days and times you mean?")

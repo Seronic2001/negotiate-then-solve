@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { EventTimeline, Lifecycle } from "../components/Lifecycle";
 import { ConstraintCard, DiffTable, GroundedExplanation, MessageBubble } from "../components/Negotiation";
+import { ClarifyForm } from "../components/Clarify";
 import { decider, EscalationPanel } from "../components/Escalation";
 import { Avatar, Badge, Card, CardHeader, Collapse, EmptyState, Json, Label, Meter, Skeleton, StatusBadge, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
@@ -113,7 +114,14 @@ function Summary({ c }: { c: Detail }) {
       <Card>
         <CardHeader title={`Reply to ${c.sender_name}`} />
         <div className="p-5">
-          {c.reply ? <p className="text-[14.5px] leading-relaxed">{c.reply}</p> : <p className="text-[13.5px] text-ink-3">Still working on it…</p>}
+          {c.status === "clarification_requested" ? (
+            <ClarifyForm caseId={c.id} sender={c.sender} question={c.reply || "Could you give more detail?"} />
+          ) : null}
+          {c.status === "clarification_requested" && c.reply ? null : c.reply ? (
+            <p className="text-[14.5px] leading-relaxed">{c.reply}</p>
+          ) : (
+            <p className="text-[13.5px] text-ink-3">Still working on it…</p>
+          )}
           {Object.keys(c.notices).length > 0 && (
             <div className="mt-5">
               <Label>Also told (only people affected)</Label>
@@ -219,7 +227,7 @@ function Negotiation({ c }: { c: Detail }) {
         <Card>
           <CardHeader
             title="Why each sentence is true"
-            subtitle="Hover a claim to see the facts it cites. Claims whose days, numbers or names are not in those facts are struck out."
+            subtitle="Each sentence of the message and the solver fact it rests on. A sentence whose days, numbers or names are not in its facts is struck out."
             action={
               o.messages.length > 1 && (
                 <Tabs tabs={o.messages.map((_, i) => ({ id: String(i), label: `Round ${i + 1}` }))} value={String(msgIdx)} onChange={(v) => setMsgIdx(Number(v))} />

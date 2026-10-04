@@ -14,7 +14,8 @@ from agents.simulators import Simulator
 from core.schemas import Channel, Request, RequestStatus, Role
 from evaluation.benchmark import build
 from language.compiler import to_draft
-from language.parsing import ParseOutput, postprocess
+from core.validator import verify_timetable
+from language.parsing import DraftConstraint, ParseOutput, postprocess
 from pipeline.ingest import Directory, Intake, UnknownSender
 from pipeline.orchestrator import NotAuthorised, Orchestrator
 from pipeline.store import Store
@@ -167,3 +168,81 @@ def test_a_newer_request_replaces_the_owners_earlier_constraint(world):
     assert compiled["superseded"] and c.outcome.rounds == 0  # no negotiation with oneself
     active = {x.id for x in store.constraints()}
     assert not set(compiled["superseded"]) & active
+
+
+def _hard_in(store, week=None):
+    return [c for c in store.constraints() if c.hard and c.active_in(week)]
+
+
+def test_a_request_the_timetable_already_meets_needs_no_approval(world):
+    sc, orch, store, owners = world
+    who = owners["R-A"]
+    busy = {(p.day, p.slot) for s, p in store.current_version().assignment.items()
+            if next(x for x in sc.instance.sessions if x.id == s).faculty == who}
+    day, slot = next((d, t) for d in sc.instance.calendar.days for t in range(sc.instance.calendar.slots_per_day)
+                     if (d, t) not in busy)
+    orch.parser.outputs["FREE-HOUR"] = ParseOutput(request_type="preference", action="compile", constraints=[
+        DraftConstraint(type="avoid", hard=False, scope_kind="faculty", scope_id=who, days=[day], slots=[slot])])
+    versions = len(store.versions())
+    c = orch.submit(req("R-8", who, "FREE-HOUR"))
+    assert c.status == S.PUBLISHED and c.proposal is None and "nothing needed to move" in c.reply
+    assert len(store.versions()) == versions and not orch.pending()
+    assert any(x.source.request == "R-8" for x in store.constraints())  # still in force
+
+
+def test_approving_an_older_proposal_does_not_undo_a_newer_change(world):
+    """Two proposals wait; the newer is approved first. The older was built on the timetable before
+    it, so it is solved again on the live version instead of being published as it was."""
+    sc, orch, store, owners = world
+    a = orch.submit(req("R-1", owners["R-A"], "REQUEST-A"))
+    b = orch.submit(req("R-2", owners["R-B"], "REQUEST-B"))
+    assert a.status == b.status == S.AWAITING_APPROVAL and a.proposal.parent == b.proposal.parent
+    vb = orch.approve("R-2", "C-TT")
+    stale = a.proposal.version
+    va = orch.approve("R-1", "C-TT")
+    assert va.version != stale and va.parent == vb.version
+    assert any(e["kind"] == "rebased" for e in store.events("R-1"))
+    assert verify_timetable(sc.instance, va.assignment, _hard_in(store)) == []
+
+
+def test_a_semester_change_reaches_weeks_with_their_own_repair(world):
+    sc, orch, store, owners = world
+    who = owners["R-B"]
+    day = sc.instance.calendar.days[0]
+    orch.parser.outputs["AWAY-WEEK-7"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+        DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=who, days=[day], weeks=[7],
+                        justification="stated")])
+    w = orch.submit(req("R-3", who, "AWAY-WEEK-7"))
+    if w.status == S.AWAITING_APPROVAL:
+        orch.approve("R-3", "C-TT")
+    week7 = store.current_version(7)
+    assert week7 is not None
+
+    a = orch.submit(req("R-4", owners["R-A"], "REQUEST-A"))
+    va = orch.approve("R-4", "C-TT")
+    assert va.week is None
+    now7 = store.current_version(7)
+    assert now7.version > va.version > week7.version  # week 7 was solved again on top of the change
+    assert verify_timetable(sc.instance, now7.assignment, _hard_in(store, 7)) == []
+
+
+def test_a_room_closure_cancels_what_has_nowhere_else_to_go(world):
+    """A closure is a fact, not a request: classes whose every usable room is closed that week are
+    cancelled for the week (make-up owed) and their people told, instead of the closure escalating."""
+    from core.semantics import room_compatible
+
+    sc, orch, store, _ = world
+    inst = sc.instance
+    s0 = min(inst.sessions, key=lambda s: sum(room_compatible(inst, s, r) for r in inst.rooms))
+    shut = [r.id for r in inst.rooms if room_compatible(inst, s0, r)]  # every room this class can use
+    lost = [s.id for s in inst.sessions if {r.id for r in inst.rooms if room_compatible(inst, s, r)} <= set(shut)]
+    orch.parser.outputs["ROOM-SHUT"] = ParseOutput(request_type="room_issue", action="compile", constraints=[
+        DraftConstraint(type="unavailable", hard=True, scope_kind="room", scope_id=r, weeks=[9]) for r in shut])
+    c = orch.submit(req("R-9", "S-LAB", "ROOM-SHUT", role=Role.LAB_INCHARGE))
+    assert c.status == S.AWAITING_APPROVAL, c.reply
+    assert set(lost) <= set(c.proposal.cancelled) and "cancelled" in c.reply
+    v = orch.approve("R-9", "C-TT")
+    assert v.week == 9 and not set(v.cancelled) & set(v.assignment)
+    teacher = inst.session_by_id[lost[0]].faculty
+    assert "make-up" in c.notices[teacher]
+    assert all(p.room not in shut for p in v.assignment.values())

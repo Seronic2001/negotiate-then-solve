@@ -103,10 +103,11 @@ class Store:
     # -- timetable versions ----------------------------------------------------------
 
     def propose_version(self, assignment: dict[str, Placement], case_id: str,
-                        week: int | None = None) -> TimetableVersion:
+                        week: int | None = None, cancelled: list[str] | None = None) -> TimetableVersion:
         cur = self.current_version(week) or self.current_version()
         (n,) = self._exec("SELECT COALESCE(MAX(version), 0) FROM versions").fetchone()
-        v = TimetableVersion(version=n + 1, assignment=assignment, parent=cur.version if cur else None, week=week)
+        v = TimetableVersion(version=n + 1, assignment=assignment, parent=cur.version if cur else None, week=week,
+                             cancelled=sorted(cancelled or []))
         self._exec("INSERT INTO versions VALUES (?,?,?,?,?,?,?)",
                    (v.version, v.model_dump_json(), v.parent, None, 0, case_id, datetime.now().isoformat()))
         return v

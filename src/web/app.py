@@ -27,7 +27,7 @@ import os
 import re
 import threading
 from collections import Counter
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -533,6 +533,77 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                 "sessions": [{**s.model_dump(), "title": inst.course_title(s.course)} for s in inst.sessions],
                 "policy": inst.policy.model_dump()}
 
+    @app.post("/api/cases/{case_id}/clarify")
+    def clarify(case_id: str, body: RequestBody, u: dict = Depends(user)) -> dict:
+        """The sender's answer to the question their request was sent back with."""
+        try:
+            W().clarify(case_id, u["id"], body.text)
+        except KeyError:
+            raise HTTPException(404) from None
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        return {"id": case_id}
+
+    @app.get("/api/weekly-changes")
+    def weekly_changes(u: dict = Depends(view("history"))) -> list[dict]:
+        """Changes published through requests in the weekly timetable, newest first: shown beside the
+        semester plan, which they do not change (it has its own 85-minute grid)."""
+        w = W()
+        out = []
+        for c in w.orch.cases.values():
+            if c.status != RequestStatus.PUBLISHED:
+                continue
+            v = w.store.version(c.proposal.version) if c.proposal else None  # as published, with its approver
+            parent = w.store.version(v.parent) if v and v.parent else None
+            diff = _diff(w, parent.assignment, v.assignment) if v and parent else []
+            out.append({"case": c.id, "sender_name": w.name_of(c.request.sender_id), "text": plain(c.request.raw_text),
+                        "received_at": c.request.received_at.isoformat(), "version": v.version if v else None,
+                        "week": v.week if v else (c.constraints[0].when.weeks[0] if c.constraints and c.constraints[0].when.weeks else None),
+                        "moved": [d for d in diff if d["after"]], "cancelled": [d for d in diff if not d["after"]],
+                        "decided_by": w.name_of(v.approved_by) if v and v.approved_by else None})
+        out.sort(key=lambda x: (x["version"] or 0, x["received_at"]), reverse=True)
+        return out
+
+    @app.get("/api/calendar")
+    def calendar(u: dict = Depends(user)) -> dict:
+        """The semester's teaching weeks with their dates; for each, the days the signed-in person has
+        classes (a teacher's own, a class rep's section's) in that week's timetable, the days a class of
+        theirs is cancelled, and whether the week has changes of its own."""
+        w = W()
+        inst = w.instance
+        start = date.fromisoformat(w.semester.state.semester_start)
+        start -= timedelta(days=start.weekday())  # weeks run from Monday
+        n_weeks = inst.calendar.weeks
+        if u["id"].startswith("ST-"):
+            mine = {s.id for s in inst.sessions if u["id"][3:] in s.groups}
+        else:
+            mine = {s.id for s in inst.sessions if s.faculty == u["id"]}
+        semester = w.store.current_version()
+        rows = []
+        for n in range(1, n_weeks + 1):
+            own = w.store.current_version(n)
+            v = own or semester
+            placed = v.assignment if v else {}
+            cancelled = set(v.cancelled) & mine if v else set()
+            classes = [{"day": p.day, "slot": p.slot, "time": hour(p.slot), "room": p.room, "session": sid,
+                        "title": inst.course_title(inst.session_by_id[sid].course),
+                        "kind": inst.session_by_id[sid].kind.value, "cancelled": sid in cancelled}
+                       for sid in sorted(mine)
+                       if (p := placed.get(sid) or (semester.assignment.get(sid) if sid in cancelled and semester else None))]
+            classes.sort(key=lambda c: (inst.calendar.days.index(c["day"]), c["slot"]))
+            rows.append({"week": n, "monday": (start + timedelta(weeks=n - 1)).isoformat(), "classes": classes,
+                         "own_changes": own is not None,
+                         "class_days": sorted({placed[s].day for s in mine if s in placed},
+                                              key=inst.calendar.days.index),
+                         "cancelled_days": sorted({semester.assignment[s].day for s in cancelled
+                                                   if semester and s in semester.assignment},
+                                                  key=inst.calendar.days.index)})
+        today = (date.today() - start).days // 7 + 1
+        return {"days": inst.calendar.days, "day_names": {d: FULL_DAY[d] for d in inst.calendar.days},
+                "current_week": min(max(today, 1), n_weeks), "weeks": rows}
+
     @app.post("/api/requests")
     def submit(body: RequestBody, u: dict = Depends(user)) -> dict:
         w = W()
@@ -714,8 +785,17 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.get("/api/versions")
     def versions(u: dict = Depends(view("history"))) -> list[dict]:
         w = W()
-        return [{**v, "approved_by_name": w.name_of(v["approved_by"]) if v["approved_by"] else None}
-                for v in reversed(w.store.versions())]
+        rows = w.store.versions()
+        # a semester change carried into a week with its own repair ("carry-<version>") is part of that
+        # change, not a change of its own: it is listed under the version it came from
+        carried: dict[int, list[dict]] = {}
+        for v in rows:
+            if (v["case"] or "").startswith("carry-"):
+                carried.setdefault(int(v["case"].removeprefix("carry-")), []).append(
+                    {"version": v["version"], "week": v["week"]})
+        return [{**v, "approved_by_name": w.name_of(v["approved_by"]) if v["approved_by"] else None,
+                 "carried": carried.get(v["version"], [])}
+                for v in reversed(rows) if not (v["case"] or "").startswith("carry-")]
 
     @app.get("/api/timetable")
     def timetable(version: int | None = None, week: int | None = None, u: dict = Depends(user)) -> dict:
@@ -727,8 +807,14 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(404)
         parent = w.store.version(v.parent) if v.parent else None
         changed = {d["session"] for d in _diff(w, parent.assignment, v.assignment)} if parent else set()
+        # weeks with their own repair (an absence, a room closed): everyone can look at them
+        weeks = sorted({x["week"] for x in w.store.versions() if x["published"] and x["week"] is not None})
+        cancelled = [{"session": sid, "session_name": session_name(w.instance, sid),
+                      "faculty_name": w.name_of(w.instance.session_by_id[sid].faculty),
+                      "groups": w.instance.session_by_id[sid].groups} for sid in v.cancelled]
         return {"version": v.version, "week": v.week, "approved_by": v.approved_by, "parent": v.parent,
-                "entries": _timetable(w, v.assignment), "changed": sorted(changed)}
+                "entries": _timetable(w, v.assignment), "changed": sorted(changed), "weeks": weeks,
+                "cancelled": cancelled}
 
     @app.get("/api/versions/diff")
     def diff(a: int, b: int, u: dict = Depends(view("history"))) -> list[dict]:
@@ -740,8 +826,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.post("/api/versions/{version}/rollback")
     def rollback(version: int, u: dict = Depends(coordinator)) -> dict:
-        v = W().store.rollback(version, u["id"])
-        W().store.log(None, "rollback", to=version, version=v.version, approver=u["id"])
+        w = W()
+        v = w.store.rollback(version, u["id"])
+        w.store.log(None, "rollback", to=version, version=v.version, approver=u["id"])
+        if v.week is None:
+            w.orch.carry_into_weeks(v, u["id"])
         return {"version": v.version}
 
     # -- transparency -------------------------------------------------------------------------------
@@ -904,8 +993,12 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.post("/api/demo/reset")
     def reset(u: dict = Depends(coordinator)) -> dict:
-        """Start the current world again: a fresh weekly history (study answers are kept)."""
-        registry.reset(current_world.get())
+        """Put the current world back to its demo state, as it stood when the start-up history had
+        finished replaying; nothing is replayed (study answers are kept)."""
+        try:
+            registry.restore(current_world.get())
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
         return {"ok": True}
 
     # -- worlds ---------------------------------------------------------------------------------

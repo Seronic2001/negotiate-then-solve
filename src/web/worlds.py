@@ -121,6 +121,14 @@ class Registry:
             self._save()
         return self.entries[world_id]
 
+    def restore(self, world_id: str) -> None:
+        """Back to the demo state: the world as it stood when its start-up history had finished
+        replaying (``World.restore``), at once, without replaying it."""
+        e = self.entries.get(world_id) or self.entries[DEMO]
+        if e["status"] != "ready" or e["world"] is None:
+            raise ValueError(f"{e['name']} is still being built")
+        e["world"].restore()
+
     def reset(self, world_id: str) -> None:
         """A fresh weekly history: the demo world anew, or an offering world rebuilt from its document."""
         e = self.entries.get(world_id) or self.entries[DEMO]

@@ -3,6 +3,7 @@ where negotiation messages wait for people, the semester planner, and which view
 
 from __future__ import annotations
 
+import copy
 import os
 import random
 import threading
@@ -111,6 +112,8 @@ class InboxResponder:
 
     def respond(self, message: Message) -> Reply:
         w = self.world
+        if w.restoring:  # the world is going back to its demo state: nobody answers what is still running
+            return Reply(decision="no_reply")
         item = w.inbox.add(getattr(_local, "case", None), self.person, message)
         if w.autopilot.get(self.person):
             if not w.seeding:  # the pause is for someone watching; nobody watches the start-up history
@@ -201,11 +204,74 @@ class World:
         self.started = datetime.now(UTC)
         self.threads: dict[str, threading.Thread] = {}
         self.seeding = False
+        self.restoring = False
+        self.snapshot: dict | None = None  # the demo state: taken once the start-up history has replayed
         if seed_history:
             self.semester.bootstrap_demo()  # the semester timetable the club desk and preferences read
             self.seeding = True
             seed = self._seed_test if self.test_data else self._seed if instance is None else self._seed_department
             threading.Thread(target=seed, daemon=True).start()
+        threading.Thread(target=self._snapshot_when_ready, daemon=True).start()
+
+    # -- the demo state -------------------------------------------------------------------
+
+    def _snapshot_when_ready(self) -> None:
+        while self.seeding or self.semester.job.get("running"):
+            time.sleep(0.5)
+        self.snapshot = self._take_snapshot()
+
+    def _take_snapshot(self) -> dict:
+        """Everything a person can change: the store (requests, versions, ledger, events), the cases,
+        the inboxes, the simulated people, autopilot and the semester plan. Not the study."""
+        keep = {id(self.instance): self.instance}  # copied objects keep pointing at the one department
+        with self.store._lock:
+            db = self.store.db.serialize()
+        with self.inbox.lock:
+            inbox = [(i.id, i.case_id, i.to, i.message, i.created, i.reply, i.answered_by, i.answered_at)
+                     for i in self.inbox.items.values()]
+        return {"db": db, "cases": copy.deepcopy(self.orch.cases, keep), "inbox": copy.deepcopy(inbox, keep),
+                "people": copy.deepcopy((self.profiles, self.simulators), keep), "autopilot": dict(self.autopilot),
+                "semester": self.semester.state.model_dump_json()}
+
+    def restore(self) -> None:
+        """Back to the snapshot, at once. Requests still running are stopped first (their pending
+        messages go unanswered), so nothing they do lands in the restored state."""
+        if self.snapshot is None:
+            raise ValueError("the demo state is not ready yet: the start-up history is still replaying")
+        snap, keep = self.snapshot, {id(self.instance): self.instance}
+        self.restoring = True
+        try:
+            for item in list(self.inbox.items.values()):
+                if item.reply is None:
+                    try:
+                        self.inbox.answer(item.id, Reply(decision="no_reply"), "reset")
+                    except ValueError:
+                        pass
+            for t in list(self.threads.values()):
+                t.join(timeout=90)
+            with self.store._lock:
+                self.store.db.deserialize(snap["db"])
+            self.orch.cases = copy.deepcopy(snap["cases"], keep)  # a fresh copy, so it can be restored again
+            items: dict[str, InboxItem] = {}
+            for iid, case_id, to, message, created, reply, by, at in copy.deepcopy(snap["inbox"], keep):
+                item = InboxItem(0, case_id, to, message)
+                item.id, item.created, item.reply, item.answered_by, item.answered_at = iid, created, reply, by, at
+                if reply is not None:
+                    item.event.set()
+                items[iid] = item
+            with self.inbox.lock:
+                self.inbox.items = items
+            self.profiles, self.simulators = copy.deepcopy(snap["people"], keep)
+            self.autopilot = dict(snap["autopilot"])
+            self.threads = {}
+            from semester.service import SemesterState
+
+            with self.semester.lock:
+                self.semester.state = SemesterState.model_validate_json(snap["semester"])
+            self.semester._rooms_for(self.semester.state.doc)
+            self.semester.save()
+        finally:
+            self.restoring = False
 
     def reload_policies(self) -> None:
         """Re-read the policy documents (OCR is cached) and hand the new corpus to the policy agent."""
@@ -351,6 +417,25 @@ class World:
         t.start()
         if wait:
             t.join()
+
+    def clarify(self, case_id: str, person: str, answer: str, wait: bool = False) -> None:
+        """The sender answers the question their request was sent back with: the same case goes through
+        the pipeline again, read as the request and the answer together."""
+        case = self.orch.cases.get(case_id)
+        if case is None:
+            raise KeyError(case_id)
+        if case.request.sender_id != person:
+            raise PermissionError("only the person who sent the request can answer its question")
+        if case.status != RequestStatus.CLARIFICATION:
+            raise ValueError(f"this request is not waiting for an answer ({case.status.value})")
+        if not answer.strip():
+            raise ValueError("write an answer first")
+        r = case.request.model_copy(deep=True)
+        r.raw_text = f"{r.raw_text.rstrip()} {answer.strip()}"
+        r.advance(RequestStatus.RECEIVED)
+        self.store.save_request(r)
+        self.store.log(case_id, "clarified", answer=answer.strip(), question=case.reply)
+        self.submit(r, wait=wait)
 
     def decide(self, case_id: str, decider: str, grant: bool, note: str = "", wait: bool = False) -> None:
         """Settle an escalation; granting re-solves, so it runs in the background like ``submit``."""

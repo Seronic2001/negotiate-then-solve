@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Clock, FlaskConical, GitBranch, History, MapPin, RotateCcw, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TimetableGrid } from "../components/TimetableGrid";
+import { WeekStepper } from "../components/WeekStepper";
 import { Badge, Button, Card, CardHeader, PageHeader, Skeleton, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -18,7 +19,16 @@ export default function Timetable() {
   const { data: inst } = useApi(() => api.instance(), []);
   const { data: versions, refresh: refreshVersions } = useApi(() => (office ? api.versions() : Promise.resolve([])), [office], office ? 5000 : undefined);
   const [version, setVersion] = useState<number | null>(null);
-  const { data: tt, refresh } = useApi(() => api.timetable(version ? { version } : {}), [version], version ? undefined : 5000);
+  const { data: cal } = useApi(() => api.calendar(), []);
+  const [week, setWeek] = useState<number | null>(null); // null: the semester timetable, every week without its own changes
+  const [weekSet, setWeekSet] = useState(false);
+  useEffect(() => {
+    if (cal && !weekSet) {
+      setWeek(cal.current_week); // open on this week
+      setWeekSet(true);
+    }
+  }, [cal, weekSet]);
+  const { data: tt, refresh } = useApi(() => api.timetable(version ? { version } : { week }), [version, week], version ? undefined : 5000);
   const isTeacher = !!inst?.faculty.some((f) => f.id === user?.id);
   // what each person browses: the office (and HoD, Dean) everything; a teacher their own classes,
   // the sections they teach and the rooms; a class rep their section and its teachers
@@ -82,7 +92,7 @@ export default function Timetable() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
-            This week's timetable
+            {week && !version ? `Timetable · week ${week}` : "Timetable"}
             {tt && office && (
               <Badge tone="muted" className="text-[12.5px]">
                 v{tt.version}
@@ -93,8 +103,8 @@ export default function Timetable() {
         }
         subtitle={
           office
-            ? "The live timetable that requests and negotiations change, week by week. Every version is kept; classes that moved in this version are outlined. The semester plan is built separately (Semester plan)."
-            : "The live timetable: requests and negotiations change it week by week. Classes that moved in the latest change are outlined."
+            ? "The live timetable that requests and negotiations change. A change for one week (an absence, a closed room) shows under that week. Every version is kept; classes that moved in this version are outlined. The semester plan is built separately (Semester plan)."
+            : "The live timetable: requests and negotiations change it. A change for one week shows under that week. Classes that moved in the latest change are outlined."
         }
         actions={
           office && (
@@ -114,6 +124,16 @@ export default function Timetable() {
           )
         }
       />
+      {(tt?.cancelled.length ?? 0) > 0 && (
+        <div className="mb-4 rounded-lg border border-bad/40 bg-bad/5 px-4 py-3 text-[13px]">
+          <p className="font-medium">
+            Not held in week {tt!.week}: {tt!.cancelled.length} {tt!.cancelled.length === 1 ? "class" : "classes"} (a make-up is owed)
+          </p>
+          <p className="mt-1 text-ink-2">
+            {tt!.cancelled.map((c) => `${c.session_name.replace(/^the /, "")} (${c.faculty_name})`).join(" · ")}
+          </p>
+        </div>
+      )}
       <div className={clsx("grid gap-6", office && "2xl:grid-cols-[minmax(0,1fr)_320px]")}>
         <Card>
           <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
@@ -122,6 +142,7 @@ export default function Timetable() {
               value={by}
               onChange={setBy}
             />
+            {!version && cal && <WeekStepper cal={cal} week={week} onChange={setWeek} />}
             {by !== "all" && options.length > 1 && (
               <select value={who} onChange={(e) => setWho(e.target.value)} className="h-8 rounded-md border border-line bg-panel px-2.5 text-[13px] outline-none">
                 {options.map((o) => (
@@ -144,7 +165,7 @@ export default function Timetable() {
 
         {office && (
           <Card className="h-fit">
-            <CardHeader icon={History} title="Version history" subtitle="Rollback publishes a copy of an older version" />
+            <CardHeader icon={History} title="Version history" subtitle="Rollback publishes a copy of an older version. A change that also reaches a week with its own changes saves that week as the next number." />
             <div className="max-h-[640px] space-y-0 overflow-y-auto p-3">
               {versions?.map((v, i) => (
                 <div key={v.version} data-index={i} className={clsx("relative rounded-md px-3 py-2", tt?.version === v.version && "bg-panel-2")}>
@@ -173,6 +194,20 @@ export default function Timetable() {
                   <p className="mt-1 pl-6 text-[11.5px] text-ink-3">
                     {v.approved_by_name ? `approved by ${v.approved_by_name}` : "awaiting approval"} · {v.case ?? ""} · {ago(v.created_at)}
                   </p>
+                  {v.carried.length > 0 && (
+                    <p className="mt-0.5 pl-6 text-[11.5px] text-ink-3">
+                      also updates{" "}
+                      {v.carried.map((c, j) => (
+                        <span key={c.version}>
+                          {j > 0 && ", "}
+                          <button onClick={() => setVersion(c.version)} className="underline decoration-dotted hover:text-brand">
+                            week {c.week}
+                          </button>{" "}
+                          as v{c.version}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

@@ -24,6 +24,8 @@ import type {
   Timetable,
   Transparency,
   VersionRow,
+  CalendarView,
+  WeeklyChange,
 } from "./types";
 
 const USER_KEY = "nts.user";
@@ -116,6 +118,7 @@ export const api = {
   overview: () => call<Overview>("/overview"),
   instance: () => call<InstanceView>("/instance"),
   submit: (text: string) => post<{ id: string }>("/requests", { text }),
+  clarify: (id: string, text: string) => post<{ id: string }>(`/cases/${id}/clarify`, { text }),
   cases: (scope: "mine" | "all") => call<CaseSummary[]>(`/cases?scope=${scope}`),
   case: (id: string) => call<CaseDetail>(`/cases/${id}`),
   events: (after = 0, caseId?: string) =>
@@ -135,6 +138,8 @@ export const api = {
   /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
   decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),
   versions: () => call<VersionRow[]>("/versions"),
+  calendar: () => call<CalendarView>("/calendar"),
+  weeklyChanges: () => call<WeeklyChange[]>("/weekly-changes"),
   timetable: (opts: { version?: number; week?: number | null } = {}) => {
     const q = new URLSearchParams();
     if (opts.version) q.set("version", String(opts.version));

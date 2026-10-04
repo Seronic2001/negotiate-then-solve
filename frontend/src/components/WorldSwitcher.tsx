@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Building2, Check, ChevronsUpDown, FileUp, Loader2, Trash2 } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, FileUp, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, currentWorld, setCurrentWorld, type WorldRow } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -102,6 +102,21 @@ export function WorldSwitcher({ name }: { name: string }) {
                 {busy === "campus" ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} className="text-ink-3" />} Add the demo campus (4-year B.Tech)
               </button>
             )}
+            <button
+              onClick={() =>
+                window.confirm(
+                  `Restore "${name}" to its demo state? It goes back to how it stood once the demo history had finished: every request, approval, reply and semester-plan change made since is removed. Study records are kept.`,
+                ) &&
+                void act("reset", async () => {
+                  await api.reset();
+                  window.location.assign("/");
+                })
+              }
+              disabled={!!busy}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-panel-2"
+            >
+              {busy === "reset" ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} className="text-ink-3" />} Restore this world to its demo state
+            </button>
             {error && <p className="px-2 text-[12px] text-bad">{error}</p>}
           </div>
         </div>

@@ -200,7 +200,7 @@ TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.CLARIFICATION: frozenset({_S.RECEIVED}),
     _S.SOLVED: frozenset({_S.FAIRNESS_AUDITED, _S.NEGOTIATING}),
     _S.NEGOTIATING: frozenset({_S.FAIRNESS_AUDITED, _S.ESCALATED}),
-    _S.FAIRNESS_AUDITED: frozenset({_S.AWAITING_APPROVAL}),
+    _S.FAIRNESS_AUDITED: frozenset({_S.AWAITING_APPROVAL, _S.PUBLISHED}),  # nothing moved: nothing to approve
     _S.AWAITING_APPROVAL: frozenset({_S.PUBLISHED, _S.NEGOTIATING}),
     _S.REFUSED: frozenset(),
     _S.DENIED: frozenset(),
@@ -250,6 +250,7 @@ class TimetableVersion(BaseModel):
     parent: int | None = None
     approved_by: str | None = None
     week: int | None = None  # None: the semester timetable; n: the repaired timetable for week n
+    cancelled: list[str] = []  # sessions not held in this week: every room they can use is closed
 
     def diff(self, other: TimetableVersion) -> dict[str, tuple[Placement | None, Placement | None]]:
         """Sessions whose placement differs, as ``id -> (self, other)``."""

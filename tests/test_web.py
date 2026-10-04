@@ -149,3 +149,75 @@ def test_only_the_timetable_office_sees_versions(client):
     assert c.get("/api/timetable", headers=as_("F-104")).json()["entries"]  # the latest published, for everyone
     assert c.get("/api/versions/diff?a=1&b=1", headers=as_("ST-G-01")).status_code == 403
     assert "history" in views_for("coordinator") and "history" not in views_for("faculty")
+
+
+def test_calendar_marks_my_class_days_per_week(client):
+    c, world = client
+    cal = c.get("/api/calendar", headers=as_("F-104")).json()
+    assert len(cal["weeks"]) == world.instance.calendar.weeks and 1 <= cal["current_week"] <= len(cal["weeks"])
+    first = cal["weeks"][0]
+    assert first["monday"] == "2026-07-27" and cal["weeks"][1]["monday"] == "2026-08-03"
+    teaching = sorted({world.store.current_version().assignment[s.id].day for s in world.instance.sessions
+                       if s.faculty == "F-104"}, key=world.instance.calendar.days.index)
+    plain = [w for w in cal["weeks"] if not w["own_changes"]]
+    assert plain and all(w["class_days"] == teaching for w in plain)
+    assert any(w["own_changes"] for w in cal["weeks"])  # week 7, from the conference absence above
+    assert all(w["class_days"] == [] for w in c.get("/api/calendar", headers=as_("S-LAB")).json()["weeks"])
+
+
+def test_weekly_changes_are_listed_for_the_semester_plan(client):
+    c, _ = client
+    assert c.get("/api/weekly-changes", headers=as_("F-104")).status_code == 403  # the office's page
+    rows = c.get("/api/weekly-changes", headers=as_(COORDINATOR)).json()
+    week7 = next(r for r in rows if r["week"] == 7)  # the conference absence published above
+    assert week7["version"] and week7["moved"] and week7["sender_name"] == "Dr. Khan"
+
+
+def test_answering_a_clarification_reruns_the_same_case(client):
+    c, _ = client
+    h = as_("F-107")
+    rid = c.post("/api/requests", json={"text": "I'll be away for a few days soon, please adjust my classes."},
+                 headers=h).json()["id"]
+    d = wait_for(c, rid, {"clarification_requested"}, user="F-107")
+    assert "which" in d["reply"]
+    assert c.post(f"/api/cases/{rid}/clarify", json={"text": "x"}, headers=as_("F-101")).status_code == 403
+    assert c.post(f"/api/cases/{rid}/clarify", json={"text": "On Wednesday and Thursday in week 10."},
+                  headers=h).status_code == 200
+    d = wait_for(c, rid, {"awaiting_approval", "published"}, user="F-107")
+    con = d["parse"]["constraints"][0]
+    assert con["type"] == "unavailable" and con["when"]["days"] == ["Wed", "Thu"] and con["when"]["weeks"] == [10]
+    assert any(e["kind"] == "clarified" for e in c.get(f"/api/events?case={rid}", headers=as_(COORDINATOR)).json())
+    assert c.post(f"/api/cases/{rid}/clarify", json={"text": "x"}, headers=h).status_code == 409
+
+
+def test_every_case_opens(client):
+    """Each case page's JSON is plain (numpy values from routing once made some answer 500)."""
+    c, world = client
+    office = as_(COORDINATOR)
+    for row in c.get("/api/cases?scope=all", headers=office).json():
+        assert c.get(f"/api/cases/{row['id']}", headers=office).status_code == 200, row["id"]
+    assert all(isinstance(x.routing.get("fast_path", False), bool) for x in world.orch.cases.values())
+
+
+def test_restore_to_the_demo_state_without_replaying(client):
+    """Last in this module: it puts the shared world back to its start."""
+    c, world = client
+    end = time.time() + 60
+    while world.snapshot is None and time.time() < end:
+        time.sleep(0.2)
+    office = as_(COORDINATOR)
+    demo_cases = set(world.snapshot["cases"])  # this world replays no history: its demo state is the start
+    rid = c.post("/api/requests", json={"text": "I'd prefer no classes before 10 am on Friday, if possible."},
+                 headers=as_("F-105")).json()["id"]
+    wait_for(c, rid, {"awaiting_approval", "published"})
+    history = c.get("/api/versions", headers=office).json()
+    assert not any((v["case"] or "").startswith("carry-") for v in history)  # listed under their change
+    assert c.post("/api/demo/reset", headers=as_("F-105")).status_code == 403
+    assert c.post("/api/demo/reset", headers=office).json() == {"ok": True}
+    assert {x["id"] for x in c.get("/api/cases?scope=all", headers=office).json()} == demo_cases
+    assert c.get("/api/timetable", headers=office).json()["version"] == 1  # the bootstrap timetable
+    assert c.get(f"/api/cases/{rid}", headers=office).status_code == 404
+    again = c.post("/api/requests", json={"text": "I'd prefer no classes before 10 am on Friday, if possible."},
+                   headers=as_("F-105"))
+    assert again.status_code == 200  # the restored store no longer holds it, so it is not a duplicate
+    assert c.post("/api/demo/reset", headers=office).status_code == 200  # and it restores again

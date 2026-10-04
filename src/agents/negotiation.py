@@ -427,6 +427,7 @@ class Negotiator:
         # same options
         self.workers, self.seed = workers, seed
         self.stakeholders = sorted({s.faculty for s in instance.sessions})  # people who teach
+        self.skip: frozenset[str] = frozenset()  # sessions cancelled in the week being solved
 
     def _emit(self, kind: str, **data) -> None:
         if self.listener is not None:
@@ -437,7 +438,7 @@ class Negotiator:
     def _solver(self, cons: Mapping[str, Constraint], week, baseline) -> TimetableSolver:
         return TimetableSolver(self.instance, cons.values(), week=week, baseline=baseline,
                                time_limit=self.time_limit, presolve=self.presolve, workers=self.workers,
-                               seed=self.seed)
+                               seed=self.seed, skip=self.skip)
 
     def _conceded(self, c: Constraint, assignment: Mapping[str, Placement]) -> dict[str, Placement]:
         """Sessions whose placement in ``assignment`` breaks ``c``."""
@@ -598,7 +599,7 @@ class Negotiator:
                 forbid(sid, p.day, p.slot)
             res = TimetableSolver(self.instance, [*base, *extra.values()], week=week, baseline=baseline,
                                   time_limit=self.time_limit, presolve=self.presolve, workers=self.workers,
-                                  seed=self.seed).solve()
+                                  seed=self.seed, skip=self.skip).solve()
             if not res.ok:
                 break
             alts.append(({sid: res.assignment[sid] for sid in first}, self._moved(res.assignment, baseline)))

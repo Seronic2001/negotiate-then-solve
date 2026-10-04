@@ -142,3 +142,26 @@ def test_system_one_learns_the_corpus(instance):
     tau = tune_tau(decisions, val)
     assert 0.3 <= tau <= 1.0
     assert all(d.latency_ms < 100 for d in decisions)
+
+
+@pytest.mark.parametrize("text, action, kind", [
+    ("i want a 2 pm slot on monday", "compile", "prefer"),  # a wish for the hour, not one to avoid
+    ("Can I have Tuesday at 11 am for my lectures?", "compile", "prefer"),
+    ("No classes on Friday at 2 pm please", "compile", "avoid"),
+    ("I would like Friday afternoon free.", "compile", "avoid"),
+    ("i want a 2 pm slot on monday for revision classes.", "investigate", None),  # an extra class: the office
+])
+def test_rule_parser_reads_which_way_a_time_goes(instance, text, action, kind):
+    from language.rule_parser import RuleParser
+
+    sender = instance.faculty[0].id
+    out = RuleParser(instance).read(request(sender, text=text))
+    assert out.action == action
+    assert [c.type for c in out.constraints] == ([kind] if kind else [])
+
+
+def test_rule_parser_keeps_the_week_of_a_preference(instance):
+    from language.rule_parser import RuleParser
+
+    out = RuleParser(instance).read(request(instance.faculty[0].id, text="No classes on Wednesday in week 10, please"))
+    assert out.action == "compile" and out.constraints[0].weeks == [10] and out.constraints[0].days == ["Wed"]
