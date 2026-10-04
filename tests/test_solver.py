@@ -3,7 +3,7 @@ import pytest
 from core.generator import generate_department
 from core.instance import policy_constraints
 from core.schemas import Constraint, ConstraintType, Scope, Tier, When
-from core.solver import TimetableSolver
+from core.solver import TimetableSolver, use_solve_cache
 from core.validator import validate_constraint, verify_timetable
 
 
@@ -102,3 +102,28 @@ def test_full_department_solves():
     result = TimetableSolver(inst, cons, time_limit=120).solve()
     assert result.ok
     assert verify_timetable(inst, result.assignment, cons) == []
+
+
+def test_solve_cache_replays_answers(small, tmp_path, monkeypatch):
+    """The web app's cache: a second identical solve reads the first one's answer, cores included."""
+    inst, cons = small
+    f = inst.faculty[0].id
+    away = Constraint(id="away", type=ConstraintType.UNAVAILABLE, tier=Tier.VERIFIED_UNAVAILABILITY, hard=True,
+                      scope=Scope(faculty=f), when=When(days=list(inst.calendar.days)))
+    use_solve_cache(tmp_path)
+    try:
+        first = TimetableSolver(inst, cons, time_limit=20).solve()
+        core = TimetableSolver(inst, [*cons, away], time_limit=20)
+        first_core = core.core(core.hard_ids)
+        assert len(list(tmp_path.glob("*.json"))) == 2
+
+        def no_solving(*a):
+            raise AssertionError("solved instead of replaying")
+
+        monkeypatch.setattr(TimetableSolver, "_solve", no_solving)
+        again = TimetableSolver(inst, cons, time_limit=20).solve()
+        core = TimetableSolver(inst, [*cons, away], time_limit=20)
+        assert again.assignment == first.assignment and again.objective == first.objective
+        assert core.core(core.hard_ids) == first_core and "away" in first_core
+    finally:
+        use_solve_cache(None)

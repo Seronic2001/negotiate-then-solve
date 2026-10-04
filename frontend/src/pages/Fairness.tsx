@@ -1,6 +1,7 @@
-import { Info, ScrollText } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Info, ScrollText, TrendingDown } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Link } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Avatar, Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -45,10 +46,66 @@ function Gauge({ value }: { value: number }) {
   );
 }
 
+type Entry = NonNullable<ReturnType<typeof useLedger>["data"]>["entries"][number];
+const useLedger = () => useApi(() => api.ledger(), [], 5000);
+
+/** The semester's Gini after each concession: it falls when someone new gives way, rises when the same
+ * people give way again. One series, so no legend; the latest value is labelled directly. */
+function GiniTrend({ entries, semester }: { entries: Entry[]; semester: string }) {
+  const rows = entries
+    .filter((e) => e.semester === semester)
+    .map((e, i) => ({ n: i + 1, label: `${i + 1}`, name: e.name, gini: +e.gini_after.toFixed(3) }));
+  if (rows.length < 2) return null;
+  const last = rows.length - 1;
+  return (
+    <Card className="mt-6">
+      <CardHeader icon={TrendingDown} title="How the Gini moved" subtitle="After each concession this semester, in order. Lower is more even." />
+      <div className="h-64 px-3 pb-3 pt-5">
+        <ResponsiveContainer>
+          <LineChart data={rows} margin={{ top: 18, right: 40, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke="var(--line)" vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: "var(--ink-3)", fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis domain={[0, 1]} ticks={[0, 0.25, 0.5, 0.75, 1]} tick={{ fill: "var(--ink-3)", fontSize: 12 }} axisLine={false} tickLine={false} width={40} />
+            <Tooltip
+              cursor={{ stroke: "var(--ink-3)", strokeDasharray: "3 3" }}
+              contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12, color: "var(--ink)" }}
+              labelFormatter={(_, p) => (p?.[0] ? `Concession ${p[0].payload.n}: ${p[0].payload.name}` : "")}
+              formatter={(v) => [Number(v).toFixed(3), "Gini after"]}
+            />
+            <Line type="stepAfter" dataKey="gini" stroke="var(--brand)" strokeWidth={2} isAnimationActive={false}
+              dot={{ r: 4, fill: "var(--brand)", stroke: "var(--panel)", strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: "var(--brand)", stroke: "var(--panel)", strokeWidth: 2 }}>
+              <LabelList dataKey="gini" content={({ x, y, index, value }) =>
+                index === last ? (
+                  <text x={Number(x) + 8} y={Number(y) - 8} fill="var(--ink)" fontSize={12} fontWeight={600}>{Number(value).toFixed(2)}</text>
+                ) : null} />
+            </Line>
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  );
+}
+
+/** "+0.021" or "−0.125", with an arrow and a word, so the direction never rests on colour alone. */
+function Moved({ entries, i }: { entries: Entry[]; i: number }) {
+  const e = entries[i];
+  const prev = entries.slice(0, i).reverse().find((x) => x.semester === e.semester);
+  if (!prev) return <span className="w-28 text-right text-[12px] text-ink-3">first this semester</span>;
+  const d = e.gini_after - prev.gini_after;
+  const down = d < 0;
+  const Icon = down ? ArrowDownRight : ArrowUpRight;
+  return (
+    <span className={`flex w-28 items-center justify-end gap-1 text-[12px] tabular-nums ${down ? "text-ok" : "text-bad"}`} title={down ? "more evenly shared" : "less evenly shared"}>
+      <Icon size={13} /> {down ? "fell" : "rose"} {Math.abs(d).toFixed(3)}
+    </span>
+  );
+}
+
 export default function Fairness() {
   const tk = useTokens();
   const t = { ...tk, ink3: tk["ink-3"] };
-  const { data } = useApi(() => api.ledger(), [], 5000);
+  const { data } = useLedger();
   const chart = (data?.stakeholders ?? []).map((s) => ({ name: s.name.replace("Dr. ", ""), credit: +s.credit.toFixed(2), concessions: s.concessions }));
   return (
     <>
@@ -89,6 +146,7 @@ export default function Fairness() {
           </div>
         </Card>
       </div>
+      {data && <GiniTrend entries={data.entries} semester={data.semester} />}
       <Card className="mt-6">
         <CardHeader icon={ScrollText} title="Ledger entries" subtitle="Append-only; recorded when a concession is accepted in negotiation" />
         {data?.entries.length ? (
@@ -96,11 +154,21 @@ export default function Fairness() {
             {data.entries.map((e, i) => (
               <div key={i} className="flex items-center gap-3 px-5 py-2.5">
                 <Avatar name={e.name} id={e.stakeholder} size={30} />
-                <p className="flex-1 text-[13.5px]">
+                <p className="min-w-0 flex-1 text-[13.5px]">
                   <span className="font-medium">{e.name}</span> relaxed <span className="font-mono text-[12px] text-ink-3">{e.constraint_id}</span>
+                  {e.case && (
+                    <>
+                      {" "}for{" "}
+                      <Link to={`/requests/${e.case}`} className="font-mono text-[12px] text-brand hover:underline">
+                        {e.case}
+                      </Link>
+                    </>
+                  )}
                 </p>
                 <Badge tone="muted">{e.semester}</Badge>
-                <span className="text-[12.5px] tabular-nums text-ink-2">+{e.credit} credit</span>
+                <span className="w-24 text-right text-[12.5px] tabular-nums text-ink-2">+{e.credit.toFixed(2)} credit</span>
+                <span className="hidden w-20 text-right text-[12.5px] tabular-nums text-ink-2 sm:inline">Gini {e.gini_after.toFixed(3)}</span>
+                <span className="hidden sm:flex"><Moved entries={data.entries} i={i} /></span>
               </div>
             ))}
           </div>

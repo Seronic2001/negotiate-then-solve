@@ -25,6 +25,7 @@ class FileBody(BaseModel):
     name: str | None = None
     data: str | None = None  # base64
     sample: bool = False
+    populate: bool = False  # also rebuild this world's people, sections and weekly timetable from the document
 
 
 class SizesBody(BaseModel):
@@ -44,7 +45,8 @@ class DecideBody(BaseModel):
     approve: bool
 
 
-def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordinator: Callable) -> None:
+def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordinator: Callable,
+             rebuild_from: Callable | None = None) -> None:
     def planner():
         return W().semester
 
@@ -131,8 +133,11 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
             doc = p.load_offerings(path)
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
-        return {"courses": len(doc.courses), "cohorts": len(doc.cohorts), "pools": len(doc.pools),
-                "warnings": doc.warnings}
+        out = {"courses": len(doc.courses), "cohorts": len(doc.cohorts), "pools": len(doc.pools),
+               "warnings": doc.warnings}
+        if body.populate and rebuild_from is not None:  # the document's people and sections become this world's
+            out["world"] = rebuild_from(doc, dict(p.state.sizes))
+        return out
 
     @app.post("/api/semester/sizes")
     def sizes(body: SizesBody, u: dict = Depends(coordinator)) -> dict:

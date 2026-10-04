@@ -244,7 +244,9 @@ def parse_rows(rows: list[str], source: str = "") -> OfferingDoc:
         ltpc = LTPC.search(row)
         if not code and not ltpc:
             if COHORT.search(row):
-                section = Cohort(id=_slug(row), name=row)
+                size = re.search(r"\s*\((\d{1,3}) students\)", row, re.IGNORECASE)  # "... Section A (66 students)"
+                name = (row[: size.start()] + row[size.end():]).strip() if size else row
+                section = Cohort(id=_slug(name), name=name, size=int(size[1]) if size else 0)
                 doc.cohorts.append(section)
             elif POOL.search(row) and len(row) < 160:
                 if isinstance(section, Pool) and (m := POOL_CAP.search(row)) and section.name in row:

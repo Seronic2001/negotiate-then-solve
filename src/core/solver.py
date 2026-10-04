@@ -10,10 +10,14 @@ objective.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import time
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ortools.sat.python import cp_model
 
@@ -62,6 +66,36 @@ class SolveResult:
     @property
     def ok(self) -> bool:
         return self.status in ("optimal", "feasible")
+
+
+# Replayed answers: the web app's start-up history solves the same models every time it
+# starts, so ``use_solve_cache`` keeps their answers on disk. Evaluations never turn it on
+# (a replayed answer takes no time, which would falsify solve timings).
+_CACHE: Path | None = None
+
+
+def use_solve_cache(folder: Path | str | None) -> None:
+    """Keep CP-SAT answers in ``folder``, keyed by the model and solver parameters; None turns it off."""
+    global _CACHE
+    _CACHE = Path(folder) if folder else None
+    if _CACHE:
+        _CACHE.mkdir(parents=True, exist_ok=True)
+
+
+class _Replay:
+    """A cached CP-SAT answer, read like the solver that produced it."""
+
+    def __init__(self, d: dict) -> None:
+        self.solution: list[int] = d["solution"]
+        self.objective_value: float = d["objective"]
+        self._core: list[int] = d["core"]
+
+    def boolean_value(self, lit) -> bool:
+        i = lit.index
+        return bool(self.solution[i]) if i >= 0 else not self.solution[-i - 1]
+
+    def sufficient_assumptions_for_infeasibility(self) -> list[int]:
+        return self._core
 
 
 class _Model:
@@ -160,7 +194,7 @@ class _Model:
         moved = self.baseline_size - sum(self.keep)
         return soft + self.disruption_weight * moved
 
-    def hint_from(self, solver: cp_model.CpSolver) -> None:
+    def hint_from(self, solver: cp_model.CpSolver | _Replay) -> None:
         self.model.clear_hints()
         for cands in self.x.values():
             for v in cands.values():
@@ -208,7 +242,24 @@ class TimetableSolver:
         soft = [c for c in self.constraints.values() if not c.hard]
         return _Model(self.instance, hard, soft, self.baseline, self.disruption_weight)
 
-    def run(self, m: _Model) -> tuple[str, cp_model.CpSolver]:
+    def run(self, m: _Model) -> tuple[str, cp_model.CpSolver | _Replay]:
+        path = None
+        if _CACHE is not None:
+            params = f"{self.time_limit}|{self.workers}|{self.seed}|{self.presolve}|"
+            path = _CACHE / f"{hashlib.sha256((params + str(m.model.proto)).encode()).hexdigest()}.json"
+            if path.exists():
+                d = json.loads(path.read_text(encoding="utf-8"))
+                return d["status"], _Replay(d)
+        status, solver = self._solve(m)
+        if path is not None and status != "unknown":  # a timeout may go the other way next time
+            r = solver.response_proto
+            tmp = path.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"status": status, "solution": list(r.solution), "objective": r.objective_value,
+                                       "core": list(r.sufficient_assumptions_for_infeasibility)}), encoding="utf-8")
+            tmp.replace(path)
+        return status, solver
+
+    def _solve(self, m: _Model) -> tuple[str, cp_model.CpSolver]:
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.time_limit
         solver.parameters.num_workers = self.workers
@@ -296,7 +347,7 @@ class TimetableSolver:
         status, solver = self.run(m)
         return status, solver, time.perf_counter() - start
 
-    def _finish(self, m: _Model, status: str, solver: cp_model.CpSolver, wall: float) -> SolveResult:
+    def _finish(self, m: _Model, status: str, solver: cp_model.CpSolver | _Replay, wall: float) -> SolveResult:
         if status not in ("optimal", "feasible"):
             return SolveResult(status=status, wall_time=wall)
         days = self.instance.calendar.days

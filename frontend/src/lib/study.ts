@@ -1,4 +1,4 @@
-import { ApiError, currentUserId } from "./api";
+import { ApiError, currentUserId, currentWorld } from "./api";
 
 /** Human study (evaluation.study): a participant is known only by a code, sent as X-Study. */
 
@@ -123,6 +123,7 @@ async function call<T>(path: string, init: RequestInit = {}, code = studyCode())
   const user = currentUserId();
   if (code) headers.set("X-Study", code);
   if (user) headers.set("X-User", user);
+  headers.set("X-World", currentWorld());
   if (init.body) headers.set("Content-Type", "application/json");
   const res = await fetch(`/api/study${path}`, { ...init, headers });
   if (!res.ok) {

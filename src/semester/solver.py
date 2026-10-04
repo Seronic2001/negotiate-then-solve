@@ -129,7 +129,10 @@ def lab_type(course: Offering) -> str:
 
 
 def cohort_size(name: str) -> int:
-    """A default enrolment per cohort; the office can override any of them."""
+    """A default enrolment per cohort; the office can override any of them. A heading that states
+    its size ("... Section A (66 students)") is taken at its word."""
+    if m := re.search(r"\((\d{1,3}) students\)", name, re.IGNORECASE):
+        return int(m[1])
     n = name.upper()
     if "M.TECH" in n or "MTECH" in n:
         return 40

@@ -1,18 +1,22 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BadgeCheck, Bell, ExternalLink, MessagesSquare, Scale, Users, XCircle } from "lucide-react";
+import { ArrowRight, BadgeCheck, Bell, ExternalLink, Gavel, MessagesSquare, Scale, TriangleAlert, Users, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { DiffTable } from "../components/Negotiation";
-import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Skeleton, Toast } from "../components/ui";
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, PageHeader, Skeleton, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ago, num } from "../lib/meta";
-import type { CaseDetail } from "../lib/types";
+import type { CaseDetail, CaseSummary } from "../lib/types";
 
 export default function Approvals() {
   const { data, refresh, loading } = useApi(() => api.approvals(), [], 3000);
   const [toast, setToast] = useState<string | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
+
+  // escalations sent to the office: not yet a change to publish, but a decision only it can make
+  const { data: all } = useApi(() => api.cases("all"), [], 3000);
+  const decisions = (all ?? []).filter((c) => c.status === "escalated" && c.escalated_to === "coordinator");
 
   const list = (data ?? []).filter((c) => !gone.has(c.id));
   return (
@@ -21,6 +25,8 @@ export default function Approvals() {
         title="Approvals"
         subtitle="Nothing is published until you approve it."
       />
+      {decisions.length > 0 && <Decisions cases={decisions} />}
+      {decisions.length > 0 && <h2 className="mb-3 text-[13px] font-medium text-ink-3">Changes to publish</h2>}
       {loading && !data ? (
         <Skeleton className="h-80" />
       ) : list.length ? (
@@ -42,11 +48,47 @@ export default function Approvals() {
         </div>
       ) : (
         <Card>
-          <EmptyState icon={BadgeCheck} title="All caught up" text="Changes that need your approval will appear here." />
+          <EmptyState
+            icon={BadgeCheck}
+            title={decisions.length ? "No changes to publish" : "All caught up"}
+            text={decisions.length ? "A granted escalation comes back here once it has been fitted in." : "Changes that need your approval will appear here."}
+          />
         </Card>
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
     </>
+  );
+}
+
+function Decisions({ cases }: { cases: CaseSummary[] }) {
+  return (
+    <Card className="mb-8 overflow-hidden border-warn/30">
+      <CardHeader
+        icon={Gavel}
+        title={`Decisions waiting for you (${cases.length})`}
+        subtitle="Requests nobody could make room for without breaking something fixed. Grant or decline each one."
+      />
+      <ul className="divide-y divide-line">
+        {cases.map((c) => (
+          <li key={c.id}>
+            <Link to={`/requests/${c.id}`} className="group flex items-center gap-4 px-5 py-3.5 hover:bg-panel-2/60">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-warn/12 text-warn">
+                <TriangleAlert size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px]">“{c.text}”</p>
+                <p className="mt-0.5 text-[12.5px] text-ink-3">
+                  {c.sender_name} · {ago(c.received_at)} · <span className="font-mono">{c.id}</span>
+                </p>
+              </div>
+              <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-brand">
+                Decide <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

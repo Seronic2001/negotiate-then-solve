@@ -1,8 +1,10 @@
+import clsx from "clsx";
 import { ArrowRight, FlaskConical, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Label, Mark } from "../components/ui";
-import { api } from "../lib/api";
+import { worldLine } from "../components/WorldSwitcher";
+import { api, currentWorld, setCurrentWorld } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { setStudyCode, study } from "../lib/study";
@@ -24,8 +26,21 @@ const STEPS = [
 
 export default function Login() {
   const { signIn } = useAuth();
-  const { data, error } = useApi(() => api.personas(), []);
+  const [world, setWorld] = useState(currentWorld());
+  const { data: worlds } = useApi(() => api.worlds(), [], 4000);
+  const { data, error } = useApi(() => api.personas(), [world]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const pick = (id: string) => {
+    setCurrentWorld(id);
+    setWorld(id);
+    setQ("");
+  };
+  const ready = (worlds ?? []).filter((w) => w.status !== "error");
+  useEffect(() => {
+    // a world that was deleted or never built: fall back to the demo
+    if (worlds && world !== "demo" && !worlds.some((w) => w.id === world && w.status === "ready")) pick("demo");
+  }, [worlds, world]);
 
   const go = async (p: Persona) => {
     setBusy(p.id);
@@ -74,9 +89,39 @@ export default function Login() {
               Cannot reach the server ({error.message}). Start it with <code className="font-mono">uv run nts-web</code>.
             </p>
           )}
+          {ready.length > 1 && (
+            <div className="mt-6">
+              <Label>Department</Label>
+              <div className="grid gap-2">
+                {ready.map((w) => (
+                  <button
+                    key={w.id}
+                    disabled={w.status !== "ready"}
+                    onClick={() => pick(w.id)}
+                    className={clsx(
+                      "rounded-lg border px-3.5 py-2.5 text-left disabled:opacity-60",
+                      w.id === world ? "border-brand bg-brand/5" : "border-line bg-panel hover:bg-panel-2/60",
+                    )}
+                  >
+                    <p className="text-[13.5px] font-medium">{w.name}</p>
+                    <p className="text-[12px] text-ink-3">{worldLine(w)}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {(data?.length ?? 0) > 20 && (
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Find a person, role or section"
+              className="mt-6 h-9 w-full rounded-md border border-line bg-panel px-3 text-[13.5px] outline-none focus:border-brand/60"
+            />
+          )}
           <div className="mt-8 space-y-6">
             {GROUPS.map((g) => {
-              const people = (data ?? []).filter((p) => g.roles.includes(p.role));
+              const ql = q.toLowerCase();
+              const people = (data ?? []).filter((p) => g.roles.includes(p.role) && (!ql || `${p.name} ${ROLE_LABEL[p.role]}`.toLowerCase().includes(ql)));
               if (!people.length) return null;
               return (
                 <div key={g.title}>

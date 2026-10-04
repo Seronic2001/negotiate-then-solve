@@ -646,6 +646,12 @@ threads and the UI follows them through the event log.
   Records go to `runs/study/` (`NTS_STUDY_DIR`); the Experiments page shows
   progress, κ and the H3 comparison, and exports everything as JSON. Run one
   pilot participant at a time and reset the demo between them.
+- **Demo replays are cached.** `nts-web` keeps CP-SAT answers in
+  `runs/solve_cache/`, keyed by the exact model and solver parameters, so the
+  start-up history and a demo reset replay in about 25 s instead of about
+  2.5 min (LLM answers are cached in `runs/llm_cache/` as before). Simulated
+  replies skip their 1.2 s pause while the history is seeded. `NTS_SOLVE_CACHE=0`
+  solves afresh; evaluations never use this cache.
 - **Offline by default.** Without an API key, `src/language/rule_parser.py` (a
   rule-based stand-in for System Two: 94% action accuracy and 83% compiled
   constraints on the paraphrased test split, vs Gemini's 100% on validation)

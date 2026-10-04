@@ -133,6 +133,8 @@ def test_pilot_session_in_the_portal(web):
     c.post("/api/study/consent", headers=h)
     assert c.get("/api/study/next/claims", headers=h).status_code == 403  # pilots only rate
     assert c.post("/api/study/practice", headers=h | {"X-User": "F-101"}).status_code == 403  # not their persona
+    # the live session runs in the demo department only: F-102 may be someone else in another world
+    assert c.post("/api/study/practice", headers=h | {"X-User": "F-102", "X-World": "campus"}).status_code == 409
     task = c.post("/api/study/practice", headers=h | {"X-User": "F-102"}).json()
     assert "routers" in task["task"]
     rid = c.post("/api/requests", json={"text": f"My {task['course']} practical needs routers too; it must be on "
@@ -158,6 +160,7 @@ def test_pilot_session_in_the_portal(web):
     live = c.get("/api/study/admin", headers=coord).json()["analysis"]["live"]
     assert live["reply_reading_confirmed"] == 1 and live["clarity"] == 4 and live["understood"] == {"partly": 1}
     assert c.get("/api/study/admin", headers={"X-User": "F-102"}).status_code == 403
+    assert {r["world"] for r in c.get("/api/study/export", headers=coord).json()["live"]} == {"demo"}
 
 
 def test_revoke_keeps_or_deletes_answers(tmp_path):

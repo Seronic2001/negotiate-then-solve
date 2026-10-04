@@ -5,6 +5,11 @@ A participant is known only by a code (``X-Study``), issued by the
 coordinator. Labelling needs no sign-in to the portal; a pilot participant's
 live session runs in the portal as the demo faculty member their code names,
 and its records carry both the code and that persona.
+
+The study belongs to the demo department, whichever world the browser is in: its
+endpoints read the demo world (persona names, the practice clash), and a pilot's
+live session is refused in any other world, so no live record comes from a
+department its persona is not part of.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from pydantic import BaseModel, Field
 from evaluation.study import REPLY_LABELS, TASKS, analyse
 
 from .wording import plain
+from .worlds import DEMO, current_world
 
 DEFAULT_PERSONA = "F-102"  # owns a practical with no special equipment: the practice clash needs one
 
@@ -94,7 +100,10 @@ def _check(task: str, value: dict) -> dict:
     return out
 
 
-def register(app: FastAPI, W: Callable, user: Callable, coordinator: Callable) -> None:
+def register(app: FastAPI, demo: Callable, user: Callable, coordinator: Callable) -> None:
+    """``demo`` gives the demo world: the study's people and practice clash live there."""
+    W = demo  # noqa: N806 - read as the other modules' W(), but always the demo world
+
     def participant(x_study: str = Header(...)) -> dict:
         p = W().study.get(x_study)
         if p is None:
@@ -144,6 +153,8 @@ def register(app: FastAPI, W: Callable, user: Callable, coordinator: Callable) -
         return {"ok": True}
 
     def pilot_in_portal(p: dict = Depends(consented), u: dict = Depends(user)) -> tuple[dict, dict]:
+        if current_world.get() != DEMO:  # the same id can be someone else in another department
+            raise HTTPException(409, "the study's live session runs in the demo department; switch to it first")
         if p["kind"] != "pilot" or u["id"] != p["persona"]:
             raise HTTPException(403, "sign in as your study persona first")
         return p, u
@@ -156,7 +167,7 @@ def register(app: FastAPI, W: Callable, user: Callable, coordinator: Callable) -
             got = w.practice_clash(u["id"])
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
-        w.study.live(p["code"], u["id"], "practice", **got)
+        w.study.live(p["code"], u["id"], "practice", world=DEMO, **got)
         return got
 
     @app.post("/api/study/live")
@@ -164,7 +175,7 @@ def register(app: FastAPI, W: Callable, user: Callable, coordinator: Callable) -
         p, u = pu
         if body.kind == "rating":
             body.value = _check("ratings", body.value if isinstance(body.value, dict) else {})
-        W().study.live(p["code"], u["id"], body.kind, **body.model_dump(exclude={"kind"}, exclude_none=True))
+        W().study.live(p["code"], u["id"], body.kind, world=DEMO, **body.model_dump(exclude={"kind"}, exclude_none=True))
         return {"ok": True}
 
     # -- coordinator ----------------------------------------------------------------------

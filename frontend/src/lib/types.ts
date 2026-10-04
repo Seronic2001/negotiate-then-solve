@@ -179,11 +179,24 @@ export interface CaseDetail extends CaseSummary {
     replies: ReplyView[];
     concessions: { stakeholder: string; name: string; constraint_id: string; credit: number }[];
     notices: Record<string, string[]>;
-    escalation: null | { to: string; to_name: string; reason: string; text: string };
+    escalation: null | {
+      to: string;
+      to_name: string;
+      reason: string;
+      text: string;
+      /** What granting would set aside (physical facts never are). */
+      set_aside: ConstraintView[];
+      /** Why granting would not help; null when it can be granted. */
+      cannot_grant: string | null;
+    };
     solver: null | { status: string; wall_time: number; moved: number | null; soft_violations: Record<string, number> };
   };
   proposal: null | { version: number; week: number | null; diff: DiffRow[] };
   fairness: { gini_before?: number; gini_after?: number; conceded?: string[]; preferences_lost?: string[] };
+  /** How a person with the authority settled its escalation. */
+  decision?: null | { by: string; by_name: string; granted: boolean; note: string; set_aside?: string[] };
+  /** This viewer is the one the escalation was sent to, and it is still open. */
+  can_decide?: boolean;
   reply: string;
   notices: Record<string, string>;
   inbox: InboxItem[];
@@ -197,6 +210,7 @@ export interface Overview {
   counts: Partial<Record<Status, number>>;
   total: number;
   pending_approvals: number;
+  my_decisions?: number;
   my_inbox: number;
   published_version: number | null;
   gini: number;
@@ -279,7 +293,17 @@ export interface Ledger {
   semester: string;
   gini: number;
   decay: number;
-  entries: { stakeholder: string; name: string; constraint_id: string; semester: string; credit: number }[];
+  entries: {
+    stakeholder: string;
+    name: string;
+    constraint_id: string;
+    semester: string;
+    credit: number;
+    /** The semester's Gini just after this concession. */
+    gini_after: number;
+    /** The request whose constraint was given up. */
+    case: string | null;
+  }[];
   stakeholders: { id: string; name: string; credit: number; concessions: number }[];
 }
 
@@ -393,7 +417,7 @@ export interface ModelRow {
 }
 
 export type Experiment =
-  | { id: string; title: string; subtitle?: string; at: string; kind: "negotiation"; configs: Record<string, NegotiationSummary>; paired?: Record<string, PairedTest> }
+  | { id: string; title: string; subtitle?: string; at: string; kind: "negotiation"; configs: Record<string, NegotiationSummary>; paired?: Record<string, PairedTest>; models?: { configs: string[]; model: string }[]; simulator?: string | null }
   | { id: string; title: string; subtitle?: string; at: string; kind: "models"; rows: ModelRow[] }
   | { id: string; title: string; at: string; kind: "safety"; summary: Record<string, unknown> };
 

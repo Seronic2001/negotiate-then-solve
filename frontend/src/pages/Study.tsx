@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { LetterView, parsePlacement, type Placement } from "../components/LetterView";
 import { RatingForm } from "../components/Rating";
 import { Button, Card, CardHeader, Label, Mark, Meter, Skeleton } from "../components/ui";
+import { setCurrentWorld } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { TIER } from "../lib/meta";
 import { setStudyCode, setStudyTask, study, studyCode, type NextItem, type StudySession, type StudyTask } from "../lib/study";
@@ -213,6 +214,7 @@ function LiveSession({ session }: { session: StudySession }) {
     setBusy(what);
     setError(null);
     try {
+      setCurrentWorld("demo"); // pilot personas and the practice clash live in the demo department
       await signIn(session.persona!);
       if (what === "practice") {
         const p = await study.practice();

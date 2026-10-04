@@ -79,7 +79,7 @@ export default function Dashboard() {
     todos.push({ key: c.id, icon: HelpCircle, text: `We need more detail on “${c.text}”`, to: `/requests/${c.id}`, action: "Open" });
   const mineToDecide = (cases ?? []).filter((c) => c.status === "escalated" && escalatedToMe(c));
   for (const c of mineToDecide.slice(0, 3))
-    todos.push({ key: c.id, icon: TriangleAlert, text: `Escalated to you for a decision: “${c.text}”`, to: `/requests/${c.id}?tab=negotiation`, action: "Decide" });
+    todos.push({ key: c.id, icon: TriangleAlert, text: `Escalated to you for a decision: “${c.text}”`, to: `/requests/${c.id}`, action: "Decide" });
   for (const c of own.filter((c) => c.status === "negotiating").slice(0, 3))
     todos.push({ key: c.id, icon: MessagesSquare, text: `“${c.text}” is being negotiated with a colleague`, to: `/requests/${c.id}`, action: "Follow" });
 

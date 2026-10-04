@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { EventTimeline, Lifecycle } from "../components/Lifecycle";
 import { ConstraintCard, DiffTable, GroundedExplanation, MessageBubble } from "../components/Negotiation";
-import { Avatar, Badge, Card, CardHeader, Collapse, EmptyState, Json, Label, Meter, Skeleton, StatusBadge, Tabs } from "../components/ui";
+import { decider, EscalationPanel } from "../components/Escalation";
+import { Avatar, Badge, Card, CardHeader, Collapse, EmptyState, Json, Label, Meter, Skeleton, StatusBadge, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ago, num, pct, ROLE_LABEL, secs } from "../lib/meta";
@@ -21,7 +22,8 @@ export default function CaseDetail() {
   const raw = params.get("tab") ?? "summary";
   const tab: Tab = OLD_TABS[raw] ?? (raw as Tab);
   const setTab = (t: Tab) => setParams(t === "summary" ? {} : { tab: t }, { replace: true });
-  const { data: c, error } = useApi(() => api.case(id), [id], 1500);
+  const { data: c, error, refresh } = useApi(() => api.case(id), [id], 1500);
+  const [toast, setToast] = useState<string | null>(null);
 
   if (error) return <EmptyState icon={AlertTriangle} title="Cannot open this request" text={error.message} />;
   if (!c)
@@ -58,6 +60,18 @@ export default function CaseDetail() {
         <Lifecycle events={c.events} status={c.status} live={c.running} />
       </Card>
 
+      {c.outcome?.escalation && (
+        <div className="mb-6">
+          <EscalationPanel
+            c={c}
+            onDecided={(msg) => {
+              setToast(msg);
+              void refresh();
+            }}
+          />
+        </div>
+      )}
+
       <div className="mb-5">
         <Tabs
           tabs={[
@@ -73,6 +87,7 @@ export default function CaseDetail() {
       {tab === "summary" && <Summary c={c} />}
       {tab === "negotiation" && <Negotiation c={c} />}
       {tab === "details" && <Details c={c} />}
+      <Toast message={toast} onDone={() => setToast(null)} />
     </>
   );
 }
@@ -84,7 +99,7 @@ function outcomeText(c: Detail): string | null {
     const who = o.concessions.map((x) => x.name).join(", ");
     return `Resolved by negotiation in ${o.rounds} round${o.rounds === 1 ? "" : "s"}${who ? `; ${who} agreed to move` : ""}.`;
   }
-  if (o.status === "escalated") return `Escalated to ${o.escalation?.to_name ?? "someone with authority"}: ${o.escalation?.reason ?? "no agreement"}.`;
+  if (o.status === "escalated") return `Escalated to ${o.escalation ? decider(o.escalation.to, o.escalation.to_name) : "someone with authority"}: ${o.escalation?.reason ?? "no agreement"}.`;
   if (o.step === 2) return "Fitted into the timetable directly; some preferences could not be kept and their owners were told.";
   return "Fitted into the timetable directly; nobody had to give anything up.";
 }
@@ -217,12 +232,6 @@ function Negotiation({ c }: { c: Detail }) {
         </Card>
       )}
 
-      {o.escalation && (
-        <Card>
-          <CardHeader title={`Escalated to ${o.escalation.to_name}`} subtitle={o.escalation.reason} />
-          <pre className="whitespace-pre-wrap p-5 font-sans text-[13.5px] leading-relaxed text-ink-2">{o.escalation.text}</pre>
-        </Card>
-      )}
     </div>
   );
 }
