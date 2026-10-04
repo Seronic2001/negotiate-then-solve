@@ -42,6 +42,7 @@ VIEWS: dict[str, set[str]] = {
     "new": _EVERYONE - {"dean"},  # the Dean rules on escalations, not requests
     "inbox": {"coordinator"} | _TEACHERS,  # negotiation only ever asks teaching staff
     "approvals": {"coordinator"},
+    "history": {"coordinator"},  # timetable versions, proposals and rollback; everyone else sees the latest published
     "documents": {"coordinator"},  # adding and removing policy documents
     "semester": {"coordinator"},  # building the semester timetable from the course offerings
     "prefs": {"coordinator", "hod", "faculty", "guest_faculty", "student"},  # semester preferences
@@ -50,6 +51,7 @@ VIEWS: dict[str, set[str]] = {
     "graph": {"coordinator"},
     "health": {"coordinator"},
     "experiments": {"coordinator"},
+    "study": {"coordinator"},  # running the human study: participant codes, progress, export
 }
 OVERSIGHT = {"coordinator", "hod", "dean"}  # see every request and the whole activity log
 
@@ -159,11 +161,15 @@ class World:
         self.policy_dir = Path(os.environ.get("NTS_POLICY_DIR", ROOT / "data" / "policies"))
         self.ocr = ocr_backend()
         self.rules, self.documents = load_corpus(ROOT / "data" / "handbook.md", self.policy_dir, self.ocr)
+        from semester.demo import offerings_from_instance, rooms_from_instance
         from semester.service import SemesterPlanner
 
+        # the semester pages use this demo department too, not the institute's real offering PDF
         self.semester = SemesterPlanner(Path(os.environ.get("NTS_SEMESTER_DIR", ROOT / "runs" / "semester")),
                                         sample=ROOT / "course-offering" / "CourseOfferings-M26-V7.pdf",
-                                        time_limit=float(os.environ.get("NTS_SEMESTER_TIME", "60")))
+                                        time_limit=float(os.environ.get("NTS_SEMESTER_TIME", "60")),
+                                        demo=offerings_from_instance(self.instance, SEMESTER),
+                                        rooms=rooms_from_instance(self.instance))
         self.inbox = Inbox()
         self.deadline = deadline if deadline is not None else float(os.environ.get("NTS_REPLY_DEADLINE", "900"))
         self.autopilot: dict[str, bool] = {}
@@ -188,6 +194,7 @@ class World:
         self.threads: dict[str, threading.Thread] = {}
         self.seeding = False
         if seed_history:
+            self.semester.bootstrap_demo()  # the semester timetable the club desk and preferences read
             self.seeding = True
             threading.Thread(target=self._seed_test if self.test_data else self._seed, daemon=True).start()
 

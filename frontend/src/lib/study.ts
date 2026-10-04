@@ -52,6 +52,7 @@ export interface H3 {
 }
 
 export interface StudyAnalysis {
+  coverage: Record<StudyTask, { items: number; double: number; single: number }>;
   participants: { team: number; pilot: number; pilot_consented: number };
   claims: { items: number; human_vs_verifier: Record<string, Kappa>; human_vs_human: Record<string, Kappa> };
   replies: { items: number; human_vs_recorded: Record<string, Kappa>; human_vs_human: Record<string, Kappa> };
@@ -75,7 +76,7 @@ export interface StudyAnalysis {
 
 export interface StudyAdmin {
   items: null | { claims: number; replies: number; ratings: number; pilot_ratings: number; built: string; source: string };
-  participants: (Omit<StudySession, "tasks" | "items_ready" | "consent_text" | "reply_labels"> & { created: string })[];
+  participants: (Omit<StudySession, "tasks" | "items_ready" | "consent_text" | "reply_labels"> & { created: string; revoked?: string; answers_deleted?: string })[];
   analysis: StudyAnalysis | null;
   reply_parser: string | null;
 }
@@ -158,5 +159,8 @@ export const study = {
   }) => post<{ ok: boolean }>("/live", body),
   admin: () => call<StudyAdmin>("/admin"),
   addParticipants: (kind: "team" | "pilot", n: number) => post<{ codes: string[] }>("/participants", { kind, n }),
+  revoke: (code: string, deleteAnswers: boolean) => post<unknown>(`/participants/${code}/revoke`, { delete_answers: deleteAnswers }),
+  restore: (code: string) => post<unknown>(`/participants/${code}/restore`),
+  clear: (confirm: string) => post<{ removed: { participants: number; labels: number; live: number } }>("/clear", { confirm }),
   export: () => call<unknown>("/export"),
 };

@@ -137,4 +137,15 @@ export const api = {
   observability: () => call<Observability>("/observability"),
   experiments: () => call<Experiment[]>("/experiments"),
   reset: () => post<{ ok: boolean }>("/demo/reset"),
+  /** The demo department's courses as an offering PDF (timetable office), saved as a download. */
+  demoOfferingsPdf: async () => {
+    const user = currentUserId();
+    const res = await fetch("/api/semester/demo-offerings.pdf", { headers: user ? { "X-User": user } : {} });
+    if (!res.ok) throw new ApiError(res.status, res.statusText);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = "DemoCourseOfferings.pdf";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
 };

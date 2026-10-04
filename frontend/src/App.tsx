@@ -26,6 +26,7 @@ const Transparency = lazy(() => import("./pages/Transparency"));
 const Observability = lazy(() => import("./pages/Observability"));
 const Experiments = lazy(() => import("./pages/Experiments"));
 const Study = lazy(() => import("./pages/Study"));
+const HumanStudy = lazy(() => import("./pages/HumanStudy"));
 
 function Splash() {
   return (
@@ -88,6 +89,7 @@ function Routed() {
           <Route path="/graph" element={<Guard view="graph"><Graph /></Guard>} />
           <Route path="/observability" element={<Guard view="health"><Observability /></Guard>} />
           <Route path="/experiments" element={<Guard view="experiments"><Experiments /></Guard>} />
+          <Route path="/human-study" element={<Guard view="study"><HumanStudy /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

@@ -59,18 +59,46 @@ class SemesterState(BaseModel):
 
 
 class SemesterPlanner:
-    def __init__(self, folder: Path, sample: Path | None = None, time_limit: float = 60.0) -> None:
+    def __init__(self, folder: Path, sample: Path | None = None, time_limit: float = 60.0,
+                 demo: OfferingDoc | None = None, rooms: list[Room] | None = None) -> None:
+        """``demo``: the web app's demo department as an offering document (``semester.demo``),
+        used as the sample instead of the PDF and loaded at start when nothing else is."""
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self.path = self.folder / "state.json"
         self.sample = sample
+        self.demo = demo
         self.time_limit = time_limit
         self.calendar = SemesterCalendar()
-        self.rooms: list[Room] = default_rooms()
+        self.demo_rooms = rooms
+        self.rooms: list[Room] = default_rooms()  # follows the document: see _rooms_for
         self.state = SemesterState.model_validate_json(self.path.read_text(encoding="utf-8")) \
             if self.path.exists() else SemesterState()
         self.lock = threading.Lock()
         self.job: dict = {"running": False}
+        if demo is not None and self._is_demo(self.state.doc):  # a demo PDF saved before ids were matched
+            before = [c.id for c in self.state.doc.cohorts]
+            self._demo_ids(self.state.doc)
+            renamed = dict(zip(before, (c.id for c in self.state.doc.cohorts), strict=True))
+            if any(a != b for a, b in renamed.items()):
+                self.state.sizes = {renamed.get(k, k): v for k, v in self.state.sizes.items()}
+                for pref in self.state.preferences:
+                    if pref.target == "cohort":
+                        pref.who = renamed.get(pref.who, pref.who)
+                self.save()
+        self._rooms_for(self.state.doc)
+        if demo is not None:
+            doc = self.state.doc
+            bundled = doc is not None and sample is not None and doc.source == sample.name
+            # the built-in demo saved under its earlier label; an uploaded demo PDF is the office's choice and stays
+            stale = doc is not None and doc.source != demo.source and doc.source.endswith("(demo department)")
+            if doc is None or bundled or stale:  # an offering document the office uploaded itself is kept
+                if bundled:  # the state built on the institute's PDF is kept aside, not lost
+                    backup = self.folder / "state-institute-offerings.json"
+                    if not backup.exists():
+                        backup.write_text(self.path.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.state = SemesterState()
+                self.load_demo()
 
     def save(self) -> None:
         with self.lock:
@@ -84,10 +112,70 @@ class SemesterPlanner:
         doc = parse_offerings(path)
         if not doc.courses:
             raise ValueError("no courses found: expected rows with a course code and L-T-P-C credits")
+        if self._is_demo(doc):
+            self._demo_ids(doc)
         self.state.doc = doc
-        self.state.sizes = {c.id: self.state.sizes.get(c.id, cohort_size(c.name)) for c in doc.cohorts}
+        self._rooms_for(doc)
+        demo = self._is_demo(doc)
+        self.state.sizes = {c.id: self.state.sizes.get(c.id, (demo and self._demo_size(c)) or cohort_size(c.name))
+                            for c in doc.cohorts}
         self.save()
         return doc
+
+    def bootstrap_demo(self) -> None:
+        """Build and publish the demo department's semester timetable in the background, once,
+        so the pages that read it (clubs, preferences) work from the start, as the weekly one does."""
+        doc = self.state.doc
+        if self.demo is None or doc is None or doc.source != self.demo.source or self.state.versions or self.job["running"]:
+            return
+
+        def run() -> None:
+            self._run("build", "demo department, built at start-up", None)
+            v = next((x for x in self.state.versions if not x.timetable.report.hard_violations), None)
+            if v is not None:
+                self.publish(v.version)
+
+        self.job = {"running": True, "kind": "build", "note": "demo department, built at start-up", "started": time.time(),
+                    "error": None, "version": None}
+        threading.Thread(target=run, daemon=True).start()
+
+    def _rooms_for(self, doc: OfferingDoc | None) -> None:
+        """The demo department's rooms for the demo document, the institute's for any other."""
+        self.rooms = (self.demo_rooms or default_rooms()) if self._is_demo(doc) else default_rooms()
+
+    def _is_demo(self, doc: OfferingDoc | None) -> bool:
+        """The demo document, or an uploaded one that lists only demo courses (its PDF, ``semester.demo``)."""
+        if self.demo is None or doc is None or not doc.courses:
+            return False
+        return doc.source == self.demo.source or set(doc.courses) <= set(self.demo.courses)
+
+    def _demo_ids(self, doc: OfferingDoc) -> None:
+        """A demo PDF's programmes get the demo sections' ids (matched by their courses), so the
+        timetables, preferences and bookings made with the built-in demo still line up."""
+        ids = {}
+        for c in doc.cohorts:
+            twin = next((d for d in self.demo.cohorts if set(d.courses) == set(c.courses)), None)
+            if twin is not None and twin.id not in ids.values():
+                ids[c.id] = twin.id
+        for c in doc.cohorts:
+            c.id = ids.get(c.id, c.id)
+        for o in doc.courses.values():
+            o.cohorts = [ids.get(x, x) for x in o.cohorts]
+
+    def _demo_size(self, cohort) -> int | None:
+        """A demo section's real size, for the same section read from a PDF (matched by its courses)."""
+        if self.demo is None:
+            return None
+        return next((c.size for c in self.demo.cohorts if set(c.courses) == set(cohort.courses) and c.size), None)
+
+    def load_demo(self) -> OfferingDoc:
+        if self.demo is None:
+            raise ValueError("no demo department")
+        self.state.doc = self.demo.model_copy(deep=True)
+        self._rooms_for(self.state.doc)
+        self.state.sizes = {c.id: self.state.sizes.get(c.id, c.size or cohort_size(c.name)) for c in self.demo.cohorts}
+        self.save()
+        return self.state.doc
 
     def set_sizes(self, sizes: dict[str, int]) -> None:
         for k, v in sizes.items():

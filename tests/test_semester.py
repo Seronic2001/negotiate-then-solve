@@ -27,18 +27,18 @@ OFFERINGS = Path("course-offering/CourseOfferings-M26-V7.pdf")
 needs_pdf = pytest.mark.skipif(not OFFERINGS.exists(), reason="the course offering PDF is not in the repository")
 
 SMALL = """B.Tech I year I Semester - CSE&CSD
-Pr MA MA5.101 Discrete Structures 3-1-0-4 Praveen P + Suryajith Ch
-Pr CS CS0.101 Computer Programming 3-1-3-5 Abhishek Deshpande + Vineet Gandhi
-Pr EC EC2.101 Digital Systems and Microcontrollers 3-1-3-5 Anshu Sarje
+Pr MA MA5.101 Discrete Structures 3-1-0-4 Deepak S + Harsha K
+Pr CS CS0.101 Computer Programming 3-1-3-5 Aarav Kulkarni + Rahul Desai
+Pr EC EC2.101 Digital Systems and Microcontrollers 3-1-3-5 Meera Joshi
 In HS OC2.101 Arts-1 (H1) 2-0-0-2 Saroja T K (Coordinator)
 In HS OC1.101 Sports-1 0-2-0-1 Physical Education Centre
 B.Tech I year I Semester - ECE&ECD
-Pr MA EC5.101 Networks, Signals and Systems 3-1-0-4 Prasad Krishnan
-Pr CS CS0.101 Computer Programming 3-1-3-5 Abhishek Deshpande + Vineet Gandhi
-Pr EC EC2.102 Electronic Workshop-1 (H2) 2-0-3-2 Praful Mankar
+Pr MA EC5.101 Networks, Signals and Systems 3-1-0-4 Arjun Menon
+Pr CS CS0.101 Computer Programming 3-1-3-5 Aarav Kulkarni + Rahul Desai
+Pr EC EC2.102 Electronic Workshop-1 (H2) 2-0-3-2 Sameer Patil
 Robotics Stream
-CS7.503 Mobile Robotics 3-1-0-4 K Madhava Krishna
-EC4.401 Robotics: Dynamics and Control 3-1-0-4 Antony Thomas
+CS7.503 Mobile Robotics 3-1-0-4 R Vikram Sood
+EC4.401 Robotics: Dynamics and Control 3-1-0-4 Rohan Mathew
 """
 
 
@@ -53,10 +53,12 @@ def test_real_offering_document():
     assert len(doc.courses) >= 140 and len(doc.cohorts) >= 35 and len(doc.pools) >= 15
     cp = doc.courses["CS0.101"]
     assert (cp.L, cp.T, cp.P, cp.C) == (3, 1, 3, 5)
-    assert cp.faculty == ["Abhishek Deshpande", "Vineet Gandhi", "Charu Sharma"]  # wrapped over two lines
+    # names are not asserted (no real people in the code); the structure is what parsing gets right or wrong
+    assert len(cp.faculty) == 3 and all(len(f.split()) == 2 for f in cp.faculty)  # wrapped over two lines
     assert len(cp.cohorts) == 6
-    assert doc.courses["EC2.101"].faculty[-1] == "Sourav Garg"  # a three-line cell, name split over lines
-    assert doc.courses["CL1.101"].faculty == ["Chiranjeevi Yarra", "Radhika Mamidi"]  # "Garg" not stolen
+    assert len(doc.courses["EC2.101"].faculty[-1].split()) == 2  # a three-line cell: the name split over lines is rejoined
+    cl = doc.courses["CL1.101"].faculty
+    assert len(cl) == 2 and all(len(f.split()) == 2 for f in cl)  # the next row's surname is not stolen
     assert doc.courses["OC2.101"].half == "H1" and doc.courses["HS7.101"].half == "H2"
     assert doc.courses["HS0.203a"].name.startswith("Basics of Ethics") and len(doc.courses["HS0.203a"].cohorts) == 8
     assert not doc.courses["OC1.101"].scheduled and not doc.courses["CS9.402"].scheduled
@@ -91,7 +93,7 @@ def test_text_rows_and_needs(small):
 
 
 def test_small_build_is_valid_and_honours_hard_preferences(small):
-    hard = Preference(id="p1", target="faculty", who="Prasad Krishnan", mode="avoid", days=["Mon", "Tue"], hard=True)
+    hard = Preference(id="p1", target="faculty", who="Arjun Menon", mode="avoid", days=["Mon", "Tue"], hard=True)
     soft = Preference(id="p2", target="cohort", who="B-TECH-I-YEAR-I-SEMESTER-CSE-CSD", mode="avoid", start="17:00")
     s = SemesterSolver(small, preferences=[hard, soft], time_limit=20)
     tt = s.solve()
@@ -122,7 +124,7 @@ def test_verify_allows_h1_and_h2_to_share_a_slot():
 
 def test_parse_requests(small):
     rooms = default_rooms()
-    p = parse("Prasad Krishnan is unavailable on Fridays", small, rooms)
+    p = parse("Arjun Menon is unavailable on Fridays", small, rooms)
     assert p.preferences[0].hard and p.preferences[0].days == ["Fri"] and p.preferences[0].target == "faculty"
     p = parse("UG1 CSE students would like no classes after 5 pm on Saturday", small, rooms)
     assert p.preferences[0].who == "B-TECH-I-YEAR-I-SEMESTER-CSE-CSD" and p.preferences[0].start == "17:00"
@@ -168,7 +170,7 @@ def test_semester_api(tmp_path, monkeypatch):
     r = c.post("/api/semester/offerings", json={"name": "offerings.html", "data": base64.b64encode(html.encode()).decode()},
                headers=office).json()
     assert r["courses"] == 9 and r["cohorts"] == 2
-    assert c.post("/api/semester/preferences", json={"text": "Prasad Krishnan is unavailable on Fridays"},
+    assert c.post("/api/semester/preferences", json={"text": "Arjun Menon is unavailable on Fridays"},
                   headers=faculty).json()["ok"]
     assert c.post("/api/semester/build", json={}, headers=faculty).status_code == 403
     c.post("/api/semester/build", json={"note": "test"}, headers=office)
@@ -196,3 +198,34 @@ def test_real_build_has_no_hard_violations():
     doc = parse_offerings(OFFERINGS)
     tt = SemesterSolver(doc, time_limit=60).solve()
     assert tt.meetings and tt.report.hard_violations == [] and tt.report.pool_clashes == 0
+
+
+def test_demo_department_as_offerings():
+    from core.generator import generate_department
+    from semester.demo import offerings_from_instance, rooms_from_instance
+    from semester.requests import parse
+
+    inst = generate_department(seed=1, n_faculty=8, n_groups=4, courses_per_group=4, n_lecture_rooms=4, n_labs=3)
+    doc = offerings_from_instance(inst)
+    assert len(doc.courses) == 16 and [c.name for c in doc.cohorts] == ["Section 1", "Section 2", "Section 3", "Section 4"]
+    assert doc.courses["CS1.101"].faculty == ["Dr. Menon"] and doc.courses["CS1.101"].P == 2
+    rooms = rooms_from_instance(inst)
+    assert {r.type for r in rooms} == {"lecture", "computing", "electronics"}
+    who = {p.target: p.who for t in ("Dr. Menon prefers not to teach before 10 am", "Section 2 wants Fridays free",
+                                     "CS1.101 should be in the morning") for p in parse(t, doc, rooms).preferences}
+    assert who == {"faculty": "Dr. Menon", "cohort": "G-02", "course": "CS1.101"}
+
+
+def test_demo_offerings_pdf_reads_back(tmp_path):
+    from core.generator import generate_department
+    from semester.demo import offerings_from_instance, offerings_pdf
+
+    inst = generate_department(seed=1, n_faculty=8, n_groups=4, courses_per_group=4, n_lecture_rooms=4, n_labs=3)
+    demo = offerings_from_instance(inst)
+    pdf = tmp_path / "demo.pdf"
+    pdf.write_bytes(offerings_pdf(demo))
+    doc = parse_offerings(pdf)
+    assert set(doc.courses) == set(demo.courses) and not doc.warnings
+    assert all((c.L, c.T, c.P, c.faculty) == (demo.courses[k].L, demo.courses[k].T, demo.courses[k].P, demo.courses[k].faculty)
+               for k, c in doc.courses.items())
+    assert [c.name.rsplit(" ", 2)[-2:] for c in doc.cohorts] == [["Section", str(i)] for i in range(1, 5)]

@@ -1,9 +1,11 @@
 import { ArrowLeft, ArrowRight, Check, ClipboardCheck, LogOut, MessageSquareText, Play, Star, X } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { LetterView, parsePlacement, type Placement } from "../components/LetterView";
 import { RatingForm } from "../components/Rating";
 import { Button, Card, CardHeader, Label, Mark, Meter, Skeleton } from "../components/ui";
 import { useAuth } from "../lib/auth";
+import { TIER } from "../lib/meta";
 import { setStudyCode, setStudyTask, study, studyCode, type NextItem, type StudySession, type StudyTask } from "../lib/study";
 
 const TASK: Record<StudyTask, { title: string; text: string; icon: typeof Star }> = {
@@ -318,33 +320,132 @@ function Quote({ children }: { children: ReactNode }) {
   return <div className="whitespace-pre-line rounded-md border border-line bg-panel-2 p-4 text-[14px] leading-relaxed">{children}</div>;
 }
 
-function ClaimItem({ item, busy, onSave }: { item: { claim: string; facts: { id: string; text: string }[] }; busy: boolean; onSave: (v: Record<string, unknown>) => void }) {
+type Fact = { id: string; text: string };
+
+/** "Option A: the X lecture (C2-L1) on Tuesday at 3 pm in Room 101; ... The solver confirms this works." */
+function parseOption(f: Fact): { key: string; placements: Placement[] } | null {
+  const m = f.text.match(/^Option (\w+):\s*(.*?)\.?\s*The solver confirms this works\.?$/);
+  if (!m) return null;
+  const placements = m[2].split("; ").map(parsePlacement);
+  return placements.every(Boolean) ? { key: m[1], placements: placements as Placement[] } : null;
+}
+
+/** "Dr. X needs ... (Tier 4, operational requirement)." -> the sentence, and the tier in plain words as a side note */
+function splitTier(text: string): [string, string | null] {
+  const m = text.match(/^(.*?)\s*\(Tier (\d)[^)]*\)\.?$/);
+  return m ? [`${m[1]}.`, TIER[+m[2]]?.name ?? null] : [text, null];
+}
+
+function OptionCard({ option }: { option: { key: string; placements: Placement[] } }) {
+  const courses = [...new Set(option.placements.map((p) => p.course))];
   return (
-    <Card>
-      <div className="space-y-4 p-5">
-        <div>
-          <Label>The facts</Label>
-          <ul className="space-y-1.5 text-[13px] text-ink-2">
-            {item.facts.map((f) => (
-              <li key={f.id} className="flex gap-2">
-                <span className="shrink-0 font-mono text-[11.5px] text-ink-3">{f.id}</span>
-                <span>{f.text}</span>
-              </li>
-            ))}
+    <div className="rounded-md border border-line bg-panel p-3">
+      <p className="text-[13px] font-semibold">Option {option.key}</p>
+      {courses.map((c) => (
+        <div key={c} className="mt-1.5">
+          <p className="text-[12px] text-ink-3">{c}</p>
+          <ul className="mt-0.5 space-y-0.5 text-[13px]">
+            {option.placements
+              .filter((p) => p.course === c)
+              .map((p) => (
+                <li key={p.session} className="flex gap-2">
+                  <span className="w-12 shrink-0 font-mono text-[11.5px] leading-5 text-ink-3">{p.session}</span>
+                  <span>
+                    {p.day} {p.time} <span className="text-ink-3">· {p.room}</span>
+                  </span>
+                </li>
+              ))}
           </ul>
         </div>
+      ))}
+    </div>
+  );
+}
+
+function ClaimItem({ item, busy, onSave }: { item: { claim: string; facts: Fact[] }; busy: boolean; onSave: (v: Record<string, unknown>) => void }) {
+  const options = item.facts.map((f) => (f.id.startsWith("OPT-") ? parseOption(f) : null));
+  const unparsed = item.facts.filter((f, i) => f.id.startsWith("OPT-") && !options[i]);
+  const conflict = item.facts.filter((f) => !f.id.startsWith("OPT-") && !f.id.startsWith("LED-"));
+  const history = item.facts.filter((f) => f.id.startsWith("LED-"));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (busy || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "s" || e.key === "S") onSave({ supported: true });
+      if (e.key === "n" || e.key === "N") onSave({ supported: false });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onSave]);
+
+  return (
+    <Card>
+      <div className="space-y-5 p-5">
         <div>
           <Label>The claim</Label>
           <Quote>{item.claim}</Quote>
         </div>
-        <p className="text-[12.5px] text-ink-3">Supported means every day, time, room, name and number in the claim appears in the facts, and nothing in it contradicts them.</p>
-        <div className="flex flex-wrap gap-2">
+
+        <div className="space-y-4 rounded-md border border-line p-4">
+          <p className="text-[12.5px] font-medium text-ink-2">Check it against these facts</p>
+          <div>
+            <Label>The conflict</Label>
+            <ul className="space-y-1.5 text-[13.5px]">
+              {conflict.map((f) => {
+                const [text, tier] = splitTier(f.text);
+                return (
+                  <li key={f.id} className="flex gap-2">
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3" />
+                    <span>
+                      {text}
+                      {tier && <span className="ml-1.5 text-[12px] text-ink-3">{tier}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          {options.some(Boolean) && (
+            <div>
+              <Label>Options offered (each checked by the solver)</Label>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {options.map((o) => o && <OptionCard key={o.key} option={o} />)}
+              </div>
+            </div>
+          )}
+          {unparsed.length > 0 && (
+            <ul className="space-y-1 text-[13px] text-ink-2">
+              {unparsed.map((f) => (
+                <li key={f.id}>{f.text}</li>
+              ))}
+            </ul>
+          )}
+          {history.length > 0 && (
+            <div>
+              <Label>History</Label>
+              <ul className="space-y-1 text-[13.5px]">
+                {history.map((f) => (
+                  <li key={f.id}>{f.text}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <p className="text-[12.5px] text-ink-3">
+          <span className="font-medium text-ink-2">Supported</span> means every day, time, room, name and number in the claim appears in these facts, and nothing in it contradicts them. A greeting or a
+          sentence with no such detail counts as supported unless it says something false.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="success" icon={Check} disabled={busy} onClick={() => onSave({ supported: true })}>
             Supported
           </Button>
           <Button variant="danger" icon={X} disabled={busy} onClick={() => onSave({ supported: false })}>
             Not supported
           </Button>
+          <span className="ml-auto hidden text-[12px] text-ink-3 sm:block">
+            Keys: <kbd className="font-mono">S</kbd> supported · <kbd className="font-mono">N</kbd> not supported
+          </span>
         </div>
       </div>
     </Card>
@@ -361,16 +462,17 @@ function ReplyItem({ item, labels, busy, onSave }: { item: { message: string; re
   const letters = new Set([...item.message.matchAll(/^([A-Z])\) /gm)].map((m) => m[1]));
   const shown = labels.filter((l) => !l.startsWith("accept:") || letters.has(l.slice(7)));
   return (
-    <Card>
-      <div className="space-y-4 p-5">
+    <div className="space-y-5">
+      <div>
+        <Label>The office's message</Label>
+        <LetterView text={item.message} />
+      </div>
+      <Card className="space-y-4 p-5">
         <div>
-          <Label>The office's message</Label>
-          <Quote>{item.message}</Quote>
+          <Label>The faculty member's reply</Label>
+          <div className="ml-4 rounded-lg rounded-tl-none border border-brand/25 bg-brand/5 px-4 py-3 text-[14.5px] leading-relaxed">“{item.reply}”</div>
         </div>
-        <div>
-          <Label>The reply</Label>
-          <Quote>{item.reply}</Quote>
-        </div>
+        <p className="text-[13.5px] font-medium">What does this reply do?</p>
         <div className="flex flex-wrap gap-2">
           {shown.map((l) => (
             <Button key={l} variant={l.startsWith("accept:") ? "primary" : "secondary"} disabled={busy} onClick={() => onSave({ label: l })}>
@@ -378,21 +480,21 @@ function ReplyItem({ item, labels, busy, onSave }: { item: { message: string; re
             </Button>
           ))}
         </div>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
 function RatingItem({ text, busy, onSave }: { text: string; busy: boolean; onSave: (v: Record<string, unknown>) => void }) {
   return (
-    <Card>
-      <div className="space-y-5 p-5">
-        <div>
-          <Label>Imagine you received this message</Label>
-          <Quote>{text}</Quote>
-        </div>
-        <RatingForm busy={busy} onSave={onSave} />
+    <div className="space-y-5">
+      <div>
+        <Label>Imagine you received this message</Label>
+        <LetterView text={text} />
       </div>
-    </Card>
+      <Card className="p-5">
+        <RatingForm busy={busy} onSave={onSave} />
+      </Card>
+    </div>
   );
 }

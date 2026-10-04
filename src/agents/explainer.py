@@ -260,8 +260,13 @@ FREE_PROMPT = """You explain a timetabling conflict to one person and offer them
 Write a short, friendly message (3-6 sentences)."""
 
 
+# a full stop after a title or "e.g." does not end a sentence ("Hi Dr. Kumar, ...")
+_SENTENCE_END = re.compile(r"(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<!\bProf\.)(?<!\be\.g\.)(?<!\bi\.e\.)"
+                           r"(?<=[.!?])\s+")
+
+
 def sentences(text: str) -> list[str]:
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    return [s.strip() for s in _SENTENCE_END.split(text) if s.strip()]
 
 
 class Explainer:

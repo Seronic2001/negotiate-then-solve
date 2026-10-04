@@ -158,3 +158,58 @@ def test_pilot_session_in_the_portal(web):
     live = c.get("/api/study/admin", headers=coord).json()["analysis"]["live"]
     assert live["reply_reading_confirmed"] == 1 and live["clarity"] == 4 and live["understood"] == {"partly": 1}
     assert c.get("/api/study/admin", headers={"X-User": "F-102"}).status_code == 403
+
+
+def test_revoke_keeps_or_deletes_answers(tmp_path):
+    s = Study(tmp_path)
+    s.save_items(build_items(_report()))
+    t1, t2 = s.add_participants("team", 2)
+    for code in (t1, t2):
+        for it in s.items()["claims"]:
+            s.label(code, "claims", it["id"], {"supported": it["machine"]})
+    s.live(t2, "F-102", "understood", value="yes")
+
+    s.revoke(t1)  # code stops working, answers kept but out of every result
+    assert s.get(t1) is None and s.get(t2)
+    assert t1 not in analyse(s)["claims"]["human_vs_verifier"]
+    assert s.labels()[("claims", t1)]
+    s.restore(t1)
+    assert t1 in analyse(s)["claims"]["human_vs_verifier"]
+
+    s.revoke(t2, delete_answers=True)  # a withdrawal: erased from disk, cannot come back
+    assert ("claims", t2) not in s.labels() and not s.live_rows()
+    assert ("claims", t1) in s.labels()
+    with pytest.raises(ValueError):
+        s.restore(t2)
+    assert s.add_participants("team", 1) == ["T-3"]  # codes are never reused
+
+
+def test_team_work_is_shared_two_raters_per_item(tmp_path):
+    s = Study(tmp_path)
+    s.save_items(build_items(_report()))
+    team = s.add_participants("team", 4)
+    claims = s.items()["claims"]
+    shares = {c: s.assigned(c, "claims") for c in team}
+    assert all(sum(i["id"] in sh for sh in shares.values()) == 2 for i in claims)  # every item: two raters
+    assert max(map(len, shares.values())) - min(map(len, shares.values())) <= 2  # even shares, about half each
+    assert all(len(sh) < len(claims) for sh in shares.values())
+    for c in team:  # everyone finishes their share
+        for it in s.queue(c, "team", "claims"):
+            s.label(c, "claims", it["id"], {"supported": it["machine"]})
+    assert s.coverage()["claims"]["double"] == len(claims)
+    assert all(not [i for i in s.queue(c, "team", "claims") if i["id"] not in s.labels()[("claims", c)]] for c in team)
+    a = analyse(s)
+    assert a["claims"]["human_vs_human"]["all raters (pooled)"]["n"] == len(claims)
+    assert a["coverage"]["claims"] == {"items": len(claims), "double": len(claims), "single": 0}
+
+
+def test_clear_needs_the_phrase_and_keeps_the_items(web):
+    c, world = web
+    world.study.add_participants("team", 2)
+    coord = {"X-User": "C-TT"}
+    assert c.post("/api/study/clear", json={"confirm": "yes"}, headers=coord).status_code == 422
+    assert c.post("/api/study/clear", json={"confirm": "delete all study data"}, headers={"X-User": "F-102"}).status_code == 403
+    removed = c.post("/api/study/clear", json={"confirm": "Delete all study data"}, headers=coord).json()["removed"]
+    assert removed["participants"] >= 2
+    assert world.study.participants() == {} and world.study.items() is not None  # the material stays
+    assert world.study.add_participants("team", 1) == ["T-1"]

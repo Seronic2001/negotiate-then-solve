@@ -1,13 +1,12 @@
 import clsx from "clsx";
-import { FlaskConical, MessagesSquare, ScanText, Scale, ShieldCheck } from "lucide-react";
+import { Cpu, FlaskConical, MessagesSquare, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { StudyAdmin } from "../components/StudyAdmin";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { useTokens } from "../lib/theme";
 import { ago, num, pct } from "../lib/meta";
-import type { Experiment, NegotiationSummary } from "../lib/types";
+import type { Experiment, ModelRow, NegotiationSummary, PairedTest } from "../lib/types";
 
 const CONFIG_LABEL: Record<string, string> = {
   ours: "Ours",
@@ -46,9 +45,6 @@ export default function Experiments() {
         title="Experiments"
         subtitle="Results from the evaluation scripts in runs/."
       />
-      <div className="mb-6">
-        <StudyAdmin />
-      </div>
       {!data ? (
         <Skeleton className="h-96" />
       ) : !data.length ? (
@@ -77,7 +73,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
     }));
     return (
       <Card>
-        <CardHeader icon={MessagesSquare} title={e.title} subtitle={`updated ${ago(e.at)} · ${configs[0]?.[1].n ?? 0} scenarios`} />
+        <CardHeader icon={MessagesSquare} title={e.title} subtitle={`${e.subtitle ? `${e.subtitle} · ` : ""}updated ${ago(e.at)}`} />
         <div className="h-64 p-5">
           <ResponsiveContainer>
             <BarChart data={chart}>
@@ -96,6 +92,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
             <thead>
               <tr className="border-b border-line text-left text-[11.5px] text-ink-3">
                 <th className="px-5 py-2.5 font-medium">Config</th>
+                <th className="px-2 py-2.5 text-right font-medium">Runs</th>
                 {METRICS.map((m) => (
                   <th key={m.key} className="px-2 py-2.5 text-right font-medium">
                     {m.label}
@@ -107,6 +104,7 @@ function ExperimentCard({ e }: { e: Experiment }) {
               {configs.map(([k, s]) => (
                 <tr key={k} className={clsx("border-b border-line/60", k.startsWith("ours") && "bg-panel-2")}>
                   <td className="px-5 py-2.5 font-medium">{CONFIG_LABEL[k] ?? k}</td>
+                  <td className="px-2 py-2.5 text-right font-mono text-ink-3">{s.n}</td>
                   {METRICS.map((m) => {
                     const vals = configs.map(([, x]) => x[m.key] as number | null).filter((x): x is number => typeof x === "number");
                     const v = s[m.key] as number | null;
@@ -122,38 +120,11 @@ function ExperimentCard({ e }: { e: Experiment }) {
             </tbody>
           </table>
         </div>
+        {e.paired && Object.keys(e.paired).length > 0 && <Paired paired={e.paired} />}
       </Card>
     );
   }
-  if (e.kind === "parsing") {
-    const two = e.system_two as Record<string, number | string | Record<string, number>>;
-    const one = e.system_one ?? {};
-    return (
-      <Card>
-        <CardHeader icon={ScanText} title={e.title} subtitle={`${String(two.model ?? "")} · ${ago(e.at)}`} />
-        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="System Two action accuracy" v={pct(two.action_accuracy as number, 1)} />
-          <Metric label="Constraints matching the label" v={pct(two.compile_semantic_match as number, 1)} />
-          <Metric label="Injections handled" v={`${two.injections_handled}/${two.injections_total}`} />
-          <Metric label="System One fast-path share" v={pct(one.fast_path_share, 1)} />
-        </div>
-      </Card>
-    );
-  }
-  if (e.kind === "policy") {
-    const s = e.summary as Record<string, number | string>;
-    return (
-      <Card>
-        <CardHeader icon={Scale} title={e.title} subtitle={`${String(s.model ?? "")} · ${ago(e.at)}`} />
-        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Allow/deny accuracy" v={pct(s.allow_deny_accuracy as number, 1)} />
-          <Metric label="Denials citing the right rule" v={pct(s.deny_citation_correct as number, 1)} />
-          <Metric label="Make-up obligations found" v={pct(s.makeup_obligation_recall as number, 1)} />
-          <Metric label="Invented citations" v={String(s.hallucinated_citations)} />
-        </div>
-      </Card>
-    );
-  }
+  if (e.kind === "models") return <Models e={e} />;
   const s = e.summary as Record<string, number | Record<string, string>>;
   const cats = s.by_category as Record<string, string>;
   return (
@@ -182,5 +153,122 @@ function Metric({ label, v }: { label: string; v: string }) {
       <p className="text-[12px] text-ink-3">{label}</p>
       <p className="mt-1 font-serif text-2xl font-semibold tabular-nums">{v}</p>
     </div>
+  );
+}
+
+function Paired({ paired }: { paired: Record<string, PairedTest> }) {
+  return (
+    <div className="overflow-x-auto border-t border-line px-5 py-4">
+      <p className="mb-2 text-[12.5px] font-medium text-ink-2">Paired tests (same scenario and seed)</p>
+      <table className="w-full min-w-[560px] text-[12.5px]">
+        <thead>
+          <tr className="text-left text-[11.5px] text-ink-3">
+            <th className="py-1.5 font-medium">Comparison</th>
+            <th className="py-1.5 text-right font-medium">Pairs</th>
+            <th className="py-1.5 text-right font-medium">Only first right</th>
+            <th className="py-1.5 text-right font-medium">Only second right</th>
+            <th className="py-1.5 text-right font-medium">McNemar p</th>
+            <th className="py-1.5 text-right font-medium">Objective Wilcoxon p</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(paired).map(([k, v]) => {
+            const [a, b] = k.split(" vs ");
+            const p = v.correct_outcome_mcnemar.p;
+            return (
+              <tr key={k} className="border-t border-line/60">
+                <td className="py-1.5">
+                  {CONFIG_LABEL[a] ?? a} vs {CONFIG_LABEL[b] ?? b}
+                </td>
+                <td className="py-1.5 text-right font-mono">{v.pairs}</td>
+                <td className="py-1.5 text-right font-mono">{v.correct_outcome_mcnemar.only_first}</td>
+                <td className="py-1.5 text-right font-mono">{v.correct_outcome_mcnemar.only_second}</td>
+                <td className={clsx("py-1.5 text-right font-mono", p < 0.05 && "font-semibold text-ok")}>{fmtP(p)}</td>
+                <td className={clsx("py-1.5 text-right font-mono", v.objective_wilcoxon.n > 0 && v.objective_wilcoxon.p < 0.05 && "font-semibold text-ok")}>
+                  {v.objective_wilcoxon.n ? fmtP(v.objective_wilcoxon.p) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const fmtP = (p: number) => (p < 0.001 ? p.toExponential(1) : p.toFixed(3));
+
+type Col = { key: keyof ModelRow; label: string; group: string; fmt: (v: number | string) => string; better?: "high" | "low" };
+
+const MODEL_COLS: Col[] = [
+  { key: "reply_tool", label: "Action", group: "Replies", fmt: (v) => pct(v as number, 0), better: "high" },
+  { key: "reply_args", label: "Details", group: "Replies", fmt: (v) => pct(v as number, 1), better: "high" },
+  { key: "to_coordinator", label: "To coord.", group: "Replies", fmt: (v) => String(v), better: "low" },
+  { key: "parse_action", label: "Action", group: "Parsing", fmt: (v) => pct(v as number, 1), better: "high" },
+  { key: "compile_exact", label: "Compile exact", group: "Parsing", fmt: (v) => pct(v as number, 1), better: "high" },
+  { key: "injections", label: "Injections", group: "Parsing", fmt: (v) => String(v) },
+  { key: "latency_p50", label: "p50 s", group: "Parsing", fmt: (v) => num(v as number, 2), better: "low" },
+  { key: "policy_allow_deny", label: "Allow/deny", group: "Policy", fmt: (v) => pct(v as number, 0), better: "high" },
+  { key: "deny_recall", label: "Deny recall", group: "Policy", fmt: (v) => pct(v as number, 0), better: "high" },
+  { key: "makeup_recall", label: "Make-up", group: "Policy", fmt: (v) => pct(v as number, 0), better: "high" },
+  { key: "swap_pairs", label: "Right pair", group: "Swaps", fmt: (v) => pct(v as number, 0), better: "high" },
+  { key: "swap_wrong", label: "Wrong commits", group: "Swaps", fmt: (v) => String(v), better: "low" },
+];
+
+const groupStart = (i: number) => i === 0 || MODEL_COLS[i - 1].group !== MODEL_COLS[i].group;
+
+function Models({ e }: { e: Extract<Experiment, { kind: "models" }> }) {
+  const groups: { group: string; span: number }[] = [];
+  for (const c of MODEL_COLS) {
+    const last = groups[groups.length - 1];
+    if (last && last.group === c.group) last.span++;
+    else groups.push({ group: c.group, span: 1 });
+  }
+  return (
+    <Card>
+      <CardHeader icon={Cpu} title={e.title} subtitle={`${e.subtitle ?? ""} · updated ${ago(e.at)}`} />
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1100px] text-[12.5px]">
+          <thead>
+            <tr className="text-[11.5px] text-ink-3">
+              <th />
+              {groups.map((g) => (
+                <th key={g.group} colSpan={g.span} className="border-l border-line px-2 pt-2.5 text-center font-medium">
+                  {g.group}
+                </th>
+              ))}
+            </tr>
+            <tr className="border-b border-line text-left text-[11.5px] text-ink-3">
+              <th className="px-5 py-2 font-medium">Model</th>
+              {MODEL_COLS.map((c, i) => (
+                <th key={c.key} className={clsx("px-2 py-2 text-right font-medium", groupStart(i) && "border-l border-line")}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {e.rows.map((r) => (
+              <tr key={r.model} className={clsx("border-b border-line/60", r.model.includes("4B fine-tuned · Q8") && "bg-panel-2")}>
+                <td className="px-5 py-2.5 font-medium">{r.model}</td>
+                {MODEL_COLS.map((c, i) => {
+                  const v = r[c.key];
+                  const vals = e.rows.map((x) => x[c.key]).filter((x): x is number => typeof x === "number");
+                  const best = typeof v === "number" && !!c.better && vals.length > 1 && v === (c.better === "high" ? Math.max(...vals) : Math.min(...vals));
+                  return (
+                    <td
+                      key={c.key}
+                      className={clsx("px-2 py-2.5 text-right font-mono", groupStart(i) && "border-l border-line", best ? "font-semibold text-ok" : v === null ? "text-ink-3" : "text-ink-2")}
+                    >
+                      {v === null ? "—" : c.fmt(v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

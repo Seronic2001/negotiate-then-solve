@@ -29,6 +29,7 @@ const FALLBACK_VIEWS: Record<View, Role[]> = {
   new: ["coordinator", "hod", "faculty", "guest_faculty", "lab_incharge", "exam_cell", "student"],
   inbox: ["coordinator", ...TEACHING],
   approvals: ["coordinator"],
+  history: ["coordinator"],
   documents: ["coordinator"],
   semester: ["coordinator"],
   prefs: ["coordinator", "hod", "faculty", "guest_faculty", "student"],
@@ -37,6 +38,7 @@ const FALLBACK_VIEWS: Record<View, Role[]> = {
   graph: ["coordinator"],
   health: ["coordinator"],
   experiments: ["coordinator"],
+  study: ["coordinator"],
 };
 
 const AuthContext = createContext<Auth | null>(null);

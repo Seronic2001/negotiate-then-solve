@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, CheckCircle2, FileUp, Hammer, Loader2, Search, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileUp, Hammer, Loader2, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SemesterGrid } from "../components/SemesterGrid";
@@ -52,10 +52,10 @@ export default function SemesterBuild() {
   return (
     <>
       <PageHeader
-        title="Build the semester timetable"
+        title="Semester plan"
         subtitle={
           ov.loaded
-            ? `From ${ov.source}: ${ov.courses?.length ?? 0} courses, ${ov.cohorts.length} programmes, ${ov.rooms.length} rooms. ${ov.published ? `Version ${ov.published} is published.` : "Nothing published yet."}`
+            ? `The whole semester, built from the course offering document on the institute's 85-minute slots; separate from this week's timetable, which requests and negotiations change. From ${ov.source}: ${ov.courses?.length ?? 0} courses, ${ov.cohorts.length} programmes, ${ov.rooms.length} rooms. ${ov.published ? `Version ${ov.published} is published.` : "Nothing published yet."}`
             : "Load the course offering document, add preferences, build, review and publish."
         }
       />
@@ -134,6 +134,24 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
     </>
   );
 
+  // for demonstrations: the demo department's courses straight away, or as a PDF to upload and watch being read
+  const demo = ov.sample_is_demo && (
+    <>
+      <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+        <input
+          type="checkbox"
+          checked={!!ov.demo_loaded}
+          disabled={busy}
+          onChange={(e) => (e.target.checked ? void load({ sample: true }) : file.current?.click())}
+        />
+        Use the demo department's courses (no PDF needed)
+      </label>
+      <Button variant="ghost" size="sm" icon={Download} onClick={() => void api.demoOfferingsPdf()} title="The same courses as a course offering PDF, to upload">
+        Demo offering PDF
+      </Button>
+    </>
+  );
+
   if (!ov.loaded)
     return (
       <Card className="p-8 text-center">
@@ -144,13 +162,14 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
           from L-T-P; the lab type from the course code.
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          {ov.sample_available && (
+          {ov.sample_available && !ov.sample_is_demo && (
             <Button variant="primary" loading={busy} onClick={() => load({ sample: true })}>
-              Use the Monsoon 2026 offerings
+              {ov.sample_is_demo ? "Use the demo department's courses" : "Use the Monsoon 2026 offerings"}
             </Button>
           )}
           {picker}
         </div>
+        {demo && <div className="mt-4 flex flex-wrap items-center justify-center gap-3">{demo}</div>}
         {error && <p className="mt-4 text-[13px] text-bad">{error}</p>}
       </Card>
     );
@@ -160,6 +179,8 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         {picker}
+        {demo}
+        {ov.source && <span className="text-[12.5px] text-ink-3">Loaded: {ov.source}</span>}
         {error && <span className="text-[13px] text-bad">{error}</span>}
       </div>
       {!!ov.warnings?.length && (
@@ -287,13 +308,28 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
 
 // ---------------------------------------------------------------------------
 
-const PREF_EXAMPLES = [
-  "Girish Varma prefers not to teach before 10 am",
-  "UG1 CSE students would like no classes after 5 pm on Saturday",
-  "Prasad Krishnan is unavailable on Fridays",
-  "CS1.301 should be in the morning",
-  "Second year ECE students want Tuesday afternoons free",
-];
+/** Who and what the loaded offering document names: examples never hard-code a real person. */
+function named(ov: SemesterOverview) {
+  const teachers = [...new Set((ov.courses ?? []).flatMap((c) => c.faculty))];
+  const group = (i: number) => {
+    const name = ov.cohorts[i]?.name ?? ov.cohorts[0]?.name ?? "UG2 CSE";
+    return name.match(/\bsection\s+\w+/i)?.[0] ?? name; // "Section 2" rather than the whole programme heading
+  };
+  const lecture = ov.rooms.find((r) => r.type === "lecture")?.id ?? "R-101";
+  const lab = ov.rooms.find((r) => r.type !== "lecture")?.id ?? lecture;
+  return { t: (i: number) => teachers[i] ?? teachers[0] ?? "Dr. Menon", group, code: ov.courses?.[0]?.code ?? "CS1.101", lecture, lab };
+}
+
+const prefExamples = (ov: SemesterOverview) => {
+  const n = named(ov);
+  return [
+    `${n.t(0)} prefers not to teach before 10 am`,
+    `${n.group(0)} students would like no classes after 4 pm on Friday`,
+    `${n.t(1)} is unavailable on Fridays`,
+    `${n.code} should be in the morning`,
+    `${n.group(1)} wants Tuesday afternoons free`,
+  ];
+};
 
 function Preferences({ ov, refresh }: { ov: SemesterOverview; refresh: () => Promise<void> }) {
   const [text, setText] = useState("");
@@ -312,7 +348,7 @@ function Preferences({ ov, refresh }: { ov: SemesterOverview; refresh: () => Pro
           value={text}
           onChange={(e) => void check(e.target.value)}
           rows={3}
-          placeholder="e.g. Girish Varma prefers not to teach before 10 am"
+          placeholder={`e.g. ${prefExamples(ov)[0]}`}
           className="w-full resize-none rounded-md border border-line bg-panel p-3 text-[14px] outline-none focus:border-brand/60"
         />
         {preview && (
@@ -339,7 +375,7 @@ function Preferences({ ov, refresh }: { ov: SemesterOverview; refresh: () => Pro
         </div>
         <Label className="mt-6">Examples</Label>
         <ul className="space-y-1">
-          {PREF_EXAMPLES.map((e) => (
+          {prefExamples(ov).map((e) => (
             <li key={e}>
               <button onClick={() => void check(e)} className="text-left text-[13px] text-ink-2 hover:text-brand">
                 “{e}”
@@ -365,7 +401,7 @@ function Preferences({ ov, refresh }: { ov: SemesterOverview; refresh: () => Pro
                   {p.start || p.end ? ` · ${p.start ?? "start"}–${p.end ?? "end"}` : ""} · from {p.source}
                 </p>
               </div>
-              <Badge tone={p.hard ? "bad" : "muted"}>{p.hard ? "hard" : "preference"}</Badge>
+              <Badge tone={p.hard ? "bad" : "muted"}>{p.hard ? "required" : "preference"}</Badge>
               <button
                 onClick={async () => {
                   await api.removePreference(p.id);
@@ -422,16 +458,29 @@ function Report({ tt }: { tt: SemTimetable }) {
 
 type By = "cohort" | "faculty" | "room" | "course";
 
+/** The solver matches teachers by a key without title or case (``faculty_key`` in semester/solver.py);
+ * people are shown by the name the offering document gives, "Dr. Menon" rather than "menon". */
+const facultyKey = (name: string) =>
+  name.replace(/\(.*?\)|^(dr|prof)\.?\s+/gi, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+function facultyNames(ov: SemesterOverview): (key: string) => string {
+  const names = new Map<string, string>();
+  for (const c of ov.courses ?? []) for (const f of c.faculty) names.set(facultyKey(f), f);
+  return (key) => names.get(key) ?? key;
+}
+
 function Viewer({ ov, tt, changed }: { ov: SemesterOverview; tt: SemTimetable; changed?: Set<string> }) {
   const [by, setBy] = useState<By>("cohort");
   const [who, setWho] = useState<string>("");
   const [picked, setPicked] = useState<SemMeeting | null>(null);
+  const display = useMemo(() => facultyNames(ov), [ov]);
   const options = useMemo(() => {
     if (by === "cohort") return ov.cohorts.map((c) => ({ id: c.id, label: c.name }));
     if (by === "room") return ov.rooms.map((r) => ({ id: r.id, label: `${r.id} (${r.type}, ${r.capacity})` }));
-    if (by === "faculty") return [...new Set(tt.meetings.flatMap((m) => m.faculty))].sort().map((f) => ({ id: f, label: f }));
+    if (by === "faculty")
+      return [...new Set(tt.meetings.flatMap((m) => m.faculty))].map((f) => ({ id: f, label: display(f) })).sort((a, b) => a.label.localeCompare(b.label));
     return [...new Map(tt.meetings.map((m) => [m.course, `${m.course} ${m.name}`])).entries()].sort().map(([id, label]) => ({ id, label }));
-  }, [by, ov, tt]);
+  }, [by, ov, tt, display]);
   useEffect(() => {
     if (!options.some((o) => o.id === who)) setWho(options[0]?.id ?? "");
   }, [options, who]);
@@ -534,7 +583,7 @@ function Viewer({ ov, tt, changed }: { ov: SemesterOverview; tt: SemTimetable; c
           </span>{" "}
           · {picked.label} · {picked.day} {picked.start}–{picked.end}
           {picked.half !== "full" && ` · ${picked.half === "H1" ? "first" : "second"} half of the semester`} · {picked.rooms.join(", ")}
-          {picked.faculty.length > 0 && ` · ${picked.faculty.join(", ")}`}
+          {picked.faculty.length > 0 && ` · ${picked.faculty.map(display).join(", ")}`}
         </div>
       )}
     </Card>
@@ -627,12 +676,15 @@ function TimetableTab({
 
 // ---------------------------------------------------------------------------
 
-const CHANGE_EXAMPLES = [
-  "Tejas Bodas is unavailable on Tuesdays",
-  "Room SH1 is closed on Mondays",
-  "Girish Varma can't teach after 5 pm",
-  "Room H105 is closed on Thursday afternoons",
-];
+const changeExamples = (ov: SemesterOverview) => {
+  const n = named(ov);
+  return [
+    `${n.t(2)} is unavailable on Tuesdays`,
+    `Room ${n.lecture} is closed on Mondays`,
+    `${n.t(0)} can't teach after 4 pm`,
+    `Room ${n.lab} is closed on Thursday afternoons`,
+  ];
+};
 
 function Changes({
   ov,
@@ -667,7 +719,7 @@ function Changes({
           value={text}
           onChange={(e) => void check(e.target.value)}
           rows={2}
-          placeholder="e.g. Tejas Bodas is unavailable on Tuesdays"
+          placeholder={`e.g. ${changeExamples(ov)[0]}`}
           className="w-full resize-none rounded-md border border-line bg-panel p-3 text-[14px] outline-none focus:border-brand/60"
         />
         {preview && <p className={clsx("mt-2 text-[13px]", preview.ok ? "text-ink-2" : "text-warn")}>{preview.ok ? `Understood: ${preview.summary?.join("; ")}` : preview.error}</p>}
@@ -691,7 +743,7 @@ function Changes({
             Re-solve around it
           </Button>
           <span className="flex flex-wrap gap-x-3 text-[12.5px] text-ink-3">
-            {CHANGE_EXAMPLES.map((e) => (
+            {changeExamples(ov).map((e) => (
               <button key={e} onClick={() => void check(e)} className="hover:text-brand">
                 “{e}”
               </button>

@@ -94,10 +94,9 @@ export function StatusBadge({ status, live }: { status: Status; live?: boolean }
 export function TierBadge({ tier }: { tier: number }) {
   const t = TIER[tier] ?? TIER[5];
   return (
-    <Badge tone={t.tone}>
-      <span className="font-mono">T{tier}</span>
-      <span className="opacity-80">{t.name}</span>
-    </Badge>
+    <span title={`Tier ${tier}. ${t.who}.`} className="cursor-help">
+      <Badge tone={t.tone}>{t.name}</Badge>
+    </span>
   );
 }
 

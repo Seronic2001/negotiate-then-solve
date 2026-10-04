@@ -1,0 +1,161 @@
+"""The demo department as a course offering document, so the semester planner
+works on the same courses, teachers, sections and rooms as the rest of the
+web app (instead of the institute's real offering PDF, whose faculty are not
+the demo personas).
+
+Each demo course becomes one offering: a code in the institute's format
+(``CS1.101``; ``EC`` when its practical needs electronics, which gives it an
+electronics lab), L-T-P from the hours of its lectures, tutorials and
+practicals, its teacher's name as the faculty, and the sections that attend
+as cohorts. Lecture rooms and labs keep their ids and capacities.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+
+from core.instance import Instance
+
+from .offerings import Cohort, Offering, OfferingDoc
+from .solver import Room
+
+
+def course_code(instance: Instance, course: str) -> str:
+    """``C-011`` (section 1, course 1) -> ``CS1.101``; ``EC`` if a practical needs electronics."""
+    digits = "".join(ch for ch in course if ch.isdigit())
+    group, k = int(digits[:-1] or 0), int(digits[-1])
+    electronics = any(s.course == course and "electronics" in s.equipment for s in instance.sessions)
+    return f"{'EC' if electronics else 'CS'}{group}.{100 + k:03d}"
+
+
+def offerings_from_instance(instance: Instance, semester: str = "") -> OfferingDoc:
+    hours: dict[str, dict[str, int]] = defaultdict(lambda: {"lecture": 0, "tutorial": 0, "practical": 0})
+    teachers: dict[str, list[str]] = defaultdict(list)
+    sections: dict[str, list[str]] = defaultdict(list)
+    for s in instance.sessions:
+        hours[s.course][s.kind.value] += s.duration
+        name = instance.faculty_by_id[s.faculty].name if s.faculty in instance.faculty_by_id else s.faculty
+        if name not in teachers[s.course]:
+            teachers[s.course].append(name)
+        for g in s.groups:
+            if g not in sections[s.course]:
+                sections[s.course].append(g)
+    courses = {}
+    for course in sorted(hours):
+        code = course_code(instance, course)
+        h = hours[course]
+        courses[code] = Offering(code=code, name=instance.course_title(course), L=h["lecture"], T=h["tutorial"],
+                                 P=h["practical"], C=h["lecture"] + h["tutorial"] + h["practical"] // 2,
+                                 faculty=teachers[course], cohorts=sections[course], category=code[:2],
+                                 note=f"demo course {course}")
+    cohorts = [Cohort(id=g.id, name=g.name, size=g.size,
+                      courses=[c for c, o in courses.items() if g.id in o.cohorts]) for g in instance.groups]
+    source = instance.name if "demo" in instance.name.lower() else f"{instance.name} (demo department)"
+    return OfferingDoc(source=source, semester=semester, courses=courses,
+                       cohorts=cohorts)
+
+
+def rooms_from_instance(instance: Instance) -> list[Room]:
+    def kind(r) -> str:
+        if r.type.value != "lab":
+            return "lecture"
+        return "electronics" if "electronics" in r.equipment else "computing"
+
+    return [Room(id=r.id, capacity=r.capacity, type=kind(r)) for r in instance.rooms]
+
+
+# ---------------------------------------------------------------------------
+# The same offerings as a PDF, laid out like the institute's document
+# ---------------------------------------------------------------------------
+
+YEAR_HEADING = "B.Tech II year I Semester - CSE"
+
+
+def _esc(text: str) -> str:
+    """Escape a PDF string literal: backslash and brackets."""
+    return text.replace("\\", "\\\\").replace("(", r"\(").replace(")", r"\)")
+
+
+def offerings_pdf(doc: OfferingDoc, title: str = "Course Offerings, Monsoon 2026") -> bytes:
+    """One A4 page: a programme heading per section ("B.Tech II year I Semester - CSE Section 1")
+    and one row per course (CD, code, name, L-T-P-C, faculty), as ``semester.offerings`` reads it.
+    Written directly (text and ruled lines), so no PDF library is needed."""
+    cols = [40, 72, 142, 392, 456, 555]  # CD | code | course name | L-T-P-C | faculty | right edge
+    ops: list[str] = []
+
+    def text(x: float, y: float, s: str, bold: bool = False, size: float = 9.5) -> None:
+        ops.append(f"BT /{'F2' if bold else 'F1'} {size} Tf {x:.1f} {y:.1f} Td ({_esc(s)}) Tj ET")
+
+    def hline(y: float) -> None:
+        ops.append(f"{cols[0]} {y:.1f} m {cols[-1]} {y:.1f} l S")
+
+    y = 800.0
+    text(cols[0], y, f"{doc.source}: {title}", bold=True, size=13)
+    y -= 16
+    text(cols[0], y, "L-T-P-C: lecture, tutorial and practical hours per week, and credits. "
+                     "Pr: programme core.", size=8.5)
+    y -= 22
+    top = y + 14
+    ops.append("0.85 0.85 0.85 RG 0.6 w")
+    hline(top)
+    for x, head in zip(cols, ["CD", "Code", "Course name", "L-T-P-C", "Faculty"], strict=False):
+        text(x + 3, y, head, bold=True)
+    y -= 18
+    for cohort in doc.cohorts:
+        hline(y + 13)
+        ops.append(f"0.93 0.93 0.93 rg {cols[0]} {y - 5:.1f} {cols[-1] - cols[0]} 18 re f 0 0 0 rg")
+        text(cols[0] + 3, y, f"{YEAR_HEADING} {cohort.name}", bold=True)
+        y -= 18
+        for code in cohort.courses:
+            c = doc.courses[code]
+            hline(y + 13)
+            for x, cell in zip(cols, ["Pr", c.code, c.name, f"{c.L}-{c.T}-{c.P}-{c.C}", " + ".join(c.faculty)],
+                               strict=False):
+                text(x + 3, y, cell)
+            y -= 18
+    hline(y + 13)
+    for x in cols:
+        ops.append(f"{x} {top:.1f} m {x} {y + 13:.1f} l S")
+    y -= 14
+    text(cols[0], y, "Generated from the demo department of the Negotiate, Then Solve web app.", size=8)
+
+    stream = "\n".join(ops).encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R "
+         b"/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>"),
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def main() -> None:
+    import argparse
+    from pathlib import Path
+
+    from core.generator import generate_department
+
+    ap = argparse.ArgumentParser(description="Write the web app's demo department as a course offering PDF.")
+    ap.add_argument("out", type=Path, nargs="?", default=Path("course-offering/DemoCourseOfferings-M26.pdf"))
+    args = ap.parse_args()
+    inst = generate_department(seed=1, n_faculty=8, n_groups=4, courses_per_group=4, n_lecture_rooms=4, n_labs=3)
+    inst.name = "CSE department (demo)"
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_bytes(offerings_pdf(offerings_from_instance(inst)))
+    print(f"wrote {args.out}")
+
+
+if __name__ == "__main__":
+    main()
