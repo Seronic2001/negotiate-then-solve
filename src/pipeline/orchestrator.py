@@ -35,7 +35,7 @@ from agents.swap import (
 )
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import Instance
-from core.schemas import Constraint, Request, RequestStatus, Role, TimetableVersion
+from core.schemas import Constraint, Request, RequestStatus, Role, Tier, TimetableVersion
 from core.solver import TimetableSolver
 from core.validator import validate_constraint
 from language.corpus import ExpectedAction, RequestType
@@ -65,6 +65,8 @@ class Case:
     notices: dict[str, str] = field(default_factory=dict)
     routing: dict = field(default_factory=dict)  # System One decision, when routing is on
     timings: dict[str, float] = field(default_factory=dict)  # seconds per stage
+    superseded: list[str] = field(default_factory=list)  # earlier constraints this request replaced
+    decision: dict | None = None  # how a person with the authority settled its escalation
 
     @property
     def id(self) -> str:
@@ -203,10 +205,10 @@ class Orchestrator:
             return case
 
         case.constraints = case.parse.constraints
-        superseded = self._supersede(case)
+        case.superseded = self._supersede(case)
         self.store.add_constraints(case.constraints, request_id=case.id)
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
-                      obligations=case.policy.obligations if case.policy else [], superseded=superseded)
+                      obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
         return self._solve(case)
 
     # -- swaps (P-SWAP) ------------------------------------------------------------------
@@ -332,6 +334,8 @@ class Orchestrator:
         if outcome.status != "feasible" and case.status == S.SOLVED:
             self._advance(case, S.NEGOTIATING, rounds=outcome.rounds)
         if outcome.status == "escalated":
+            # until someone decides, the request is not in force: later requests must not run into it
+            self._withdraw(case)
             case.reply = "Your request conflicts with others and has been escalated for a decision."
             self._advance(case, S.ESCALATED, to=outcome.escalation.to, reason=outcome.escalation.reason,
                           brief=outcome.escalation.text)
@@ -362,6 +366,68 @@ class Orchestrator:
                 "gini_after": round(ledger.gini(teaching, self.semester), 4),
                 "conceded": sorted({e.stakeholder for e in outcome.concessions}),
                 "preferences_lost": sorted(outcome.notices)}
+
+    def _withdraw(self, case: Case) -> None:
+        for c in case.constraints:
+            self.store.set_active(c.id, False)
+        for cid in case.superseded:
+            self.store.set_active(cid, True)
+
+    # -- escalations: a person with the authority decides ------------------------------------
+
+    def overrides(self, case: Case) -> list[Constraint]:
+        """What granting an escalated request sets aside: the other constraints in its conflicts,
+        except physical facts (a closed room stays closed)."""
+        if case.outcome is None:
+            return []
+        own = {c.id for c in case.constraints}
+        known = {c.id: c for c in self.store.constraints(active_only=False)}
+        ids = dict.fromkeys(i for mus in case.outcome.mus_log for i in mus if i not in own)
+        return [known[i] for i in ids if i in known and known[i].tier != Tier.PHYSICAL]
+
+    def cannot_grant(self, case: Case) -> str | None:
+        """Why granting this escalated request would not help, or None when it can be granted."""
+        if case.parse is None or not case.parse.constraints:
+            return "this request has nothing to put into the timetable"
+        if case.outcome is not None and not self.overrides(case):
+            return ("it cannot fit even on its own, so granting would not help; "
+                    "decline it, or ask the sender for a narrower request")
+        return None
+
+    def decide(self, case_id: str, decider: str, grant: bool, note: str = "", name: str | None = None) -> Case:
+        """Grant (the request goes back through the solver with its conflicts set aside, and then to
+        approval like any change) or decline (the sender is told, with the note)."""
+        case = self.cases[case_id]
+        if case.status != S.ESCALATED:
+            raise ValueError(f"case {case_id} is not escalated ({case.status.value})")
+        name = name or (self.instance.faculty_by_id[decider].name if decider in self.instance.faculty_by_id else decider)
+        if not grant:
+            case.decision = {"by": decider, "granted": False, "note": note}
+            case.reply = f"Your request was declined by {name}" + (f": {note}" if note else ".")
+            self._advance(case, S.DENIED, decided_by=decider, note=note)
+            return case
+        if why := self.cannot_grant(case):
+            raise ValueError(why)
+        set_aside = self.overrides(case)
+        if not case.constraints:  # sent up by the policy check before it was compiled
+            case.constraints = case.parse.constraints
+            case.superseded = self._supersede(case)
+            self.store.add_constraints(case.constraints, request_id=case.id)
+        for c in case.constraints:
+            self.store.set_active(c.id, True)
+        for cid in case.superseded:
+            self.store.set_active(cid, False)
+        for c in set_aside:
+            self.store.set_active(c.id, False)
+        case.decision = {"by": decider, "granted": True, "note": note, "set_aside": [c.id for c in set_aside]}
+        self._advance(case, S.COMPILED, decided_by=decider, granted=True, note=note,
+                      set_aside=[c.id for c in set_aside])
+        self._solve(case)
+        if case.status == S.ESCALATED:  # still no way: put back what was set aside
+            for c in set_aside:
+                self.store.set_active(c.id, True)
+            case.decision = None
+        return case
 
     # -- human approval (L6) -------------------------------------------------------------
 

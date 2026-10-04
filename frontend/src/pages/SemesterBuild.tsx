@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SemesterGrid } from "../components/SemesterGrid";
 import { Badge, Button, Card, CardHeader, Collapse, EmptyState, Label, PageHeader, Skeleton, Tabs, Toast } from "../components/ui";
-import { api } from "../lib/api";
+import { api, currentWorld } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import type { ParsedInput, SemCourse, SemMeeting, SemesterOverview, SemNeed, SemTimetable } from "../lib/types";
 
@@ -96,12 +96,16 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
   const [q, setQ] = useState("");
   const [sizes, setSizes] = useState<Record<string, number>>({});
 
-  const load = async (body: { sample: true } | { name: string; data: string }) => {
+  const [populate, setPopulate] = useState(currentWorld() !== "demo");
+  const load = async (body: { sample: true } | { name: string; data: string; populate?: boolean }) => {
     setBusy(true);
     setError(null);
     try {
       const r = await api.loadOfferings(body);
-      toast(`Read ${r.courses} courses, ${r.cohorts} programmes and ${r.pools} elective pools`);
+      toast(
+        `Read ${r.courses} courses, ${r.cohorts} programmes and ${r.pools} elective pools` +
+          ("populate" in body && body.populate ? ". This world's people and weekly timetable are being rebuilt from it: the sign-in list updates in a minute." : ""),
+      );
       await refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -124,7 +128,7 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
         accept=".pdf,.png,.jpg,.jpeg,.html,.htm,.txt,.md"
         onChange={async (e) => {
           const f = e.target.files?.[0];
-          if (f) await load({ name: f.name, data: await readFile(f) });
+          if (f) await load({ name: f.name, data: await readFile(f), populate });
           if (file.current) file.current.value = "";
         }}
       />
@@ -180,6 +184,10 @@ function Offerings({ ov, refresh, toast }: { ov: SemesterOverview; refresh: () =
       <div className="flex flex-wrap items-center gap-3">
         {picker}
         {demo}
+        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2" title="Teachers, sections and their weekly classes come from the uploaded document; this world's weekly history starts again">
+          <input type="checkbox" checked={populate} onChange={(e) => setPopulate(e.target.checked)} />
+          Use the uploaded document's people and sections for this world
+        </label>
         {ov.source && <span className="text-[12.5px] text-ink-3">Loaded: {ov.source}</span>}
         {error && <span className="text-[13px] text-bad">{error}</span>}
       </div>

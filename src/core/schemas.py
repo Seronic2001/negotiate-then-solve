@@ -205,7 +205,7 @@ TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.REFUSED: frozenset(),
     _S.DENIED: frozenset(),
     _S.PUBLISHED: frozenset(),
-    _S.ESCALATED: frozenset(),
+    _S.ESCALATED: frozenset({_S.COMPILED, _S.DENIED}),  # a person with the authority grants or declines it
     _S.ANSWERED: frozenset(),
     _S.FORWARDED: frozenset(),
 }

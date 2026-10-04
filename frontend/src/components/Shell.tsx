@@ -38,6 +38,7 @@ import { ROLE_LABEL, STATUS } from "../lib/meta";
 import { useTheme } from "../lib/theme";
 import type { Overview, View } from "../lib/types";
 import { StudyBanner } from "./StudyBanner";
+import { WorldSwitcher } from "./WorldSwitcher";
 import { Avatar, Kbd, LiveDot, Mark } from "./ui";
 
 interface NavItem {
@@ -175,10 +176,10 @@ function Sidebar({
   onSearch: () => void;
   collapsed?: boolean;
 }) {
-  const { sees } = useAuth();
+  const { sees, can } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? ov?.pending_approvals : 0) ?? 0;
+  const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? (ov?.pending_approvals ?? 0) + (ov?.my_decisions ?? 0) : 0) ?? 0;
   const status = ov?.seeding ? "Loading demo history…" : ov?.published_version != null ? `Timetable v${ov.published_version} published` : "Connecting…";
 
   return (
@@ -188,7 +189,7 @@ function Sidebar({
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="truncate font-serif text-[15.5px] leading-tight font-semibold">Negotiate, Then Solve</p>
-            <p className="truncate text-[11.5px] text-ink-3">{ov?.department ?? "Timetabling"}</p>
+            {can("approve") ? <WorldSwitcher name={ov?.department ?? "Timetabling"} /> : <p className="truncate text-[11.5px] text-ink-3">{ov?.department ?? "Timetabling"}</p>}
           </div>
         )}
       </div>

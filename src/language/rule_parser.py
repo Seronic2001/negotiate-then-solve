@@ -30,6 +30,9 @@ ONLY = re.compile(r"\b(only|limit(ed)? to|restrict|keep my (lectures|classes|tea
 AVOID = re.compile(r"\b(no classes|not teach|avoid|free|nothing before|don't schedule|do not schedule|rather not)\b", re.IGNORECASE)
 QUESTION = re.compile(r"\b(rule|allowed|permitted|permissible|policy|who (has|needs) to approve|how many|"
                       r"can classes|is it ok)\b", re.IGNORECASE)
+# "it has to be on Wednesday at 2 pm": where a class should be, not when the teacher is free
+PLACE = re.compile(r"\b(must|has to|have to|needs? to|should|would like (it|them) to|want (it|them) to)\s+be\s+(on|at|in)\b",
+                   re.IGNORECASE)
 OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.IGNORECASE)
 VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.IGNORECASE)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
@@ -105,6 +108,9 @@ class RuleParser:
                 return f.id
         return None
 
+    def _names_room(self, low: str) -> bool:
+        return any(r.name.lower() in low or r.id.lower() in low for r in self.instance.rooms)
+
     def mentioned(self, text: str, sender: str) -> list[str]:
         """Other faculty members the text names: by full name, else every one
         whose surname appears ("Dr. Rao" may fit two people)."""
@@ -146,8 +152,8 @@ class RuleParser:
         other = self.other_faculty(text, sender)
         scope_kind, scope_id = ("faculty", other) if other else ("faculty", sender)
 
-        # rooms: a lab in-charge reporting an outage
-        if role == "lab_incharge":
+        # rooms: a lab in-charge reporting an outage, or the exam cell taking a room for exams
+        if role in ("lab_incharge", "exam_cell") and (role == "lab_incharge" or self._names_room(low)):
             lab = next((r for r in self.instance.rooms if r.name.lower() in low or r.id.lower() in low), None)
             if lab is None:
                 return self._clarify("room_issue", ["room"], "Which room is affected?")
@@ -178,6 +184,12 @@ class RuleParser:
                                  "Could you tell me which " + " and ".join(missing or ["days"]) + " you mean?")
 
         if UNAVAILABLE.search(low):
+            # "can't on Mon, Wed or Fri; I am only on campus on Tue and Thu": the days they *can* come are not
+            # unavailable ones. Take the days from the clauses that say when they cannot, when those name days.
+            clauses = re.split(r"[;.]|\bbut\b", text)
+            off = [c for c in clauses if UNAVAILABLE.search(c)]
+            if any(ONLY.search(c) and not UNAVAILABLE.search(c) for c in clauses) and (d := self.days(" ".join(off))):
+                days = d
             return self._compile("unavailability", [DraftConstraint(
                 type="unavailable", hard=True, scope_kind=scope_kind, scope_id=scope_id, days=days,
                 slots=slots, weeks=weeks, justification="stated" if re.search(r"\b(because|due to|conference|"
@@ -196,6 +208,11 @@ class RuleParser:
 
         if days or slots:
             hard = not WISH.search(low) and bool(re.search(r"\b(must|need|has to|have to|cannot)\b", low))
+            if PLACE.search(low) and not AVOID.search(low):
+                sessions = self.sessions_named(text, scope_id)
+                target = ("session", sessions[0]) if sessions else (scope_kind, scope_id)
+                return self._compile("preference", [DraftConstraint(
+                    type="prefer", hard=hard, scope_kind=target[0], scope_id=target[1], days=days, slots=slots)])
             if ONLY.search(low) and days and not AVOID.search(low):
                 return self._compile("preference", [DraftConstraint(
                     type="prefer", hard=hard, scope_kind=scope_kind, scope_id=scope_id, days=days, slots=slots)])

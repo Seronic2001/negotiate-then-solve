@@ -117,7 +117,7 @@ class SemesterPlanner:
         self.state.doc = doc
         self._rooms_for(doc)
         demo = self._is_demo(doc)
-        self.state.sizes = {c.id: self.state.sizes.get(c.id, (demo and self._demo_size(c)) or cohort_size(c.name))
+        self.state.sizes = {c.id: self.state.sizes.get(c.id, (demo and self._demo_size(c)) or c.size or cohort_size(c.name))
                             for c in doc.cohorts}
         self.save()
         return doc

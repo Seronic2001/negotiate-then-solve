@@ -20,6 +20,8 @@ SSO (OIDC) for real use; authorisation decisions are already server-side.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -140,7 +142,10 @@ def _case_detail(w: World, case: Case) -> dict:
             "notices": {k: plain(v) for k, v in o.notices.items()},
             "escalation": None if o.escalation is None else {"to": o.escalation.to, "to_name": w.name_of(
                 o.escalation.to) if o.escalation.to in inst.faculty_by_id else o.escalation.to,
-                "reason": plain(o.escalation.reason), "text": plain(o.escalation.text)},
+                "reason": plain(o.escalation.reason), "text": plain(o.escalation.text),
+                # what granting would set aside, and why it cannot be granted (None: it can)
+                "set_aside": [_constraint(w, c) for c in w.orch.overrides(case)],
+                "cannot_grant": w.orch.cannot_grant(case)},
             "solver": None if o.result is None else {"status": o.result.status, "wall_time": o.result.wall_time,
                                                      "moved": o.result.moved,
                                                      "soft_violations": o.result.soft_violations}}
@@ -151,6 +156,7 @@ def _case_detail(w: World, case: Case) -> dict:
     else:
         d["proposal"] = None
     d["fairness"] = case.fairness
+    d["decision"] = None if case.decision is None else {**case.decision, "by_name": w.name_of(case.decision["by"])}
     d["reply"] = plain(case.reply)
     d["notices"] = {k: plain(v) for k, v in case.notices.items()}
     d["inbox"] = [_inbox_item(w, i) for i in w.inbox.items.values() if i.case_id == case.id]
@@ -287,14 +293,14 @@ def _experiments() -> list[dict]:
             configs |= {k: v["summary"] for k, v in rep["configs"].items()}
             paired |= rep.get("paired") or {}
             if rep["models"].get("agent"):
-                models.append(f"{', '.join(rep['configs'])}: {rep['models']['agent']}")
+                models.append({"configs": list(rep["configs"]), "model": rep["models"]["agent"]})
         extra, _ = load("negotiation-main-paired.json")
         paired |= extra or {}
         sim = next((rep["models"]["simulator"] for rep, _ in parts if rep["models"].get("simulator")), None)
         order = sorted(configs, key=lambda k: CONFIG_ORDER.index(k) if k in CONFIG_ORDER else len(CONFIG_ORDER))
         out.append({"id": "negotiation-main", "kind": "negotiation", "at": max(at for _, at in parts),
-                    "title": "Main experiment: 60 scenarios, ours-llm / B3 / B4 over 3 seeds",
-                    "subtitle": "; ".join(models) + (f"; simulators: {sim}" if sim else ""),
+                    "title": "Main experiment: our system against the baselines on 60 scenarios",
+                    "models": models, "simulator": sim,
                     "configs": {k: configs[k] for k in order}, "paired": paired})
 
     rows, latest = [], None
@@ -338,6 +344,13 @@ def _experiments() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+class WorldBody(BaseModel):
+    name: str = ""
+    preset: str | None = None  # "campus"
+    filename: str | None = None
+    data: str | None = None  # base64 of a course offering document
+
+
 class LoginBody(BaseModel):
     person: str
 
@@ -363,6 +376,11 @@ class RejectBody(BaseModel):
     reason: str = ""
 
 
+class DecisionBody(BaseModel):
+    grant: bool
+    note: str = ""
+
+
 class AutopilotBody(BaseModel):
     person: str
     on: bool
@@ -381,13 +399,33 @@ def _rule_view(r: Rule) -> dict:
             "pages": list(r.pages), "method": r.method}
 
 
-def create_web_app(world: World | None = None) -> FastAPI:
-    state = {"w": world or World()}
+def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None, restore: bool | None = None,
+                   campus: bool = False) -> FastAPI:
+    """``world``: the demo world (built when omitted). Worlds made from offering documents are kept
+    in ``worlds_dir`` and restored at start (by default only when the demo world is built here, so tests
+    that pass their own world start alone); ``campus`` also makes the demo campus if it is missing."""
+    from .worlds import DEMO, Registry, WorldStarting, current_world
+
+    registry = Registry(world or World(), worlds_dir, restore=world is None if restore is None else restore)
+    if campus:
+        registry.campus()
     app = FastAPI(title="Negotiate, Then Solve API", version="1.0")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+    @app.middleware("http")
+    async def which_world(request, call_next):
+        """The world a request means: ``X-World`` (the demo when absent)."""
+        token = current_world.set(request.headers.get("x-world") or "demo")
+        try:
+            return await call_next(request)
+        finally:
+            current_world.reset(token)
+
     def W() -> World:
-        return state["w"]
+        try:
+            return registry.get()
+        except WorldStarting as e:
+            raise HTTPException(503, str(e)) from None
 
     def user(x_user: str = Header(...)) -> dict:
         w = W()
@@ -417,10 +455,21 @@ def create_web_app(world: World | None = None) -> FastAPI:
 
     from .semester import register as register_semester
 
-    register_semester(app, W, user, view, coordinator)
+    def rebuild_from(doc, sizes) -> dict:
+        """Give the current world the people, sections, rooms and weekly timetable of an offering document."""
+        e = registry.rebuild(current_world.get(), doc, sizes)
+        return {"world": e["id"], "status": e["status"]}
+
+    register_semester(app, W, user, view, coordinator, rebuild_from)
     from .study import register as register_study
 
-    register_study(app, W, user, coordinator)
+    def demo_world() -> World:
+        try:
+            return registry.get(DEMO)
+        except WorldStarting as e:
+            raise HTTPException(503, str(e)) from None
+
+    register_study(app, demo_world, user, coordinator)
 
     # -- auth (mock) ------------------------------------------------------------------
 
@@ -455,6 +504,8 @@ def create_web_app(world: World | None = None) -> FastAPI:
             "department": w.instance.name, "semester": SEMESTER, "seeding": w.seeding,
             "counts": dict(statuses), "total": len(reqs),
             "pending_approvals": len(w.orch.pending()),
+            # escalations sent to this person and still open (the Approvals page lists them too)
+            "my_decisions": sum(1 for c in cases.values() if c.status == RequestStatus.ESCALATED and decides(u, c)),
             "my_inbox": sum(1 for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None),
             "published_version": cur.version if cur else None,
             "gini": ledger.gini(teaching, SEMESTER),
@@ -517,7 +568,32 @@ def create_web_app(world: World | None = None) -> FastAPI:
             raise HTTPException(403)
         if c is None:
             return {**_summary(w, r, None), "events": w.store.events(case_id)}
-        return _case_detail(w, c)
+        return _case_detail(w, c) | {"can_decide": c.status == RequestStatus.ESCALATED and decides(u, c)}
+
+    def decides(u: dict, case: Case) -> bool:
+        """The person an escalation was sent to: "coordinator", "dean", "hod", or the heads by id."""
+        to = case.outcome.escalation.to if case.outcome and case.outcome.escalation else ""
+        if to == "coordinator":
+            return u["id"] == COORDINATOR
+        if to in ("dean", "hod"):
+            return u["role"] == to
+        return u["id"] in to.split(", ")
+
+    @app.post("/api/cases/{case_id}/decide")
+    def decide(case_id: str, body: DecisionBody, u: dict = Depends(user)) -> dict:
+        """Grant or decline an escalated request; granting re-solves it and then it waits for approval."""
+        w = W()
+        c = w.orch.cases.get(case_id)
+        if c is None:
+            raise HTTPException(404)
+        if c.status != RequestStatus.ESCALATED:
+            raise HTTPException(409, f"this request is not waiting for a decision ({c.status.value})")
+        if not decides(u, c):
+            raise HTTPException(403, "this decision was sent to someone else")
+        if body.grant and (why := w.orch.cannot_grant(c)):
+            raise HTTPException(409, why)
+        w.decide(case_id, u["id"], body.grant, body.note.strip())
+        return {"status": "deciding"}
 
     @app.get("/api/events")
     def events(after: int = 0, case: str | None = None, limit: int = 200, u: dict = Depends(user)) -> list[dict]:
@@ -676,8 +752,14 @@ def create_web_app(world: World | None = None) -> FastAPI:
         entries = w.store.ledger()
         led = ConcessionLedger(entries)
         teaching = sorted({s.faculty for s in w.instance.sessions})
+        known = {c.id: c for c in w.store.constraints(active_only=False)}
+        # the semester's Gini just after each entry, so the page can show how each concession moved it
+        after = [ConcessionLedger(entries[:i + 1]).gini(teaching, e.semester) for i, e in enumerate(entries)]
         return {"semester": SEMESTER, "gini": led.gini(teaching, SEMESTER), "decay": led.decay,
-                "entries": [e.model_dump() | {"name": w.name_of(e.stakeholder)} for e in entries],
+                "entries": [e.model_dump() | {"name": w.name_of(e.stakeholder), "gini_after": g,
+                                              "case": known[e.constraint_id].source.request
+                                              if e.constraint_id in known else None}
+                            for e, g in zip(entries, after, strict=True)],
                 "stakeholders": [{"id": f, "name": w.name_of(f), "credit": led.credit(f, SEMESTER),
                                   "concessions": led.times().get(f, 0),
                                   "burden": led.counts().get(f, 0.0)} for f in teaching]}
@@ -822,8 +904,47 @@ def create_web_app(world: World | None = None) -> FastAPI:
 
     @app.post("/api/demo/reset")
     def reset(u: dict = Depends(coordinator)) -> dict:
-        state["w"] = World(parser_mode=W().parser_mode)
+        """Start the current world again: a fresh weekly history (study answers are kept)."""
+        registry.reset(current_world.get())
         return {"ok": True}
+
+    # -- worlds ---------------------------------------------------------------------------------
+
+    @app.get("/api/worlds")
+    def worlds() -> list[dict]:
+        """Every world, for the sign-in page (before anyone is signed in) and the office's switcher."""
+        return registry.list()
+
+    @app.post("/api/worlds")
+    def new_world(body: WorldBody, u: dict = Depends(coordinator)) -> dict:
+        from semester.offerings import parse_offerings
+
+        if body.preset == "campus":
+            e = registry.campus()
+        else:
+            if not body.data:
+                raise HTTPException(422, "give a course offering document, or preset: campus")
+            folder = registry.folder / "uploads"
+            folder.mkdir(parents=True, exist_ok=True)
+            name = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(body.filename or "offerings.pdf").name)
+            path = folder / name
+            try:
+                path.write_bytes(base64.b64decode(body.data, validate=True))
+            except (binascii.Error, ValueError):
+                raise HTTPException(422, "data must be base64") from None
+            doc = parse_offerings(path)
+            if not doc.courses or not doc.cohorts:
+                raise HTTPException(422, "no courses and programmes found in that document")
+            e = registry.create(body.name or doc.source or name, doc, source=name)
+        return {k: e[k] for k in ("id", "name", "status")}
+
+    @app.delete("/api/worlds/{world_id}")
+    def delete_world(world_id: str, u: dict = Depends(coordinator)) -> dict:
+        try:
+            registry.delete(world_id)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        return {"deleted": world_id}
 
     dist = ROOT / "frontend" / "dist"
     if dist.exists():
@@ -858,5 +979,10 @@ def run() -> None:
         os.environ["NTS_PARSER"] = args.parser
     if args.test_data is not None:
         os.environ["NTS_TEST_DATA"] = str(args.test_data)
-    uvicorn.run(create_web_app(), host=os.environ.get("NTS_HOST", "127.0.0.1"),
+    # repeated solves (the start-up history, a demo run again) replay from disk; NTS_SOLVE_CACHE=0 solves afresh
+    from core.solver import use_solve_cache
+
+    use_solve_cache(None if os.environ.get("NTS_SOLVE_CACHE") == "0" else ROOT / "runs" / "solve_cache")
+    # the demo campus is made once (then restored like any world); NTS_CAMPUS=0 skips it
+    uvicorn.run(create_web_app(campus=os.environ.get("NTS_CAMPUS", "1") != "0"), host=os.environ.get("NTS_HOST", "127.0.0.1"),
                 port=int(os.environ.get("NTS_PORT", "8000")))

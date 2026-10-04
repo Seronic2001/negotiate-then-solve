@@ -27,6 +27,38 @@ import type {
 } from "./types";
 
 const USER_KEY = "nts.user";
+const WORLD_KEY = "nts.world";
+
+/** The world (department) this browser works in; sent with every request as X-World. */
+export function currentWorld(): string {
+  try {
+    return localStorage.getItem(WORLD_KEY) || "demo";
+  } catch {
+    return "demo";
+  }
+}
+
+export function setCurrentWorld(id: string): void {
+  try {
+    localStorage.setItem(WORLD_KEY, id);
+  } catch {
+    /* the choice lasts until reload */
+  }
+}
+
+export interface WorldRow {
+  id: string;
+  name: string;
+  kind: "demo" | "offerings";
+  status: "ready" | "starting" | "error";
+  error: string | null;
+  source: string;
+  people?: number;
+  sections?: number;
+  sessions?: number;
+  rooms?: number;
+  seeding?: boolean;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -58,6 +90,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = currentUserId();
   const headers = new Headers(init.headers);
   if (user) headers.set("X-User", user);
+  headers.set("X-World", currentWorld());
   if (init.body) headers.set("Content-Type", "application/json");
   const res = await fetch(`/api${path}`, { ...init, headers });
   if (!res.ok) {
@@ -99,6 +132,8 @@ export const api = {
   approvals: () => call<CaseDetail[]>("/approvals"),
   approve: (id: string) => post<{ version: number; notified: Record<string, string> }>(`/approvals/${id}/approve`),
   reject: (id: string, reason: string) => post<{ status: string }>(`/approvals/${id}/reject`, { reason }),
+  /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
+  decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),
   versions: () => call<VersionRow[]>("/versions"),
   timetable: (opts: { version?: number; week?: number | null } = {}) => {
     const q = new URLSearchParams();
@@ -119,7 +154,7 @@ export const api = {
     ),
   semester: () => call<SemesterOverview>("/semester"),
   semesterPublic: () => call<SemesterOverview>("/semester/public"),
-  loadOfferings: (body: { sample: true } | { name: string; data: string }) =>
+  loadOfferings: (body: { sample: true } | { name: string; data: string; populate?: boolean }) =>
     post<{ courses: number; cohorts: number; pools: number; warnings: string[] }>("/semester/offerings", body),
   setSizes: (sizes: Record<string, number>) => post<{ ok: boolean }>("/semester/sizes", { sizes }),
   addPreference: (text: string, preview = false) => post<ParsedInput>("/semester/preferences", { text, preview }),
@@ -137,10 +172,14 @@ export const api = {
   observability: () => call<Observability>("/observability"),
   experiments: () => call<Experiment[]>("/experiments"),
   reset: () => post<{ ok: boolean }>("/demo/reset"),
+  worlds: () => call<WorldRow[]>("/worlds"),
+  newWorld: (body: { preset: "campus" } | { name: string; filename: string; data: string }) =>
+    post<{ id: string; name: string; status: string }>("/worlds", body),
+  deleteWorld: (id: string) => call<{ deleted: string }>(`/worlds/${id}`, { method: "DELETE" }),
   /** The demo department's courses as an offering PDF (timetable office), saved as a download. */
   demoOfferingsPdf: async () => {
     const user = currentUserId();
-    const res = await fetch("/api/semester/demo-offerings.pdf", { headers: user ? { "X-User": user } : {} });
+    const res = await fetch("/api/semester/demo-offerings.pdf", { headers: { "X-World": currentWorld(), ...(user ? { "X-User": user } : {}) } });
     if (!res.ok) throw new ApiError(res.status, res.statusText);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(await res.blob());
