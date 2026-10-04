@@ -17,14 +17,17 @@ $env:NTS_PORT = "$Port"
 $env:NTS_LOCAL_URL = $GpuUrl
 $env:NTS_LOCAL_MODEL = $Model
 
-$parser = "offline"
+# The app uses the model whenever it answers and the rule-based stand-ins whenever it does not, switching
+# back by itself (src/web/fallback.py), so it starts on the model even when the GPU is down right now.
+$parser = if ($Offline) { "offline" } else { "local" }
 if (-not $Offline) {
     try {
         $models = Invoke-RestMethod -Uri "$GpuUrl/models" -TimeoutSec 5
-        if ($models.data.id -contains $Model) { $parser = "local" }
-        else { Write-Host "GPU server is up but does not serve $Model; it serves: $($models.data.id -join ', ')" }
+        if (-not ($models.data.id -contains $Model)) {
+            Write-Host "GPU server is up but does not serve $Model; it serves: $($models.data.id -join ', ')"
+        }
     } catch {
-        Write-Host "GPU server not reachable at $GpuUrl; starting with the offline parser."
+        Write-Host "GPU server not reachable at $GpuUrl right now; the rule-based stand-ins answer until it is back."
     }
 }
 

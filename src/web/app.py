@@ -515,6 +515,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                              "mean_rounds": mean([o.rounds for o in outcomes if o.rounds])},
             "recent": w.store.events(limit=None)[-12:],
             "models": w.models, "sessions": len(w.instance.sessions), "faculty": len(w.instance.faculty),
+            "model": None if w.model_link is None else {**w.model_link.status(), "mode": w.parser_mode},
             "rooms": len(w.instance.rooms), "groups": len(w.instance.groups),
             "test_run": w.test_run,
         }
@@ -1076,6 +1077,10 @@ def run() -> None:
     from core.solver import use_solve_cache
 
     use_solve_cache(None if os.environ.get("NTS_SOLVE_CACHE") == "0" else ROOT / "runs" / "solve_cache")
+    # each world's state survives a restart (runs/state/<world>/); NTS_PERSIST=0 replays the history every time
+    from .world import use_state_dir
+
+    use_state_dir(None if os.environ.get("NTS_PERSIST") == "0" else ROOT / "runs" / "state")
     # the demo campus is made once (then restored like any world); NTS_CAMPUS=0 skips it
     uvicorn.run(create_web_app(campus=os.environ.get("NTS_CAMPUS", "1") != "0"), host=os.environ.get("NTS_HOST", "127.0.0.1"),
                 port=int(os.environ.get("NTS_PORT", "8000")))

@@ -217,6 +217,7 @@ export interface Overview {
   negotiations: { agreed: number; escalated: number; feasible: number; mean_rounds: number | null };
   recent: EventRow[];
   models: { parser: string; policy: string };
+  model?: { up: boolean | null; error: string | null; since: number; mode: string } | null; // null: offline mode
   sessions: number;
   faculty: number;
   rooms: number;

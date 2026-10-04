@@ -4,7 +4,10 @@ where negotiation messages wait for people, the semester planner, and which view
 from __future__ import annotations
 
 import copy
+import hashlib
+import io
 import os
+import pickle
 import random
 import threading
 import time
@@ -27,6 +30,37 @@ from pipeline.orchestrator import Orchestrator
 from pipeline.store import Store
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Where worlds keep their state between server runs (``use_state_dir``); None keeps it in memory only,
+# as the tests and evaluations do. ``nts-web`` turns it on.
+STATE_DIR: Path | None = None
+
+
+def use_state_dir(folder: Path | str | None) -> None:
+    global STATE_DIR
+    STATE_DIR = Path(folder) if folder else None
+
+
+class _Pickler(pickle.Pickler):
+    """The department is rebuilt at start-up, not saved: references to it are written as a name."""
+
+    def __init__(self, f, instance) -> None:
+        super().__init__(f, protocol=pickle.HIGHEST_PROTOCOL)
+        self.instance = instance
+
+    def persistent_id(self, obj):
+        return "instance" if obj is self.instance else None
+
+
+class _Unpickler(pickle.Unpickler):
+    def __init__(self, f, instance) -> None:
+        super().__init__(f)
+        self.instance = instance
+
+    def persistent_load(self, pid):
+        if pid == "instance":
+            return self.instance
+        raise pickle.UnpicklingError(f"unknown reference {pid!r}")
 SEMESTER = "2026-1"
 COORDINATOR = "C-TT"
 
@@ -206,7 +240,12 @@ class World:
         self.seeding = False
         self.restoring = False
         self.snapshot: dict | None = None  # the demo state: taken once the start-up history has replayed
-        if seed_history:
+        # saved state from an earlier run of the same department, when ``use_state_dir`` is on
+        self.state_dir = STATE_DIR / world_id if STATE_DIR and not self.test_data else None
+        self._fingerprint = hashlib.sha256(self.instance.model_dump_json().encode()).hexdigest()[:16]
+        self._saved_mark: tuple | None = None
+        resumed = self._resume()
+        if seed_history and not resumed:
             self.semester.bootstrap_demo()  # the semester timetable the club desk and preferences read
             self.seeding = True
             seed = self._seed_test if self.test_data else self._seed if instance is None else self._seed_department
@@ -218,7 +257,87 @@ class World:
     def _snapshot_when_ready(self) -> None:
         while self.seeding or self.semester.job.get("running"):
             time.sleep(0.5)
-        self.snapshot = self._take_snapshot()
+        if self.snapshot is None:  # a resumed world brought its demo state with it
+            self.snapshot = self._take_snapshot()
+            self._write("demo", self.snapshot)
+        while self.state_dir is not None:  # then keep the live state on disk
+            time.sleep(5)
+            self.save()
+
+    # -- state between runs ---------------------------------------------------------------
+
+    def _mark(self) -> tuple:
+        (events,) = self.store._exec("SELECT COALESCE(MAX(n), 0) FROM events").fetchone()
+        return (events, len(self.orch.cases), len(self.inbox.items), sum(i.reply is not None for i in self.inbox.items.values()))
+
+    def save(self) -> bool:
+        """Write the live state if anything changed since the last write; True if written."""
+        if self.state_dir is None or self.seeding or self.restoring:
+            return False
+        mark = self._mark()
+        if mark == self._saved_mark:
+            return False
+        try:
+            snap = self._take_snapshot()
+        except RuntimeError:  # a request changed the cases while they were copied: next time
+            return False
+        self._write("live", snap)
+        self._saved_mark = mark
+        return True
+
+    def _write(self, name: str, snap: dict) -> None:
+        if self.state_dir is None:
+            return
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        buf = io.BytesIO()
+        _Pickler(buf, self.instance).dump({"fingerprint": self._fingerprint, "snap": snap})
+        tmp = self.state_dir / f"{name}.tmp"
+        tmp.write_bytes(buf.getvalue())
+        tmp.replace(self.state_dir / f"{name}.pkl")
+
+    def _read(self, name: str) -> dict | None:
+        path = self.state_dir / f"{name}.pkl" if self.state_dir else None
+        if path is None or not path.exists():
+            return None
+        try:
+            saved = _Unpickler(io.BytesIO(path.read_bytes()), self.instance).load()
+        except Exception as e:  # noqa: BLE001 - written by older code: replay instead
+            print(f"[state] {path} could not be read ({type(e).__name__}: {e}); replaying the history", flush=True)
+            return None
+        if saved.get("fingerprint") != self._fingerprint:
+            print(f"[state] {path} is for a different department; replaying the history", flush=True)
+            return None
+        return saved["snap"]
+
+    def _resume(self) -> bool:
+        """Carry on from the state saved by an earlier run, instead of replaying the history."""
+        live = self._read("live")
+        if live is None:
+            return False
+        try:
+            self._apply(live)
+        except Exception as e:  # noqa: BLE001 - a state this code cannot take: replay instead
+            print(f"[state] saved state could not be applied ({type(e).__name__}: {e}); replaying", flush=True)
+            return False
+        self.snapshot = self._read("demo")
+        # a request the last run was still working on has nobody carrying it on: it starts again
+        # (its unanswered messages are closed); one waiting for a person stays as it was
+        waiting = {RequestStatus.PUBLISHED, RequestStatus.REFUSED, RequestStatus.DENIED, RequestStatus.ANSWERED,
+                   RequestStatus.FORWARDED, RequestStatus.AWAITING_APPROVAL, RequestStatus.ESCALATED,
+                   RequestStatus.CLARIFICATION}
+        for item in list(self.inbox.items.values()):
+            if item.reply is None:
+                self.inbox.answer(item.id, Reply(decision="no_reply"), "restart")
+        stalled = [c for c in self.orch.cases.values() if c.status not in waiting]
+        self._saved_mark = self._mark()
+        self.store.log(None, "resumed", cases=len(self.orch.cases), restarted=[c.id for c in stalled])
+        for c in stalled:
+            r = c.request.model_copy(deep=True)
+            r.status = RequestStatus.RECEIVED  # from the start, as if just received
+            self.store.log(c.id, "restarted", was=c.status.value)
+            self.submit(r)
+        print(f"[state] {self.world_id}: resumed {len(self.orch.cases)} requests from {self.state_dir}", flush=True)
+        return True
 
     def _take_snapshot(self) -> dict:
         """Everything a person can change: the store (requests, versions, ledger, events), the cases,
@@ -238,7 +357,7 @@ class World:
         messages go unanswered), so nothing they do lands in the restored state."""
         if self.snapshot is None:
             raise ValueError("the demo state is not ready yet: the start-up history is still replaying")
-        snap, keep = self.snapshot, {id(self.instance): self.instance}
+        snap = self.snapshot
         self.restoring = True
         try:
             for item in list(self.inbox.items.values()):
@@ -249,29 +368,35 @@ class World:
                         pass
             for t in list(self.threads.values()):
                 t.join(timeout=90)
-            with self.store._lock:
-                self.store.db.deserialize(snap["db"])
-            self.orch.cases = copy.deepcopy(snap["cases"], keep)  # a fresh copy, so it can be restored again
-            items: dict[str, InboxItem] = {}
-            for iid, case_id, to, message, created, reply, by, at in copy.deepcopy(snap["inbox"], keep):
-                item = InboxItem(0, case_id, to, message)
-                item.id, item.created, item.reply, item.answered_by, item.answered_at = iid, created, reply, by, at
-                if reply is not None:
-                    item.event.set()
-                items[iid] = item
-            with self.inbox.lock:
-                self.inbox.items = items
-            self.profiles, self.simulators = copy.deepcopy(snap["people"], keep)
-            self.autopilot = dict(snap["autopilot"])
-            self.threads = {}
-            from semester.service import SemesterState
-
-            with self.semester.lock:
-                self.semester.state = SemesterState.model_validate_json(snap["semester"])
-            self.semester._rooms_for(self.semester.state.doc)
-            self.semester.save()
+            self._apply(snap)
         finally:
             self.restoring = False
+        self.save()
+
+    def _apply(self, snap: dict) -> None:
+        """Put a snapshot's state in place (a copy of it, so it can be applied again)."""
+        keep = {id(self.instance): self.instance}
+        with self.store._lock:
+            self.store.db.deserialize(snap["db"])
+        self.orch.cases = copy.deepcopy(snap["cases"], keep)  # a fresh copy, so it can be restored again
+        items: dict[str, InboxItem] = {}
+        for iid, case_id, to, message, created, reply, by, at in copy.deepcopy(snap["inbox"], keep):
+            item = InboxItem(0, case_id, to, message)
+            item.id, item.created, item.reply, item.answered_by, item.answered_at = iid, created, reply, by, at
+            if reply is not None:
+                item.event.set()
+            items[iid] = item
+        with self.inbox.lock:
+            self.inbox.items = items
+        self.profiles, self.simulators = copy.deepcopy(snap["people"], keep)
+        self.autopilot = dict(snap["autopilot"])
+        self.threads = {}
+        from semester.service import SemesterState
+
+        with self.semester.lock:
+            self.semester.state = SemesterState.model_validate_json(snap["semester"])
+        self.semester._rooms_for(self.semester.state.doc)
+        self.semester.save()
 
     def reload_policies(self) -> None:
         """Re-read the policy documents (OCR is cached) and hand the new corpus to the policy agent."""
@@ -313,8 +438,11 @@ class World:
         from agents.swap import LLMSwapReader, RuleSwapReader
 
         if self.parser_mode == "gemini":
-            self.models["swaps"] = self.parser.client.model
-            return LLMSwapReader(self.instance, self.parser.client)
+            from .fallback import Fallback
+
+            self.models["swaps"] = f"{self.models['parser']} (rules when unreachable)"
+            return Fallback(self.model_link, lambda c: LLMSwapReader(self.instance, c), RuleSwapReader(self.instance),
+                            "swaps")
         self.models["swaps"] = "rules"
         return RuleSwapReader(self.instance)
 
@@ -324,8 +452,11 @@ class World:
         from agents.negotiation import ReplyParser, RuleReplyParser
 
         if self.parser_mode in ("gemini", "local"):
+            from .fallback import Fallback
+
             self.models["replies"] = self.models["parser"]
-            return ReplyParser(self.parser.client, self.instance)
+            return Fallback(self.model_link, lambda c: ReplyParser(c, self.instance), RuleReplyParser(self.instance),
+                            "replies")
         self.models["replies"] = "offline rules (keywords)"
         return RuleReplyParser(self.instance)
 
@@ -364,27 +495,52 @@ class World:
         return kind
 
     def _components(self):
+        """The parser and policy check. With a model (``gemini``, ``local``) each is wrapped so that the
+        rule-based stand-in answers whenever the model cannot (``web.fallback``); offline, the stand-ins."""
         kind = self.retriever_kind = self._retriever_kind()
+        rule_parser, rule_policy = RuleParser(self.instance), RulePolicyAgent(self.rules, self.instance, retriever=kind)
+        self.model_link = None
+        if self.parser_mode not in ("gemini", "local"):
+            return (rule_parser, rule_policy,
+                    {"parser": "offline rules", "policy": f"offline rules ({kind} retrieval)", "retrieval": kind})
+        from agents.policy import PolicyAgent
+
+        from .fallback import Fallback, ModelLink
+
         if self.parser_mode == "gemini":
-            from agents.policy import PolicyAgent
             from language.llm import GeminiClient, default_model
             from language.parsing import SystemTwoParser
 
-            client = GeminiClient(default_model("agent"))
-            return (SystemTwoParser(self.instance, client), PolicyAgent(self.rules, client, self.instance, retriever=kind),
-                    {"parser": client.model, "policy": client.model, "retrieval": kind})
-        if self.parser_mode == "local":
+            name = default_model("agent")
+            self.model_link = ModelLink(lambda: GeminiClient(name), on_change=self._model_changed)
+            make_parser = lambda c: SystemTwoParser(self.instance, c)  # noqa: E731
+        else:
             # the multi-task model parses (compiler prompt) and reviews (policy prompt), as in eval_policy --local
-            from agents.policy import PolicyAgent
+            import urllib.request
+
             from language.compiler import CompilerParser
             from language.local import LocalClient
 
-            client = LocalClient(base_url=os.environ.get("NTS_LOCAL_URL", "http://localhost:8080/v1"), timeout=600)
-            return (CompilerParser(self.instance, client), PolicyAgent(self.rules, client, self.instance, retriever=kind),
-                    {"parser": f"{client.model} (fine-tuned)", "policy": f"{client.model} (fine-tuned)",
-                     "retrieval": kind})
-        return (RuleParser(self.instance), RulePolicyAgent(self.rules, self.instance, retriever=kind),
-                {"parser": "offline rules", "policy": f"offline rules ({kind} retrieval)", "retrieval": kind})
+            url = os.environ.get("NTS_LOCAL_URL", "http://localhost:8080/v1")
+            name = f"{os.environ.get('NTS_LOCAL_MODEL') or 'local model'} (fine-tuned)"
+
+            def probe(_client) -> None:  # a quick answer from /models, so a dead host costs seconds, not the timeout
+                with urllib.request.urlopen(f"{url.rstrip('/')}/models", timeout=3) as r:
+                    r.read()
+
+            self.model_link = ModelLink(
+                lambda: LocalClient(base_url=url, timeout=float(os.environ.get("NTS_LOCAL_TIMEOUT", "120"))),
+                probe=probe, on_change=self._model_changed)
+            make_parser = lambda c: CompilerParser(self.instance, c)  # noqa: E731
+        self.model_link.usable()  # connect now if it can; it is tried again later if not
+        parser = Fallback(self.model_link, make_parser, rule_parser, "parser")
+        policy = Fallback(self.model_link, lambda c: PolicyAgent(self.rules, c, self.instance, retriever=kind),
+                          rule_policy, "policy")
+        fallback = " (rules when unreachable)"
+        return parser, policy, {"parser": name + fallback, "policy": name + fallback, "retrieval": kind}
+
+    def _model_changed(self, up: bool, error: str | None) -> None:
+        self.store.log(None, "model_reachable" if up else "model_unreachable", error=error)
 
     # -- names ----------------------------------------------------------------------------
 

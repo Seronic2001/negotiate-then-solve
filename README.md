@@ -656,6 +656,19 @@ UI follows them through the event log.
   2.5 min (LLM answers are cached in `runs/llm_cache/` as before). Simulated
   replies skip their 1.2 s pause while the history is seeded. `NTS_SOLVE_CACHE=0`
   solves afresh; evaluations never use this cache.
+- **State survives restarts.** `nts-web` saves each world's state (requests,
+  timetable versions, inboxes, simulated people, semester plan) to
+  `runs/state/<world>/live.pkl` a few seconds after anything changes, and its
+  demo state to `demo.pkl`; the next start carries on from them instead of
+  replaying the history. A state saved for a different department, or one the
+  code can no longer read, is ignored. A request that was mid-way when the
+  server stopped starts again. `NTS_PERSIST=0` replays every time.
+- **The model can drop out.** In `local` and `gemini` mode the parser, policy
+  check and reply reader fall back to their rule-based stand-ins whenever the
+  model does not answer, and go back to the model by itself when it does
+  (`src/web/fallback.py`); a model server that is down at start-up does not
+  stop the app. The sidebar says which is in use. `NTS_LOCAL_TIMEOUT` (default
+  120 s) bounds one model call.
 - **Offline by default.** Without an API key, `src/language/rule_parser.py` (a
   rule-based stand-in for System Two: 94% action accuracy and 83% compiled
   constraints on the paraphrased test split, vs Gemini's 100% on validation)
