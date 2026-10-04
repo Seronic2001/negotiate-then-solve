@@ -1,6 +1,6 @@
 import { Lock } from "lucide-react";
 import { lazy, Suspense, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { EmptyState, Mark, Skeleton } from "./components/ui";
 import { AuthProvider, useAuth } from "./lib/auth";
@@ -25,6 +25,7 @@ const Clubs = lazy(() => import("./pages/Clubs"));
 const Transparency = lazy(() => import("./pages/Transparency"));
 const Observability = lazy(() => import("./pages/Observability"));
 const Experiments = lazy(() => import("./pages/Experiments"));
+const Study = lazy(() => import("./pages/Study"));
 
 function Splash() {
   return (
@@ -51,7 +52,15 @@ function Guard({ view, children }: { view: View; children: ReactNode }) {
 
 function Routed() {
   const { user, ready } = useAuth();
+  const { pathname } = useLocation();
   if (!ready) return <Splash />;
+  if (pathname.startsWith("/study"))
+    // participants enter by code; no portal sign-in needed for the labelling tasks
+    return (
+      <Suspense fallback={<Splash />}>
+        <Study />
+      </Suspense>
+    );
   if (!user)
     return (
       <Suspense fallback={<Splash />}>

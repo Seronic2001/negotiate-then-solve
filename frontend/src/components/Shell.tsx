@@ -36,6 +36,7 @@ import { useApi, useHotkey } from "../lib/hooks";
 import { ROLE_LABEL, STATUS } from "../lib/meta";
 import { useTheme } from "../lib/theme";
 import type { Overview, View } from "../lib/types";
+import { StudyBanner } from "./StudyBanner";
 import { Avatar, Kbd, LiveDot, Mark } from "./ui";
 
 interface NavItem {
@@ -150,7 +151,10 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="font-serif text-[15px] font-semibold">Negotiate, Then Solve</span>
         </header>
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-8">{children}</div>
+          <div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-8">
+            <StudyBanner />
+            {children}
+          </div>
         </main>
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} items={items} />

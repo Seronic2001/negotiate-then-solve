@@ -172,6 +172,10 @@ class World:
         self.simulators = {p: Simulator(self.instance, prof) for p, prof in self.profiles.items()}
         self.system_one, self.tau, self.system_one_info = self._train_system_one()
         self.parser, self.policy, self.models = self._components()
+        self.reply_parser = self._reply_parser()
+        from evaluation.study import Study
+
+        self.study = Study(Path(os.environ.get("NTS_STUDY_DIR", ROOT / "runs" / "study")))
         teaching = sorted({s.faculty for s in self.instance.sessions})
         self.orch = Orchestrator(
             self.instance, self.store, parser=self.parser, negotiator=self._negotiator(),
@@ -231,6 +235,39 @@ class World:
             return LLMSwapReader(self.instance, self.parser.client)
         self.models["swaps"] = "rules"
         return RuleSwapReader(self.instance)
+
+    def _reply_parser(self):
+        """Reads a reply typed in the inbox into one tool call: the agent model
+        (Gemini or the fine-tuned local model), or the keyword handler offline."""
+        from agents.negotiation import ReplyParser, RuleReplyParser
+
+        if self.parser_mode in ("gemini", "local"):
+            self.models["replies"] = self.models["parser"]
+            return ReplyParser(self.parser.client, self.instance)
+        self.models["replies"] = "offline rules (keywords)"
+        return RuleReplyParser(self.instance)
+
+    def practice_clash(self, person: str) -> dict:
+        """A pilot participant's practice negotiation: a colleague claims the
+        only routers lab for Tuesday afternoon (answered by the simulator); the
+        participant then asks for the same in their own words, and the
+        negotiator writes to them. Returns what to ask for."""
+        free = [s for s in self.instance.sessions if s.kind.value == "practical" and not s.equipment]
+        mine = next((s for s in free if s.faculty == person), None)
+        other = next((s for s in free if s.faculty != person), None)
+        if mine is None or other is None:
+            raise ValueError(f"{person} has no practical without special equipment to practise with")
+        self.autopilot[other.faculty] = True
+        self.autopilot[person] = False
+        title = self.instance.course_title
+        # worded unlike the seeded history: intake drops a message it has already received
+        r = self.intake.from_portal(other.faculty, f"Please keep my {title(other.course)} practical on Tuesday "
+                                                   "afternoon; it must be then, and it needs the routers.")
+        if r is not None:
+            self.submit(r, wait=True)
+        return {"colleague": self.name_of(other.faculty), "course": title(mine.course), "session": mine.id,
+                "task": f"Your {title(mine.course)} practical also needs the routers, and you would like it on "
+                        "Tuesday afternoon. Ask the timetable office for that, in your own words."}
 
     def _retriever_kind(self) -> str:
         """``NTS_RETRIEVER`` (default hybrid: BM25 + embeddings). Without the

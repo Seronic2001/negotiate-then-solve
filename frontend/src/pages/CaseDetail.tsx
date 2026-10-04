@@ -8,7 +8,9 @@ import { Avatar, Badge, Card, CardHeader, Collapse, EmptyState, Json, Label, Met
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ago, num, pct, ROLE_LABEL, secs } from "../lib/meta";
+import { study } from "../lib/study";
 import type { CaseDetail as Detail } from "../lib/types";
+import { useStudySession } from "../components/StudyBanner";
 
 type Tab = "summary" | "negotiation" | "details";
 const OLD_TABS: Record<string, Tab> = { overview: "summary", change: "summary", parse: "details", policy: "details", trace: "details" };
@@ -92,6 +94,7 @@ function Summary({ c }: { c: Detail }) {
   const outcome = outcomeText(c);
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <UnderstoodCheck c={c} />
       <Card>
         <CardHeader title={`Reply to ${c.sender_name}`} />
         <div className="p-5">
@@ -358,5 +361,51 @@ function Details({ c }: { c: Detail }) {
         </Collapse>
       ) : null}
     </div>
+  );
+}
+
+/** Study: a pilot participant says whether the system understood their own request. */
+function UnderstoodCheck({ c }: { c: Detail }) {
+  const session = useStudySession();
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [comment, setComment] = useState("");
+  if (!session || c.sender !== session.persona || c.running || !c.parse) return null;
+  const understood = c.parse.constraints.map((k) => k.text);
+  const save = async (value: string) => {
+    setAnswer(value);
+    await study.live({ kind: "understood", case: c.id, text: c.text, reading: understood.join(" ") || c.parse?.action, value,
+                       ...(comment.trim() ? { comment: comment.trim() } : {}) });
+  };
+  return (
+    <Card className="border-brand/30 lg:col-span-2">
+      <CardHeader title="Study: did the system understand you?" subtitle="Compare what you wrote with how it was read" />
+      <div className="space-y-3 p-5 text-[14px]">
+        {understood.length ? (
+          <ul className="list-disc space-y-1 pl-5 text-ink-2">
+            {understood.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-ink-2">It was read as: {c.parse.action}{c.parse.refusal ? ` (${c.parse.refusal})` : ""}.</p>
+        )}
+        {answer ? (
+          <p className="text-[13.5px] text-ok">Saved: {answer}. Thank you.</p>
+        ) : (
+          <>
+            <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What was missed or wrong? (optional)"
+                   className="w-full rounded-md border border-line bg-panel px-3 py-2 text-[13.5px] outline-none focus:border-brand/60" />
+            <div className="flex flex-wrap gap-2">
+              {(["yes", "partly", "no"] as const).map((v) => (
+                <button key={v} onClick={() => void save(v)}
+                        className="rounded-md border border-line px-3.5 py-1.5 text-[13.5px] capitalize hover:border-brand/60 hover:bg-panel-2">
+                  {v === "yes" ? "Yes, exactly" : v === "partly" ? "Partly" : "No"}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
   );
 }

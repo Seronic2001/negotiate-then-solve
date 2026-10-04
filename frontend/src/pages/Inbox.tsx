@@ -9,7 +9,10 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { ago } from "../lib/meta";
+import { study as studyApi } from "../lib/study";
 import type { InboxItem } from "../lib/types";
+import { useStudySession } from "../components/StudyBanner";
+import { RatingForm } from "../components/Rating";
 
 export default function Inbox() {
   const { user } = useAuth();
@@ -300,13 +303,128 @@ function Thread({
                 )}
               </div>
               {error && <p className="rounded-md bg-bad/10 px-3 py-2 text-sm text-bad">{error}</p>}
+              {mine && <OwnWords item={item} onDone={onDone} />}
             </div>
           )}
         </div>
       </Card>
+      {mine && <RateMessage item={item} />}
       <Collapse title="Why these options (the facts behind the message)">
           <GroundedExplanation m={m} />
         </Collapse>
     </div>
+  );
+}
+
+/** Reply in your own words: the reply parser reads it into one answer, which the sender confirms before it is sent. */
+function OwnWords({ item, onDone }: { item: InboxItem; onDone: (msg: string) => Promise<void> }) {
+  const study = useStudySession();
+  const [text, setText] = useState("");
+  const [reading, setReading] = useState<{ reading: string; parser: string | null } | null>(null);
+  const [rejected, setRejected] = useState(false);
+  const [busy, setBusy] = useState<"check" | "send" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const check = async () => {
+    setBusy("check");
+    setError(null);
+    setRejected(false);
+    try {
+      setReading(await api.replyText(item.id, text, true));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const send = async () => {
+    setBusy("send");
+    setError(null);
+    try {
+      const got = await api.replyText(item.id, text, false);
+      if (study) await studyApi.live({ kind: "reply", item: item.id, text, reading: got.reading, confirmed: true });
+      await onDone("Reply sent. The negotiator continues with your answer.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const wrong = async () => {
+    setRejected(true);
+    if (study && reading) await studyApi.live({ kind: "reply", item: item.id, text, reading: reading.reading, confirmed: false });
+  };
+
+  return (
+    <div className="rounded-md border border-line p-4">
+      <p className="text-[13px] font-medium">Or reply in your own words</p>
+      <textarea
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setReading(null);
+        }}
+        rows={2}
+        placeholder="e.g. Wednesday works for me, but not before 11."
+        className="mt-2 w-full resize-none rounded-md border border-line bg-panel p-2.5 text-[13.5px] outline-none focus:border-brand/60"
+      />
+      {!reading ? (
+        <Button size="sm" className="mt-2" disabled={!text.trim()} loading={busy === "check"} onClick={check}>
+          Check how it is read
+        </Button>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <p className="rounded-md bg-panel-2 px-3 py-2 text-[13.5px]">
+            <span className="text-ink-3">The system reads this as: </span>
+            {reading.reading}
+          </p>
+          {rejected ? (
+            <p className="text-[13px] text-ink-2">Thanks, noted. Rephrase it above, or answer with the buttons.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="primary" icon={Check} loading={busy === "send"} onClick={send}>
+                Yes, send it
+              </Button>
+              <Button size="sm" icon={X} onClick={wrong}>
+                No, that is not what I meant
+              </Button>
+            </div>
+          )}
+          {reading.parser && <p className="text-[11.5px] text-ink-3">Read by: {reading.parser}</p>}
+        </div>
+      )}
+      {error && <p className="mt-2 text-[13px] text-bad">{error}</p>}
+    </div>
+  );
+}
+
+/** Pilot participants rate the message they received, as in the study's rating task. */
+function RateMessage({ item }: { item: InboxItem }) {
+  const study = useStudySession();
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!study) return null;
+  return (
+    <Card>
+      <CardHeader title="Study: rate this message" subtitle="How it reads to you, whatever you answered" />
+      <div className="p-5">
+        {saved ? (
+          <p className="flex items-center gap-2 text-[13.5px] text-ok">
+            <Check size={15} /> Saved. Thank you.
+          </p>
+        ) : (
+          <RatingForm
+            busy={busy}
+            submitLabel="Save rating"
+            onSave={async (value) => {
+              setBusy(true);
+              await studyApi.live({ kind: "rating", item: item.id, text: item.message.text, value });
+              setBusy(false);
+              setSaved(true);
+            }}
+          />
+        )}
+      </div>
+    </Card>
   );
 }

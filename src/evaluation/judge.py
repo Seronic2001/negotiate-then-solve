@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from language.llm import GeminiClient, default_model
 
 from .stats import mean
+from .study import judge_id
 
 JUDGE_PROMPT = """You rate messages that a university timetabling system sent to faculty
 members to resolve scheduling conflicts. For each message give two scores:
@@ -51,7 +52,8 @@ def messages_from_report(path: Path) -> list[dict]:
     for config, block in report["configs"].items():
         for row in block["rows"]:
             for k, text in enumerate(row.get("messages", [])):
-                out.append({"id": f"{config}/{row['scenario']}/{k + 1}", "config": config, "text": text})
+                out.append({"id": judge_id(config, row["scenario"], k, row.get("seed", 0)), "config": config,
+                            "text": text})
     return out
 
 
