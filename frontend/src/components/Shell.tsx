@@ -4,6 +4,7 @@ import {
   Activity,
   BadgeCheck,
   BookOpen,
+  ClipboardCheck,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -54,16 +55,17 @@ export const NAV: NavItem[] = [
   { to: "/inbox", label: "Inbox", icon: Inbox, group: "main", view: "inbox", badge: "inbox" },
   { to: "/approvals", label: "Approvals", icon: BadgeCheck, group: "main", view: "approvals", badge: "approvals" },
   { to: "/documents", label: "Policy documents", icon: FileUp, group: "main", view: "documents" },
-  { to: "/semester", label: "Build timetable", icon: Hammer, group: "semester", view: "semester" },
+  { to: "/semester", label: "Semester plan", icon: Hammer, group: "semester", view: "semester" },
   { to: "/preferences", label: "Semester preferences", icon: SlidersHorizontal, group: "semester", view: "prefs" },
   { to: "/clubs", label: "Club activities", icon: Music, group: "semester", view: "clubs" },
-  { to: "/timetable", label: "Timetable", icon: CalendarDays, group: "main", view: "timetable" },
+  { to: "/timetable", label: "This week", icon: CalendarDays, group: "main", view: "timetable" },
   { to: "/fairness", label: "Fairness", icon: Scale, group: "reference", view: "fairness" },
   { to: "/policy", label: "Handbook", icon: BookOpen, group: "reference", view: "handbook" },
   { to: "/transparency", label: "How it works", icon: Waypoints, group: "reference", view: "how" },
   { to: "/graph", label: "Knowledge graph", icon: Network, group: "research", view: "graph" },
   { to: "/observability", label: "System health", icon: Activity, group: "research", view: "health" },
   { to: "/experiments", label: "Experiments", icon: FlaskConical, group: "research", view: "experiments" },
+  { to: "/human-study", label: "Human study", icon: ClipboardCheck, group: "research", view: "study" },
 ];
 
 const COLLAPSED_KEY = "nts.sidebar.collapsed";
@@ -344,6 +346,21 @@ function Account({ collapsed = false }: { collapsed?: boolean }) {
                   </div>
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/study"); // enters with the code the timetable office issued
+                }}
+                className="mt-1 flex w-full items-center gap-2.5 rounded-md border-t border-line px-2 py-1.5 pt-2 text-left hover:bg-panel-2"
+              >
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand/10 text-brand">
+                  <FlaskConical size={13} />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px]">Study participant</p>
+                  <p className="truncate text-[11px] text-ink-3">Sign in with a participant code</p>
+                </div>
+              </button>
             </div>
             <button onClick={signOut} className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-[13px] text-ink-2 hover:bg-panel-2">
               <LogOut size={14} /> Sign out

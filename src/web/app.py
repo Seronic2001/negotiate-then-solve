@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from collections import Counter
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -45,6 +46,8 @@ from language.llm import FREE_TIER, LLMError
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 
+from .wording import TIER_LABEL, plain
+from .wording import TIER_WHO as TIER_WHO_PLAIN
 from .world import (
     COORDINATOR,
     OVERSIGHT,
@@ -77,14 +80,17 @@ def _placement(w: World, p: Placement | None) -> dict | None:
 
 def _constraint(w: World, c) -> dict:
     return {"id": c.id, "type": c.type.value, "hard": c.hard, "tier": int(c.tier), "tier_name": TIER_NAME[c.tier],
-            "owner": c.owner, "owner_name": w.name_of(c.owner), "text": describe(w.instance, c),
+            "tier_label": TIER_LABEL[int(c.tier)], "tier_who": TIER_WHO_PLAIN[int(c.tier)],
+            "owner": c.owner, "owner_name": w.name_of(c.owner), "text": plain(describe(w.instance, c)),
             "when": c.when.model_dump(), "justification": c.justification.value,
             "source": c.source.model_dump(), "valid": c.valid.model_dump()}
 
 
 def _message(w: World, m: Message | dict) -> dict:
     m = m if isinstance(m, dict) else m.model_dump()
-    return {**m, "to_name": w.name_of(m["to"]),
+    return {**m, "to_name": w.name_of(m["to"]), "text": plain(m["text"]),
+            "facts": [{**f, "text": plain(f["text"])} for f in m.get("facts", [])],
+            "claims": [{**c, "text": plain(c["text"])} for c in m.get("claims", [])],
             "offers": [{**o, "placements": [{"session": s, "session_name": session_name(w.instance, s),
                                               **_placement(w, Placement(**p))} for s, p in o["placements"].items()]}
                        for o in m["offers"]]}
@@ -97,7 +103,9 @@ def _summary(w: World, r: Request, case: Case | None) -> dict:
             "status": status, "route": case.route if case else "",
             "type": case.parse.output.request_type if case and case.parse and case.parse.output else None,
             "rounds": case.outcome.rounds if case and case.outcome else 0,
-            "running": r.id in w.threads and w.threads[r.id].is_alive()}
+            "running": r.id in w.threads and w.threads[r.id].is_alive(),
+            # who an escalation went to, so each person's home page lists only the decisions that are theirs
+            "escalated_to": case.outcome.escalation.to if case and case.outcome and case.outcome.escalation else None}
 
 
 def _case_detail(w: World, case: Case) -> dict:
@@ -129,10 +137,10 @@ def _case_detail(w: World, case: Case) -> dict:
             "messages": [_message(w, m) for m in o.messages],
             "replies": [r.model_dump(exclude_none=True) for r in o.replies],
             "concessions": [e.model_dump() | {"name": w.name_of(e.stakeholder)} for e in o.concessions],
-            "notices": o.notices,
+            "notices": {k: plain(v) for k, v in o.notices.items()},
             "escalation": None if o.escalation is None else {"to": o.escalation.to, "to_name": w.name_of(
                 o.escalation.to) if o.escalation.to in inst.faculty_by_id else o.escalation.to,
-                "reason": o.escalation.reason, "text": o.escalation.text},
+                "reason": plain(o.escalation.reason), "text": plain(o.escalation.text)},
             "solver": None if o.result is None else {"status": o.result.status, "wall_time": o.result.wall_time,
                                                      "moved": o.result.moved,
                                                      "soft_violations": o.result.soft_violations}}
@@ -143,8 +151,8 @@ def _case_detail(w: World, case: Case) -> dict:
     else:
         d["proposal"] = None
     d["fairness"] = case.fairness
-    d["reply"] = case.reply
-    d["notices"] = case.notices
+    d["reply"] = plain(case.reply)
+    d["notices"] = {k: plain(v) for k, v in case.notices.items()}
     d["inbox"] = [_inbox_item(w, i) for i in w.inbox.items.values() if i.case_id == case.id]
     d["events"] = w.store.events(case.id)
     return d
@@ -215,17 +223,25 @@ def _pct(xs: list[float], q: float) -> float | None:
     return xs[min(len(xs) - 1, round(q / 100 * (len(xs) - 1)))]
 
 
+_CACHE_MODEL: dict[str, str] = {}  # cache file -> model; cached answers never change, so each file is read once
+_CACHE_LOCK = threading.Lock()
+
+
 def _llm_usage() -> list[dict]:
     cache = ROOT / "runs" / "llm_cache"
     today = date.today().isoformat()
     out = []
-    counts: Counter[str] = Counter()
-    if cache.exists():
-        for f in cache.glob("*.json"):
-            try:
-                counts[json.loads(f.read_text(encoding="utf-8")).get("model", "?")] += 1
-            except (OSError, ValueError):
-                continue
+    with _CACHE_LOCK:  # requests run in a thread pool
+        if cache.exists():
+            names = {f.name for f in cache.glob("*.json")}
+            for name in names - _CACHE_MODEL.keys():
+                try:
+                    _CACHE_MODEL[name] = json.loads((cache / name).read_text(encoding="utf-8")).get("model", "?")
+                except (OSError, ValueError):
+                    continue
+            for gone in _CACHE_MODEL.keys() - names:
+                del _CACHE_MODEL[gone]
+        counts = Counter(_CACHE_MODEL.values())
     models = set(counts) | {m for m in FREE_TIER if (cache / f"_quota-{m}-{today}.txt").exists()}
     for m in sorted(models):
         q = cache / f"_quota-{m}-{today}.txt"
@@ -233,6 +249,23 @@ def _llm_usage() -> list[dict]:
         out.append({"model": m, "used_today": int(q.read_text()) if q.exists() else 0, "rpd": rpd, "rpm": rpm,
                     "cached_responses": counts.get(m, 0)})
     return out
+
+
+# The main negotiation experiment: three runs that together make the reduced plan (README, Interpretation layer)
+MAIN_RUNS = ("negotiation-main-ours-4b.json", "negotiation-main-baselines-gemini.json", "negotiation-main-offline.json")
+CONFIG_ORDER = ["ours-llm", "ours", "B4", "B3", "B2", "B1", "A1", "A2", "A3", "A1-offline", "oracle"]
+
+# One row per model: (label, replies, parsing, policy, swaps) result files in runs/; None where not run
+MODEL_ROWS = [
+    ("Qwen3.5-4B fine-tuned · Q8_0", "replies-4b-nts-q8", "parsing-4b-nts-q8-paratest", "policy-4b-nts-q8-test", "swaps-4b-nts-q8"),
+    ("Qwen3.5-4B fine-tuned · Q6_K", "replies-4b-nts-q6", "parsing-4b-nts-q6-paratest", "policy-4b-nts-q6-test", "swaps-4b-nts-q6"),
+    ("Qwen3.5-2B fine-tuned v2 · Q8_0", "replies-2b-nts-q8", "parsing-2b-nts-q8-paratest", "policy-2b-nts-q8-test", "swaps-2b-nts-q8"),
+    ("Qwen3.5-2B fine-tuned v1 · Q5_K_M", "replies-2b", "parsing-local-mt-paratest", "policy-local-mt-fix-test", None),
+    ("Gemini 3.5 Flash-Lite (prompted)", "replies-gemini", "parsing-lite-paratest-full", "policy-test", None),
+    ("Qwen3.5-4B base · Q8_0", "replies-4b-base", None, None, None),
+    ("Qwen3.5-2B base · Q5_K_M", "replies-2b-base", None, None, None),
+    ("Rules (keyword parser, rule swap reader)", "replies-rule", None, None, "swaps-rules-20260929"),
+]
 
 
 def _experiments() -> list[dict]:
@@ -245,30 +278,53 @@ def _experiments() -> list[dict]:
             return None, None
         return json.loads(p.read_text(encoding="utf-8")), datetime.fromtimestamp(p.stat().st_mtime, UTC).isoformat()
 
-    neg, at = load("negotiation-offline.json")
-    probe, at2 = load("negotiation-ours-probe.json")
-    if neg:
-        configs = {k: v["summary"] for k, v in neg["configs"].items()}
-        if probe:
-            configs["ours"] = probe["configs"]["ours"]["summary"]
-        out.append({"id": "negotiation", "title": "Negotiation benchmark (60 scenarios, offline)", "at": at2 or at,
-                    "kind": "negotiation", "configs": configs, "paired": neg.get("paired")})
-    smoke, at = load("negotiation-llm-smoke.json")
-    if smoke:
-        out.append({"id": "negotiation-llm", "title": "LLM configurations (3-scenario smoke run)", "at": at,
-                    "kind": "negotiation", "configs": {k: v["summary"] for k, v in smoke["configs"].items()}})
-    for name, title in (("parsing-lite-paraval-v2.json", "Parsing: paraphrased validation"),
-                        ("parsing-lite-test-v2.json", "Parsing: templated test")):
-        rep, at = load(name)
-        if rep:
-            two = {k: v for k, v in rep.get("system_two", {}).items() if k != "rows"}
-            out.append({"id": name.removesuffix(".json"), "title": title, "at": at, "kind": "parsing",
-                        "system_one": rep.get("system_one"), "system_two": two})
-    pol, at = load("policy-sim-val-v1.json")
-    if pol:
-        out.append({"id": "policy", "title": "Policy agent: paraphrased validation", "at": at, "kind": "policy",
-                    "summary": {k: v for k, v in pol.items() if k != "rows"}})
-    safety = sorted(runs.glob("safety-*.json")) if runs.exists() else []
+    parts = [(rep, at) for rep, at in map(load, MAIN_RUNS) if rep]
+    if parts:
+        configs: dict[str, dict] = {}
+        paired: dict = {}
+        models = []
+        for rep, _ in parts:
+            configs |= {k: v["summary"] for k, v in rep["configs"].items()}
+            paired |= rep.get("paired") or {}
+            if rep["models"].get("agent"):
+                models.append(f"{', '.join(rep['configs'])}: {rep['models']['agent']}")
+        extra, _ = load("negotiation-main-paired.json")
+        paired |= extra or {}
+        sim = next((rep["models"]["simulator"] for rep, _ in parts if rep["models"].get("simulator")), None)
+        order = sorted(configs, key=lambda k: CONFIG_ORDER.index(k) if k in CONFIG_ORDER else len(CONFIG_ORDER))
+        out.append({"id": "negotiation-main", "kind": "negotiation", "at": max(at for _, at in parts),
+                    "title": "Main experiment: 60 scenarios, ours-llm / B3 / B4 over 3 seeds",
+                    "subtitle": "; ".join(models) + (f"; simulators: {sim}" if sim else ""),
+                    "configs": {k: configs[k] for k in order}, "paired": paired})
+
+    rows, latest = [], None
+    for label, rep_f, parse_f, pol_f, swap_f in MODEL_ROWS:
+        rep, a1 = load(f"{rep_f}.json") if rep_f else (None, None)
+        par, a2 = load(f"{parse_f}.json") if parse_f else (None, None)
+        pol, a3 = load(f"{pol_f}.json") if pol_f else (None, None)
+        swp, a4 = load(f"{swap_f}.json") if swap_f else (None, None)
+        if not (rep or par or pol or swp):
+            continue
+        latest = max(x for x in (latest, a1, a2, a3, a4) if x)
+        r = (rep or {}).get("summary", rep or {})
+        two = (par or {}).get("system_two", {})
+        rows.append({
+            "model": label,
+            "reply_tool": r.get("tool_accuracy"), "reply_args": r.get("argument_accuracy"),
+            "to_coordinator": r.get("to_coordinator"),
+            "parse_action": two.get("action_accuracy"), "compile_exact": two.get("compile_exact_match"),
+            "injections": f"{two['injections_handled']}/{two['injections_total']}" if two else None,
+            "latency_p50": two.get("latency_s_p50"),
+            "policy_allow_deny": (pol or {}).get("allow_deny_accuracy"), "deny_recall": (pol or {}).get("deny_recall"),
+            "makeup_recall": (pol or {}).get("makeup_obligation_recall"),
+            "swap_pairs": (swp or {}).get("pair_accuracy"), "swap_wrong": (swp or {}).get("wrong_commitments"),
+        })
+    if rows:
+        out.append({"id": "models", "kind": "models", "at": latest, "rows": rows,
+                    "title": "Models on the component benchmarks",
+                    "subtitle": "Replies: 100 cases (Benchmark D). Parsing: 151 paraphrased test requests. "
+                                "Policy: 109 test requests. Swaps: 120 requests (no model was trained on swaps)."})
+    safety = sorted(runs.glob("safety-*.json"), key=lambda f: f.stat().st_mtime) if runs.exists() else []
     if safety:
         rep = json.loads(safety[-1].read_text(encoding="utf-8"))
         out.append({"id": "safety", "title": f"Safety set ({safety[-1].stem.split('-')[1]} parser)",
@@ -580,7 +636,7 @@ def create_web_app(world: World | None = None) -> FastAPI:
         return {"status": w.orch.cases[case_id].status.value}
 
     @app.get("/api/versions")
-    def versions(u: dict = Depends(user)) -> list[dict]:
+    def versions(u: dict = Depends(view("history"))) -> list[dict]:
         w = W()
         return [{**v, "approved_by_name": w.name_of(v["approved_by"]) if v["approved_by"] else None}
                 for v in reversed(w.store.versions())]
@@ -588,6 +644,8 @@ def create_web_app(world: World | None = None) -> FastAPI:
     @app.get("/api/timetable")
     def timetable(version: int | None = None, week: int | None = None, u: dict = Depends(user)) -> dict:
         w = W()
+        if version and u["role"] not in VIEWS["history"]:
+            raise HTTPException(403, "only the timetable office sees earlier and proposed versions")
         v = w.store.version(version) if version else (w.store.current_version(week) or w.store.current_version())
         if v is None:
             raise HTTPException(404)
@@ -597,7 +655,7 @@ def create_web_app(world: World | None = None) -> FastAPI:
                 "entries": _timetable(w, v.assignment), "changed": sorted(changed)}
 
     @app.get("/api/versions/diff")
-    def diff(a: int, b: int, u: dict = Depends(user)) -> list[dict]:
+    def diff(a: int, b: int, u: dict = Depends(view("history"))) -> list[dict]:
         w = W()
         va, vb = w.store.version(a), w.store.version(b)
         if va is None or vb is None:

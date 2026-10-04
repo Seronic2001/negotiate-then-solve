@@ -170,15 +170,51 @@ class Study:
     def tasks_for(self, kind: str) -> list[str]:
         return list(TASKS) if kind == "team" else ["ratings"]
 
-    def queue(self, code: str, kind: str, task: str) -> list[dict]:
-        """The rater's items for a task, in an order of their own (blind to configuration)."""
+    def team(self) -> list[str]:
+        return sorted(c for c, p in self.active().items() if p["kind"] == "team")
+
+    def assigned(self, code: str, task: str) -> set[str]:
+        """Team work is shared: every item goes to exactly two raters, rotating through every pair
+        of active team raters, so each does about 2/N of a task (all of it when N <= 2)."""
         items = (self.items() or {}).get(task, [])
-        if task == "ratings" and kind == "pilot":
-            items = [i for i in items if i["pilot"]]
+        team = self.team()
+        if code not in team:
+            return set()
+        if len(team) <= 2:
+            return {i["id"] for i in items}
+        pairs = list(combinations(team, 2))
+        return {it["id"] for n, it in enumerate(items) if code in pairs[n % len(pairs)]}
+
+    def queue(self, code: str, kind: str, task: str, labels: dict | None = None) -> list[dict]:
+        """The rater's items for a task, in an order of their own (blind to configuration): a pilot
+        participant's are the pilot set; a team rater's are their share, plus anything they already
+        labelled, minus items two others have already finished (after the team changed size)."""
+        items = (self.items() or {}).get(task, [])
+        if kind == "pilot":
+            items = [i for i in items if i["pilot"]] if task == "ratings" else []
+        else:
+            labels = self.labels() if labels is None else labels
+            mine = labels.get((task, code), {})
+            others = Counter(i for (t, c), vals in labels.items() if t == task and c != code and c in self.team()
+                             for i in vals)
+            share = self.assigned(code, task)
+            items = [i for i in items if i["id"] in mine or (i["id"] in share and others[i["id"]] < 2)]
         seed = int(hashlib.sha256(f"{code}/{task}".encode()).hexdigest()[:8], 16)
         items = list(items)
         random.Random(seed).shuffle(items)
         return items
+
+    def coverage(self, labels: dict | None = None) -> dict[str, dict]:
+        """How many items of each task have the two team labels agreement needs."""
+        labels = self.labels() if labels is None else labels
+        team = set(self.team())
+        out = {}
+        for task in TASKS:
+            items = (self.items() or {}).get(task, [])
+            n = Counter(i for (t, c), vals in labels.items() if t == task and c in team for i in vals)
+            out[task] = {"items": len(items), "double": sum(n[i["id"]] >= 2 for i in items),
+                         "single": sum(n[i["id"]] == 1 for i in items)}
+        return out
 
     # -- participants ---------------------------------------------------------------------
 
@@ -208,9 +244,50 @@ class Study:
             self._save_participants(ps)
         return codes
 
+    def active(self) -> dict[str, dict]:
+        """Participants whose code still works; a revoked one counts in no result."""
+        return {c: p for c, p in self.participants().items() if not p.get("revoked")}
+
     def get(self, code: str) -> dict | None:
-        p = self.participants().get(code.strip().upper())
-        return p and {"code": code.strip().upper(), **p}
+        code = code.strip().upper()
+        p = self.active().get(code)
+        return p and {"code": code, **p}
+
+    def revoke(self, code: str, delete_answers: bool = False) -> dict:
+        """The code stops working and its answers leave every result. With
+        ``delete_answers`` (a withdrawal) its labels and live records are erased
+        from disk, and the code cannot be restored."""
+        with self._lock:
+            ps = self.participants()
+            if code not in ps:
+                raise KeyError(code)
+            ps[code]["revoked"] = ps[code].get("revoked") or _now()
+            if delete_answers:
+                for name in ("labels.jsonl", "live.jsonl"):
+                    rows = [r for r in self._read(name) if r.get("code") != code]
+                    (self.root / name).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                                                  encoding="utf-8")
+                ps[code]["answers_deleted"] = _now()
+            self._save_participants(ps)
+        return {"code": code, **ps[code]}
+
+    def clear(self) -> dict:
+        """Start over: every participant, label and live record goes; the item sets stay."""
+        with self._lock:
+            counts = {"participants": len(self.participants()), "labels": len(self._read("labels.jsonl")),
+                      "live": len(self._read("live.jsonl"))}
+            for name in ("participants.json", "labels.jsonl", "live.jsonl"):
+                (self.root / name).unlink(missing_ok=True)
+        return counts
+
+    def restore(self, code: str) -> dict:
+        with self._lock:
+            ps = self.participants()
+            if ps[code].get("answers_deleted"):
+                raise ValueError("this participant withdrew and their answers were deleted")
+            ps[code].pop("revoked", None)
+            self._save_participants(ps)
+        return {"code": code, **ps[code]}
 
     def consent(self, code: str) -> dict:
         with self._lock:
@@ -251,7 +328,7 @@ class Study:
         labels = self.labels()
         out = {}
         for task in self.tasks_for(kind):
-            q = self.queue(code, kind, task)
+            q = self.queue(code, kind, task, labels)
             done = labels.get((task, code), {})
             out[task] = {"done": sum(i["id"] in done for i in q), "total": len(q)}
         return out
@@ -270,10 +347,23 @@ def _kappa(a: list, b: list, weights: str | None = None) -> float | None:
 
 
 def _pairwise(by_rater: dict[str, dict[str, object]], weights: str | None = None) -> dict:
+    """Agreement between raters. With the work shared, different pairs label different items, so the
+    headline is pooled: each item's first two labels (by rater code) form one pair, over all items.
+    Pairs of raters that share at least 10 items are listed as well."""
     out = {}
+    humans = sorted(r for r in by_rater if r != "llm_judge")  # the judge labels everything: never pooled
+    pooled_a, pooled_b = [], []
+    for item in sorted({i for r in humans for i in by_rater[r]}):
+        got = [by_rater[r][item] for r in humans if item in by_rater[r]]
+        if len(got) >= 2:
+            pooled_a.append(got[0])
+            pooled_b.append(got[1])
+    if len(humans) > 2 and len(pooled_a) >= 2:
+        out["all raters (pooled)"] = {"n": len(pooled_a), "kappa": _kappa(pooled_a, pooled_b, weights)}
+    least = 2 if len(humans) <= 2 else 10
     for a, b in combinations(sorted(by_rater), 2):
         common = sorted(set(by_rater[a]) & set(by_rater[b]))
-        if len(common) >= 2:
+        if len(common) >= least:
             out[f"{a} vs {b}"] = {"n": len(common),
                                   "kappa": _kappa([by_rater[a][i] for i in common], [by_rater[b][i] for i in common],
                                                   weights)}
@@ -294,7 +384,7 @@ def _vs_machine(by_rater: dict[str, dict[str, object]], machine: dict[str, objec
 
 def analyse(study: Study, judge_ratings: dict[str, dict] | None = None) -> dict:
     items = study.items() or {t: [] for t in TASKS}
-    ps = study.participants()
+    ps = study.active()  # a revoked participant's answers count nowhere
     labels = study.labels()
     team = {c for c, p in ps.items() if p["kind"] == "team"}
     pilot = {c for c, p in ps.items() if p["kind"] == "pilot"}
@@ -306,6 +396,7 @@ def analyse(study: Study, judge_ratings: dict[str, dict] | None = None) -> dict:
     claim_h = rater_labels("claims", team, "supported")
     reply_h = rater_labels("replies", team, "label")
     report: dict = {
+        "coverage": study.coverage(labels),
         "participants": {"team": len(team), "pilot": len(pilot),
                          "pilot_consented": sum(bool(ps[c]["consented"]) for c in pilot)},
         "claims": {"items": len(items["claims"]),
@@ -335,7 +426,7 @@ def analyse(study: Study, judge_ratings: dict[str, dict] | None = None) -> dict:
                          "kappa": kappas, "h3_pilot": _h3(rating_rows, meta, "pilot"),
                          "h3_team": _h3(rating_rows, meta, "team")}
 
-    live = study.live_rows()
+    live = [r for r in study.live_rows() if r["code"] in ps]
     understood = Counter(r["value"] for r in live if r["kind"] == "understood")
     reply_checks = [r for r in live if r["kind"] == "reply"]
     live_ratings = [r for r in live if r["kind"] == "rating"]
@@ -369,7 +460,7 @@ def _h3(rows: list[tuple], meta: dict[str, dict], kind: str) -> dict:
 
 def write_ratings_csv(study: Study, path: Path) -> int:
     """Team ratings in the ``evaluation.judge --kappa`` format."""
-    ps = study.participants()
+    ps = study.active()
     rows = [(i, code, v["clarity"], v["acceptability"]) for (task, code), vals in study.labels().items()
             if task == "ratings" and ps.get(code, {}).get("kind") == "team" for i, v in vals.items()]
     with path.open("w", newline="", encoding="utf-8") as f:

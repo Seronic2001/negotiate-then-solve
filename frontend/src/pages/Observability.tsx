@@ -12,7 +12,18 @@ export default function Observability() {
   const { data: o } = useApi(() => api.observability(), [], 2500);
   const events = useLiveEvents(1200);
   const t = useTokens();
-  if (!o) return <Skeleton className="h-[640px]" />;
+  if (!o)
+    return (
+      <>
+        <PageHeader title="System health" subtitle="Model quota, latency per stage, routing and the safety counters." />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="mt-6 h-80" />
+      </>
+    );
   const kinds = Object.entries(o.events_by_kind)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)

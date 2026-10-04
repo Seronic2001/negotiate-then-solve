@@ -65,6 +65,11 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
                                             for slot, ids in elective_pools(doc, c)]}
                         for c in (doc.cohorts if doc else [])],
             "rooms": [r.model_dump() for r in p.rooms],
+            "demo_loaded": p.demo is not None and doc is not None and doc.source == p.demo.source,
+            # the offering document is public: who teaches what, for whom, so preferences can name them
+            "catalog": [{"code": c.code, "name": c.name, "faculty": c.faculty, "cohorts": c.cohorts, "pools": c.pools,
+                         "L": c.L, "T": c.T, "P": c.P, "half": c.half}
+                        for c in (doc.courses.values() if doc else [])],
         }
         if full and doc:
             needs = p.needs()
@@ -77,7 +82,8 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
                 "versions": [{"version": v.version, "created": v.created, "kind": v.kind, "note": v.note,
                               "published": v.published, "based_on": v.based_on, "moved": len(v.diff),
                               "report": v.timetable.report.model_dump(exclude={"room_use"})} for v in p.state.versions],
-                "sample_available": bool(p.sample and p.sample.exists()),
+                "sample_available": p.demo is not None or bool(p.sample and p.sample.exists()),
+                "sample_is_demo": p.demo is not None,
             }
         return out
 
@@ -89,9 +95,26 @@ def register(app: FastAPI, W: Callable, user: Callable, view: Callable, coordina
     def semester_public(u: dict = Depends(user)) -> dict:
         return overview_of(planner(), full=False)
 
+    @app.get("/api/semester/demo-offerings.pdf")
+    def demo_pdf(u: dict = Depends(coordinator)):
+        """The demo department's courses as an offering PDF, to show the upload path end to end."""
+        from fastapi.responses import Response
+
+        from semester.demo import offerings_pdf
+
+        p = planner()
+        if p.demo is None:
+            raise HTTPException(404, "no demo department")
+        return Response(offerings_pdf(p.demo), media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="DemoCourseOfferings.pdf"'})
+
     @app.post("/api/semester/offerings")
     def offerings(body: FileBody, u: dict = Depends(coordinator)) -> dict:
         p = planner()
+        if body.sample and p.demo is not None:
+            doc = p.load_demo()
+            return {"courses": len(doc.courses), "cohorts": len(doc.cohorts), "pools": len(doc.pools),
+                    "warnings": doc.warnings}
         if body.sample:
             if not (p.sample and p.sample.exists()):
                 raise HTTPException(404, "no sample offering document")

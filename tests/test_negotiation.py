@@ -475,3 +475,11 @@ def test_cut_off_output_is_retried_then_handed_to_the_coordinator():
     stuck = Rambler(None)
     got = ReplyParser(stuck, inst).parse(msg, "A is fine")
     assert got.decision == "escalate" and stuck.calls == MAX_RETRIES + 1 and got.errors
+
+
+def test_sentences_do_not_end_at_a_title():
+    from agents.explainer import sentences
+
+    text = "Hi Dr. Kumar, your lab clashes with Dr. Verma's. Option A is Monday at 2 pm. Does it work, e.g. for week 3?"
+    assert sentences(text) == ["Hi Dr. Kumar, your lab clashes with Dr. Verma's.", "Option A is Monday at 2 pm.",
+                               "Does it work, e.g. for week 3?"]

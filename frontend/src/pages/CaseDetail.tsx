@@ -271,7 +271,7 @@ function Details({ c }: { c: Detail }) {
         {p ? (
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
-              <Label>Constraints (tiers and authority set by code)</Label>
+              <Label>What the request asks for</Label>
               <div className="space-y-2">
                 {p.constraints.map((k, i) => (
                   <ConstraintCard key={k.id} c={k} index={i} />

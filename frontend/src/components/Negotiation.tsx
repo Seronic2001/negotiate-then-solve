@@ -9,15 +9,15 @@ export function ConstraintCard({ c, highlight, index = 0 }: { c: ConstraintView;
   return (
     <div data-index={index} className={clsx("rounded-md border p-3.5", highlight ? "border-bad/35 bg-bad/[0.04]" : "border-line bg-panel")}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[11.5px] text-ink-3">{c.id}</span>
         <TierBadge tier={c.tier} />
-        <Badge tone={c.hard ? "bad" : "muted"}>{c.hard ? "hard" : "soft"}</Badge>
-        <Badge tone="info">{c.type.replace("_", " ")}</Badge>
+        <Badge tone={c.hard ? "bad" : "muted"}>{c.hard ? "required" : "if possible"}</Badge>
       </div>
       <p className="mt-2 text-[13.5px] leading-relaxed">{c.text}</p>
+      {c.tier_who && <p className="mt-1 text-[12.5px] text-ink-3">Who can change it: {c.tier_who.charAt(0).toLowerCase() + c.tier_who.slice(1)}.</p>}
       <div className="mt-2 flex flex-wrap items-center gap-3 text-[11.5px] text-ink-3">
         {c.owner && <span>owner: {c.owner_name}</span>}
         {c.source.request && <span>from {c.source.request}</span>}
+        <span className="font-mono opacity-70">{c.id}</span>
         {c.source.rule && <span>rule: {c.source.rule}</span>}
         {c.justification !== "none" && (
           <span className="flex items-center gap-1">

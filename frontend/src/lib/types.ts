@@ -11,7 +11,7 @@ export interface Persona {
   views?: View[];
 }
 
-export type View = "home" | "requests" | "timetable" | "handbook" | "how" | "new" | "inbox" | "approvals" | "documents" | "semester" | "prefs" | "clubs" | "fairness" | "graph" | "health" | "experiments";
+export type View = "home" | "requests" | "timetable" | "handbook" | "how" | "new" | "inbox" | "approvals" | "history" | "documents" | "semester" | "prefs" | "clubs" | "fairness" | "graph" | "health" | "experiments" | "study";
 
 export type Status =
   | "received"
@@ -39,6 +39,7 @@ export interface EventRow {
 }
 
 export interface CaseSummary {
+  escalated_to?: string | null;
   id: string;
   sender: string;
   sender_name: string;
@@ -59,6 +60,9 @@ export interface ConstraintView {
   hard: boolean;
   tier: number;
   tier_name: string;
+  /** plain-language tier and who may change it (web/wording.py) */
+  tier_label?: string;
+  tier_who?: string;
   owner: string | null;
   owner_name: string;
   text: string;
@@ -366,10 +370,31 @@ export interface NegotiationSummary {
   status: Record<string, number>;
 }
 
+export interface PairedTest {
+  pairs: number;
+  correct_outcome_mcnemar: { only_first: number; only_second: number; p: number };
+  objective_wilcoxon: { n: number; p: number; median_diff: number };
+}
+
+export interface ModelRow {
+  model: string;
+  reply_tool: number | null;
+  reply_args: number | null;
+  to_coordinator: number | null;
+  parse_action: number | null;
+  compile_exact: number | null;
+  injections: string | null;
+  latency_p50: number | null;
+  policy_allow_deny: number | null;
+  deny_recall: number | null;
+  makeup_recall: number | null;
+  swap_pairs: number | null;
+  swap_wrong: number | null;
+}
+
 export type Experiment =
-  | { id: string; title: string; at: string; kind: "negotiation"; configs: Record<string, NegotiationSummary>; paired?: unknown }
-  | { id: string; title: string; at: string; kind: "parsing"; system_one: Record<string, number> | null; system_two: Record<string, unknown> }
-  | { id: string; title: string; at: string; kind: "policy"; summary: Record<string, unknown> }
+  | { id: string; title: string; subtitle?: string; at: string; kind: "negotiation"; configs: Record<string, NegotiationSummary>; paired?: Record<string, PairedTest> }
+  | { id: string; title: string; subtitle?: string; at: string; kind: "models"; rows: ModelRow[] }
   | { id: string; title: string; at: string; kind: "safety"; summary: Record<string, unknown> };
 
 // -- semester timetable ---------------------------------------------------------
@@ -483,12 +508,15 @@ export interface SemesterOverview {
   cohorts: SemCohort[];
   rooms: SemRoom[];
   courses?: SemCourse[];
+  catalog?: { code: string; name: string; faculty: string[]; cohorts: string[]; pools: string[]; L: number; T: number; P: number; half: string }[];
   pools?: { id: string; name: string; courses: string[]; cap: number | null }[];
   warnings?: string[];
   preferences?: SemPreference[];
   closures?: { room: string; window: SemWindow; text: string }[];
   versions?: SemVersionMeta[];
   sample_available?: boolean;
+  sample_is_demo?: boolean;
+  demo_loaded?: boolean;
 }
 
 export interface SemMeeting {

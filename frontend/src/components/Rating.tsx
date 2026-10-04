@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui";
 
@@ -6,23 +7,30 @@ import { Button } from "./ui";
 export function Likert({ label, low, high, value, onChange }: { label: string; low: string; high: string; value: number | null; onChange: (v: number) => void }) {
   return (
     <div>
-      <p className="text-[13.5px] font-medium">{label}</p>
-      <div className="mt-2 flex items-center gap-2">
-        <span className="hidden w-28 text-right text-[12px] text-ink-3 sm:block">{low}</span>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            onClick={() => onChange(n)}
-            className={clsx("grid size-9 place-items-center rounded-md border text-[14px] font-medium", value === n ? "border-brand bg-brand text-panel" : "border-line bg-panel text-ink-2 hover:border-brand/50")}
-          >
-            {n}
-          </button>
-        ))}
-        <span className="hidden w-28 text-[12px] text-ink-3 sm:block">{high}</span>
+      <p className="text-[14px] font-medium">{label}</p>
+      <div className="mt-2.5 max-w-md">
+        <div role="radiogroup" aria-label={label} className="grid grid-cols-5 overflow-hidden rounded-md border border-line">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              role="radio"
+              aria-checked={value === n}
+              onClick={() => onChange(n)}
+              className={clsx(
+                "h-10 text-[14px] font-medium transition-colors",
+                n > 1 && "border-l border-line",
+                value === n ? "bg-brand text-panel" : "bg-panel text-ink-2 hover:bg-panel-2",
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1.5 flex justify-between text-[12px] text-ink-3">
+          <span>1 · {low}</span>
+          <span>{high} · 5</span>
+        </div>
       </div>
-      <p className="mt-1 text-[11.5px] text-ink-3 sm:hidden">
-        1 = {low}, 5 = {high}
-      </p>
     </div>
   );
 }
@@ -32,19 +40,33 @@ export function RatingForm({ busy, onSave, submitLabel = "Save and next" }: { bu
   const [acceptability, setAcceptability] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   return (
-    <div className="space-y-4">
-      <Likert label="How clear is it what happened and what you are asked to do?" low="confusing" high="immediately clear" value={clarity} onChange={setClarity} />
-      <Likert label="How acceptable would this message be to receive?" low="unreasonable" high="fair and easy to agree to" value={acceptability} onChange={setAcceptability} />
-      <input
+    <div className="space-y-5">
+      <Likert label="How clear is what happened, and what you are asked to do?" low="confusing" high="immediately clear" value={clarity} onChange={setClarity} />
+      <Likert label="How acceptable would this message be to receive?" low="unreasonable" high="fair, easy to agree to" value={acceptability} onChange={setAcceptability} />
+      <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Comment (optional)"
-        className="w-full rounded-md border border-line bg-panel px-3 py-2 text-[13.5px] outline-none focus:border-brand/60"
+        rows={2}
+        placeholder="Anything that stood out? (optional)"
+        className="w-full max-w-md resize-none rounded-md border border-line bg-panel px-3 py-2 text-[13.5px] outline-none focus:border-brand/60"
       />
-      <Button variant="primary" disabled={busy || !clarity || !acceptability} loading={busy} onClick={() => onSave({ clarity, acceptability, ...(comment.trim() ? { comment: comment.trim() } : {}) })}>
-        {submitLabel}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="primary" disabled={busy || !clarity || !acceptability} loading={busy} onClick={() => onSave({ clarity, acceptability, ...(comment.trim() ? { comment: comment.trim() } : {}) })}>
+          {submitLabel}
+        </Button>
+        <Button
+          variant="ghost"
+          icon={RotateCcw}
+          disabled={busy || (!clarity && !acceptability && !comment)}
+          onClick={() => {
+            setClarity(null);
+            setAcceptability(null);
+            setComment("");
+          }}
+        >
+          Clear
+        </Button>
+      </div>
     </div>
   );
 }
-

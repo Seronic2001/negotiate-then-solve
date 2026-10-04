@@ -50,13 +50,14 @@ export const ROLE_LABEL: Record<Role, string> = {
   student: "Class representative",
 };
 
-export const TIER: Record<number, { name: string; tone: Tone }> = {
-  0: { name: "Physical", tone: "bad" },
-  1: { name: "Policy", tone: "bad" },
-  2: { name: "Commitment", tone: "warn" },
-  3: { name: "Verified unavailability", tone: "brand" },
-  4: { name: "Operational", tone: "info" },
-  5: { name: "Preference", tone: "muted" },
+/** Tiers in the words of the person using the service; the number and who may change it stay in the tooltip. */
+export const TIER: Record<number, { name: string; who: string; tone: Tone }> = {
+  0: { name: "Can't be changed", who: "Nobody, it is physically impossible otherwise", tone: "bad" },
+  1: { name: "Institute rule", who: "Only the Dean or the academic council can make an exception", tone: "bad" },
+  2: { name: "Agreed commitment", who: "Only the academic office can change it", tone: "warn" },
+  3: { name: "Confirmed absence", who: "Kept, unless the person offers an alternative themselves", tone: "brand" },
+  4: { name: "Teaching need", who: "The owner or the head of department can agree to change it", tone: "info" },
+  5: { name: "Preference", who: "Kept where possible; the owner can give it up freely", tone: "muted" },
 };
 
 export const EVENT_LABEL: Record<string, string> = {

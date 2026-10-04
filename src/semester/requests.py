@@ -1,10 +1,10 @@
 """Preferences and changes for the semester timetable, from plain words.
 
-    "Girish Varma prefers not to teach before 10 am"
+    "Dr. Menon prefers not to teach before 10 am"
     "UG1 CSE students would like no classes after 5 pm on Saturday"
-    "Prasad Krishnan is unavailable on Fridays"
+    "Dr. Iyer is unavailable on Fridays"
     "CS1.301 should be in the morning"
-    "Room H105 is closed on Tuesdays for renovation"
+    "Room R-101 is closed on Tuesdays for renovation"
 
 Who it is about comes from the offering document (faculty names, course
 codes and names, programmes and years); days and times from the words.
@@ -86,6 +86,12 @@ def _days(text: str) -> list[str] | None:
 
 
 def _cohorts(text: str, doc: OfferingDoc) -> list[str]:
+    named = [c.id for c in doc.cohorts if re.search(rf"\b{re.escape(c.name)}\b", text, re.IGNORECASE)]
+    for m in re.finditer(r"\bsection\s+\w+\b", text, re.IGNORECASE):  # "Section 2" inside a programme heading
+        named += [c.id for c in doc.cohorts
+                  if re.search(rf"\b{re.escape(m[0])}\b", c.name, re.IGNORECASE) and c.id not in named]
+    if named:  # a cohort by its own name ("Section 2"), as in the demo department
+        return named
     t = text.upper()
     year = None
     if m := re.search(r"\bUG\s?([1-5])\b", t):

@@ -129,3 +129,23 @@ def test_views_are_scoped_by_role(client):
     cases = {e.get("case") for e in c.get("/api/events", headers=student).json()}
     assert cases == {rid}
     assert len({e.get("case") for e in c.get("/api/events", headers=as_(COORDINATOR)).json()}) > 1
+
+
+def test_tiers_are_shown_in_plain_words():
+    from web.wording import plain
+
+    assert plain("Lab 3 is unavailable in week 9 (Tier 0, physical).") == "Lab 3 is unavailable in week 9 (can't be changed)."
+    assert plain("Dr. Rao needs Lab 2 (Tier 4, operational requirement).") == "Dr. Rao needs Lab 2 (teaching need)."
+    assert "Tier" not in plain("Escalation to coordinator: every option needs a Tier 0-2 change.")
+    assert plain(None) is None
+
+
+def test_only_the_timetable_office_sees_versions(client):
+    c, _ = client
+    assert c.get("/api/versions", headers=as_(COORDINATOR)).status_code == 200
+    assert c.get("/api/versions", headers=as_("F-104")).status_code == 403
+    assert c.get("/api/timetable?version=1", headers=as_("F-104")).status_code == 403  # earlier or proposed
+    assert c.get("/api/timetable?version=1", headers=as_(COORDINATOR)).status_code == 200
+    assert c.get("/api/timetable", headers=as_("F-104")).json()["entries"]  # the latest published, for everyone
+    assert c.get("/api/versions/diff?a=1&b=1", headers=as_("ST-G-01")).status_code == 403
+    assert "history" in views_for("coordinator") and "history" not in views_for("faculty")

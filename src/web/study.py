@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 from evaluation.study import REPLY_LABELS, TASKS, analyse
 
+from .wording import plain
+
 DEFAULT_PERSONA = "F-102"  # owns a practical with no special equipment: the practice clash needs one
 
 CONSENT = [
@@ -32,6 +34,17 @@ class ParticipantsBody(BaseModel):
     kind: Literal["team", "pilot"]
     n: int = Field(1, ge=1, le=20)
     persona: str | None = None
+
+
+CLEAR_PHRASE = "delete all study data"
+
+
+class ClearBody(BaseModel):
+    confirm: str  # must be CLEAR_PHRASE, typed by the coordinator
+
+
+class RevokeBody(BaseModel):
+    delete_answers: bool = False  # a withdrawal: erase their labels and live records too
 
 
 class LabelBody(BaseModel):
@@ -56,8 +69,8 @@ def _blind(task: str, it: dict) -> dict:
     if task == "claims":
         return {"id": it["id"], "claim": it["claim"], "facts": it["facts"]}
     if task == "replies":
-        return {"id": it["id"], "message": it["message"], "reply": it["reply"]}
-    return {"id": it["id"], "text": it["text"]}
+        return {"id": it["id"], "message": plain(it["message"]), "reply": it["reply"]}
+    return {"id": it["id"], "text": plain(it["text"])}  # as the portal shows it to the recipient
 
 
 def _check(task: str, value: dict) -> dict:
@@ -179,6 +192,28 @@ def register(app: FastAPI, W: Callable, user: Callable, coordinator: Callable) -
         if body.kind == "pilot" and persona not in w.instance.faculty_by_id:
             raise HTTPException(422, f"{persona} is not a faculty member of this department")
         return {"codes": w.study.add_participants(body.kind, body.n, persona)}
+
+    @app.post("/api/study/participants/{code}/revoke")
+    def revoke(code: str, body: RevokeBody, u: dict = Depends(coordinator)) -> dict:
+        try:
+            return W().study.revoke(code, delete_answers=body.delete_answers)
+        except KeyError:
+            raise HTTPException(404, "no such participant") from None
+
+    @app.post("/api/study/participants/{code}/restore")
+    def restore(code: str, u: dict = Depends(coordinator)) -> dict:
+        try:
+            return W().study.restore(code)
+        except KeyError:
+            raise HTTPException(404, "no such participant") from None
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+
+    @app.post("/api/study/clear")
+    def clear(body: ClearBody, u: dict = Depends(coordinator)) -> dict:
+        if body.confirm.strip().lower() != CLEAR_PHRASE:
+            raise HTTPException(422, f'type "{CLEAR_PHRASE}" to confirm')
+        return {"removed": W().study.clear()}
 
     @app.get("/api/study/export")
     def export(u: dict = Depends(coordinator)) -> dict:
