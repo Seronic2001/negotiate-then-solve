@@ -41,7 +41,7 @@ from core.graph import add_conflict, build_graph
 from core.schemas import Placement, Request, RequestStatus, Tier
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour
-from language.llm import FREE_TIER
+from language.llm import FREE_TIER, LLMError
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 
@@ -171,6 +171,28 @@ def _inbox_item(w: World, i: InboxItem) -> dict:
             "answered_by": i.answered_by}
 
 
+def _reading(w: World, m: Message, r: Reply) -> str:
+    """A typed reply in plain words, for the sender to confirm."""
+    days = ", ".join(FULL_DAY.get(d, d) for d in r.counter_days or [])
+    if r.decision == "accept":
+        offer = next((o for o in m.offers if o.key == (r.choice or "").strip().upper()), None)
+        where = "; ".join(f"{session_name(w.instance, s)} on {placement_text(w.instance, p)}"
+                          for s, p in offer.placements.items()) if offer else ""
+        return f"You accept option {r.choice}" + (f": {where}." if where else ".")
+    if r.decision == "counter":
+        slots = sorted(r.counter_slots or [])
+        when = f" from {hour(slots[0])} to {hour(slots[-1] + 1)}" if slots else ""
+        return f"None of the options works; you could do {days or 'other days'}{when} instead."
+    if r.decision == "propose" and r.proposal:
+        return f"You propose {placement_text(w.instance, r.proposal)} instead."
+    if r.decision == "reject":
+        return "You decline all the options" + (f" ({r.reason})." if r.reason else ".")
+    if r.decision == "clarify":
+        return f"You ask a question first: {r.question or r.text}"
+    return "The system could not read this as an answer; it would go to the timetable coordinator" + (
+        f" ({r.reason})." if r.reason else ".")
+
+
 def _timetable(w: World, assignment: dict[str, Placement]) -> list[dict]:
     inst = w.instance
     rows = []
@@ -276,6 +298,11 @@ class ReplyBody(BaseModel):
     text: str = ""
 
 
+class ReplyTextBody(BaseModel):
+    text: str
+    preview: bool = True
+
+
 class RejectBody(BaseModel):
     reason: str = ""
 
@@ -335,6 +362,9 @@ def create_web_app(world: World | None = None) -> FastAPI:
     from .semester import register as register_semester
 
     register_semester(app, W, user, view, coordinator)
+    from .study import register as register_study
+
+    register_study(app, W, user, coordinator)
 
     # -- auth (mock) ------------------------------------------------------------------
 
@@ -466,6 +496,34 @@ def create_web_app(world: World | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         return _inbox_item(w, item)
+
+    @app.post("/api/inbox/{item_id}/reply-text")
+    def reply_text(item_id: str, body: ReplyTextBody, u: dict = Depends(user)) -> dict:
+        """A reply in the person's own words, read into one tool call by the
+        reply parser. ``preview`` returns the reading without sending it."""
+        w = W()
+        item = w.inbox.items.get(item_id)
+        if item is None:
+            raise HTTPException(404)
+        if item.to != u["id"]:
+            raise HTTPException(403, "this message is addressed to someone else")
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(422, "write a reply first")
+        try:
+            got = w.reply_parser.parse(item.message, text)
+        except LLMError as e:
+            raise HTTPException(503, f"the reply model is unavailable: {e}") from None
+        got = got.model_copy(update={"text": text})
+        view = {"reply": got.model_dump(exclude_none=True), "reading": _reading(w, item.message, got),
+                "parser": w.models.get("replies")}
+        if body.preview:
+            return view
+        try:
+            w.inbox.answer(item_id, got, u["id"])
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        return view | {"item": _inbox_item(w, item)}
 
     @app.post("/api/inbox/{item_id}/simulate")
     def simulate(item_id: str, u: dict = Depends(user)) -> dict:

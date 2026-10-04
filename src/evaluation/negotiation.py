@@ -190,6 +190,9 @@ def run_negotiation(sc: Scenario, config: str, shared: ConcessionLedger, agent, 
         "explanation_modes": dict(Counter(m.explanation_mode for m in out.messages)),
         "first_accepted": bool(out.replies) and out.replies[0].decision == "accept",
         "messages": [m.text for m in out.messages],
+        # what each explanation could use and what it claimed, for the human claim labels (evaluation.study)
+        "explanations": [{"to": m.to, "mode": m.explanation_mode, "facts": m.facts, "claims": m.claims}
+                         for m in out.messages],
         "replies": [r.model_dump(exclude_none=True) for r in out.replies],
     }
 

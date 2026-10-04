@@ -417,6 +417,7 @@ stability are not modelled.
 | `src/evaluation/negotiation.py` | brief §5 | Runs ours / B1–B4 / oracle / A1–A3 (B2 = same objective, cheapest correction imposed; B4 = primary baseline). `--plan` runs the reduced plan: ours-llm, B3, B4 on all 60 × 3 seeds; ablations on a stratified 30 and B1 on a stratified 20, seed 0 (650 LLM runs); invalid candidates, invention calls and filtered inventions (H1), tool calls, retries; validity, correct outcome, resolution rate, rounds per resolved conflict, distance to the oracle objective, escalation P/R and reasons, weighted burden (Gini, max, CV), faithfulness, leaks; pooled and per family; McNemar, Wilcoxon, bootstrap CIs |
 | `src/evaluation/replies.py` | brief §5.1 D | 100 replies to a real UC3 message with gold tool calls (accept, partial, counter-proposal, vague, refusal, injected); tool and argument accuracy, valid first calls, recovery, unsafe-action rate; `--parser llm` or `rule` (A3) |
 | `src/evaluation/judge.py`, `src/evaluation/stats.py` | §12.5 | Batched LLM judge (clarity, acceptability) and quadratic-weighted Cohen's κ against human raters |
+| `src/evaluation/study.py`, `src/web/study.py` | §12.5 | Human data collected in the web app (`/study`): team labels for judge validation (100 claims vs the faithfulness verifier, 100 replies vs the recorded call, 110 messages rated for clarity and acceptability) and the anonymised faculty pilot (24 paired grounded/free messages for H3, plus a live session in the portal); Cohen's κ, H3 Wilcoxon, `human_ratings.csv` for the judge |
 
 ```sh
 uv run python -m evaluation.benchmark                                  # data/scenarios.jsonl (about 30 s)
@@ -425,7 +426,9 @@ uv run python -m evaluation.negotiation --plan --local --sim-local   # the reduc
 uv run python -m evaluation.negotiation --configs ours-llm,B4 --subset 20   # Gemini check of the main comparison
 uv run python -m evaluation.replies --parser llm --local           # reply tool calls (Benchmark D); --parser rule is A3
 uv run python -m evaluation.judge runs/negotiation-XXXX.json           # LLM judge (batched, Flash-Lite)
-uv run python -m evaluation.judge --kappa data/human_ratings.csv       # judge vs human raters
+uv run python -m evaluation.judge --kappa runs/study/human_ratings.csv  # judge vs human raters
+uv run python -m evaluation.study build runs/negotiation-study-source.json   # study items (ours-llm + A2, seed 0)
+uv run python -m evaluation.study report                                  # kappas, H3, live checks; writes human_ratings.csv
 ```
 
 Offline results so far (60 scenarios; `runs/negotiation-offline.json`,
@@ -627,6 +630,22 @@ threads and the UI follows them through the event log.
   days and times, or decline). "Let the simulator answer" and per-person
   autopilot let one person demo both sides; unanswered messages escalate at
   the deadline (`NTS_REPLY_DEADLINE`, default 900 s).
+- **Replies in your own words.** Under each inbox message a free-text box
+  sends the reply to the reply parser (the agent model in `gemini` and
+  `local` mode, the keyword handler offline). The sender sees how it was read
+  ("You accept option B: ...") and confirms before anything is sent.
+- **Human study (`/study`).** Participants enter a code issued on the
+  Experiments page (coordinator) and give consent; no name is stored. Team
+  raters (`T-n`) rate messages, check explanation claims against their facts
+  and label replies, blind to the configuration. Pilot faculty (`P-nn`) rate
+  the 24-message pilot set, then use the portal as a demo faculty member
+  (default F-102): send a preference and say whether the system understood
+  it; in the practice clash a simulated colleague takes the only routers lab,
+  the participant asks for it in their own words, answers the negotiator's
+  message in their own words, confirms the reading and rates the message.
+  Records go to `runs/study/` (`NTS_STUDY_DIR`); the Experiments page shows
+  progress, κ and the H3 comparison, and exports everything as JSON. Run one
+  pilot participant at a time and reset the demo between them.
 - **Offline by default.** Without an API key, `src/language/rule_parser.py` (a
   rule-based stand-in for System Two: 94% action accuracy and 83% compiled
   constraints on the paraphrased test split, vs Gemini's 100% on validation)
@@ -647,7 +666,8 @@ approvals (coordinator), timetable with versions and rollback, fairness
 ledger, handbook with a retrieval playground, how decisions work (tiers,
 weights, ladder, safety rules), knowledge graph, observability (LLM quota,
 stage latency, routing, faithfulness, safety counters, event stream) and
-experiments (results from `runs/`). Dark and light themes; Ctrl+K palette.
+experiments (results from `runs/`, and the human study), and the study
+page for participants (`/study`). Dark and light themes; Ctrl+K palette.
 
 ## Key conventions
 
@@ -672,7 +692,8 @@ experiments (results from `runs/`). Dark and light themes; Ctrl+K palette.
   (`evaluation.negotiation --plan`) and the reply benchmark; the safety set with Gemini;
   judge ratings. Each run resumes from the cache after a daily-quota stop.
 - **Team:** 100 hand-written requests and two annotators; the institute's
-  real handbook; human pilot ratings (`data/human_ratings.csv`) for judge κ.
+  real handbook; the human study in the web app (`/study`: two team raters,
+  5-10 pilot faculty after ethics clearance), then `evaluation.study report`.
 - **Local model:** generate the multi-task data (`training.distill`), train it, and score it with the `--local` evaluations.
 - **Swaps and hybrid retrieval with the models:** `evaluation.swaps --reader
   gemini`, and `evaluation.policy --retriever hybrid` (Gemini and `--local`)

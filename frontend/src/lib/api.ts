@@ -90,6 +90,9 @@ export const api = {
   inbox: () => call<InboxItem[]>("/inbox"),
   reply: (id: string, reply: Omit<ReplyView, "decision"> & { decision: "accept" | "reject" | "counter" }) =>
     post<InboxItem>(`/inbox/${id}/reply`, reply),
+  /** A reply in the person's own words, read by the reply parser; preview shows the reading without sending. */
+  replyText: (id: string, text: string, preview: boolean) =>
+    post<{ reply: ReplyView & { decision: string }; reading: string; parser: string | null; item?: InboxItem }>(`/inbox/${id}/reply-text`, { text, preview }),
   simulate: (id: string) => post<InboxItem>(`/inbox/${id}/simulate`),
   autopilot: () => call<Record<string, boolean>>("/autopilot"),
   setAutopilot: (person: string, on: boolean) => post<Record<string, boolean>>("/autopilot", { person, on }),

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { FlaskConical, MessagesSquare, ScanText, Scale, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { StudyAdmin } from "../components/StudyAdmin";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -45,6 +46,9 @@ export default function Experiments() {
         title="Experiments"
         subtitle="Results from the evaluation scripts in runs/."
       />
+      <div className="mb-6">
+        <StudyAdmin />
+      </div>
       {!data ? (
         <Skeleton className="h-96" />
       ) : !data.length ? (

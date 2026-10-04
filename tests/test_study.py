@@ -1,0 +1,160 @@
+"""Human study: item sets, storage, analysis, and the endpoints a participant uses."""
+
+import os
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from evaluation.study import (
+    Study,
+    analyse,
+    build_items,
+    judge_id,
+    reply_label,
+    write_ratings_csv,
+)
+
+
+def _row(scenario, config, n_msgs=2):
+    facts = [{"id": "C-1", "text": "Dr. Rao needs Lab 2 on Tuesday."}, {"id": "OPT-A", "text": "Option A: Wednesday at 2 pm."}]
+    claims = [{"text": "You both need Lab 2 on Tuesday.", "facts": ["C-1"], "supported": True},
+              {"text": "Option A is on Friday.", "facts": ["OPT-A"], "supported": False}]
+    mode = "grounded" if config == "ours-llm" else "free"
+    replies = [{"decision": "accept", "choice": "A", "text": "A works."},
+               {"decision": "counter", "counter_days": ["Fri"], "text": "Friday instead?"}]
+    return {"scenario": scenario, "seed": 0,
+            "messages": [f"{config} message {k} for {scenario}\n\nOptions:\nA) one\nB) two" for k in range(n_msgs)],
+            "explanations": [{"to": "F-1", "mode": mode, "facts": facts, "claims": claims} for _ in range(n_msgs)],
+            "replies": replies[:n_msgs]}
+
+
+def _report(n=14):
+    scen = [f"S-{i:03d}-{'contention' if i % 2 else 'deadlock'}" for i in range(1, n + 1)]
+    return {"configs": {"ours-llm": {"rows": [_row(s, "ours-llm") for s in scen]},
+                        "A2": {"rows": [_row(s, "A2") for s in scen[: n // 2]]}}}
+
+
+def test_item_sets_pair_grounded_and_free_and_keep_every_rejected_claim():
+    items = build_items(_report())
+    claims = items["claims"]
+    assert all(not c["machine"] for c in claims if c["claim"] == "Option A is on Friday.")
+    assert sum(not c["machine"] for c in claims) == min(40, 14 * 2 + 7 * 2)  # every rejected claim, up to 40
+    assert {r["machine"] for r in items["replies"]} == {"accept:A", "counter"}
+    ratings = items["ratings"]
+    assert len(ratings) == 7 * 2 * 2 + (14 - 7) * 2  # pairs, then unpaired grounded messages (fewer than 110 here)
+    pilot = [r for r in ratings if r["pilot"]]
+    assert {r["mode"] for r in pilot} == {"grounded", "free"} and len(pilot) % 2 == 0
+    assert ratings[0]["id"] == judge_id("ours-llm", ratings[0]["scenario"], ratings[0]["message"])
+
+
+def test_reply_labels():
+    assert reply_label({"decision": "accept", "choice": " b"}) == "accept:B"
+    assert reply_label({"decision": "propose"}) == "other" and reply_label({"decision": "reject"}) == "reject"
+
+
+def test_storage_queue_and_analysis(tmp_path):
+    s = Study(tmp_path)
+    s.save_items(build_items(_report()))
+    t1, t2 = s.add_participants("team", 2)
+    (p1,) = s.add_participants("pilot", 1, persona="F-102")
+    assert (t1, t2, p1) == ("T-1", "T-2", "P-01")
+    assert s.queue(t1, "team", "claims") != s.queue(t2, "team", "claims")  # each rater has an order of their own
+    assert all(i["pilot"] for i in s.queue(p1, "pilot", "ratings"))
+    for code in (t1, t2):
+        for it in s.items()["claims"]:
+            s.label(code, "claims", it["id"], {"supported": it["machine"]})
+    first = s.items()["claims"][0]
+    s.label(t1, "claims", first["id"], {"supported": not first["machine"]})  # a change of mind: the latest counts
+    s.label(t1, "claims", first["id"], {"supported": first["machine"]})
+    for it in s.queue(p1, "pilot", "ratings"):
+        s.label(p1, "ratings", it["id"], {"clarity": 5 if it["mode"] == "grounded" else 3, "acceptability": 4})
+    s.live(p1, "F-102", "understood", value="yes")
+    s.live(p1, "F-102", "reply", confirmed=False)
+    a = analyse(s)
+    assert a["claims"]["human_vs_verifier"][t1]["kappa"] == 1.0 and a["claims"]["human_vs_verifier"][t1]["ok"]
+    assert a["claims"]["human_vs_human"][f"{t1} vs {t2}"]["kappa"] == 1.0
+    h3 = a["ratings"]["h3_pilot"]
+    assert h3["pairs"] == len(s.queue(p1, "pilot", "ratings")) // 2
+    assert h3["clarity"]["grounded"] == 5 and h3["clarity"]["free"] == 3
+    assert a["live"]["understood"] == {"yes": 1} and a["live"]["reply_reading_confirmed"] == 0
+    assert s.progress(p1, "pilot") == {"ratings": {"done": len(s.queue(p1, "pilot", "ratings")),
+                                                  "total": len(s.queue(p1, "pilot", "ratings"))}}
+    assert write_ratings_csv(s, tmp_path / "h.csv") == 0  # pilot ratings are not team ratings
+
+
+# ---------------------------------------------------------------------------
+# Endpoints (real pipeline, offline parser)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def web(tmp_path_factory):
+    from web.app import World, create_web_app
+
+    root = tmp_path_factory.mktemp("study")
+    os.environ["NTS_STUDY_DIR"] = str(root)
+    try:
+        world = World(parser_mode="offline", seed_history=False, deadline=60)
+    finally:
+        del os.environ["NTS_STUDY_DIR"]
+    world.study.save_items(build_items(_report()))
+    return TestClient(create_web_app(world)), world
+
+
+def test_labelling_is_blind_and_needs_consent(web):
+    c, world = web
+    (code,) = world.study.add_participants("team", 1)
+    h = {"X-Study": code}
+    assert c.get("/api/study/me", headers={"X-Study": "T-99"}).status_code == 401
+    assert c.get("/api/study/next/claims", headers=h).status_code == 403  # consent first
+    assert c.post("/api/study/consent", headers=h).json()["consented"]
+    nxt = c.get("/api/study/next/claims", headers=h).json()
+    assert set(nxt["item"]) == {"id", "claim", "facts"} and nxt["done"] == 0  # no config, no machine label
+    assert c.post("/api/study/labels", json={"task": "claims", "item": nxt["item"]["id"], "value": {"supported": "yes"}},
+                  headers=h).status_code == 422
+    assert c.post("/api/study/labels", json={"task": "claims", "item": nxt["item"]["id"], "value": {"supported": True}},
+                  headers=h).json()["ok"]
+    assert c.get("/api/study/next/claims", headers=h).json()["done"] == 1
+    rating = c.get("/api/study/next/ratings", headers=h).json()["item"]
+    assert set(rating) == {"id", "text"}
+    assert c.post("/api/study/labels", json={"task": "ratings", "item": rating["id"],
+                                             "value": {"clarity": 6, "acceptability": 3}}, headers=h).status_code == 422
+
+
+@pytest.mark.slow
+def test_pilot_session_in_the_portal(web):
+    """Practice clash -> own request -> negotiator's message -> reply in own words -> rating."""
+    c, _world = web
+    coord = {"X-User": "C-TT"}
+    code = c.post("/api/study/participants", json={"kind": "pilot", "n": 1}, headers=coord).json()["codes"][0]
+    h = {"X-Study": code}
+    assert c.get("/api/study/me", headers=h).json()["persona"] == "F-102"
+    c.post("/api/study/consent", headers=h)
+    assert c.get("/api/study/next/claims", headers=h).status_code == 403  # pilots only rate
+    assert c.post("/api/study/practice", headers=h | {"X-User": "F-101"}).status_code == 403  # not their persona
+    task = c.post("/api/study/practice", headers=h | {"X-User": "F-102"}).json()
+    assert "routers" in task["task"]
+    rid = c.post("/api/requests", json={"text": f"My {task['course']} practical needs routers too; it must be on "
+                                                "Tuesday afternoon."}, headers={"X-User": "F-102"}).json()["id"]
+    end, item = time.time() + 120, None
+    while time.time() < end and item is None:
+        item = next((i for i in c.get("/api/inbox", headers={"X-User": "F-102"}).json() if i["case"] == rid), None)
+        time.sleep(0.3)
+    assert item, "the negotiator never wrote to the participant"
+    letter = item["message"]["offers"][0]["key"]
+    peek = c.post(f"/api/inbox/{item['id']}/reply-text", json={"text": f"Option {letter} is fine with me.",
+                                                              "preview": True}, headers={"X-User": "F-102"}).json()
+    assert peek["reply"]["decision"] == "accept" and peek["reading"].startswith(f"You accept option {letter}")
+    assert c.post(f"/api/inbox/{item['id']}/reply-text", json={"text": "x"},
+                  headers={"X-User": "F-101"}).status_code == 403  # addressed to someone else
+    sent = c.post(f"/api/inbox/{item['id']}/reply-text", json={"text": f"Option {letter} is fine with me.",
+                                                              "preview": False}, headers={"X-User": "F-102"}).json()
+    assert sent["item"]["reply"]["choice"] == letter
+    for body in ({"kind": "reply", "item": item["id"], "confirmed": True},
+                 {"kind": "rating", "item": item["id"], "value": {"clarity": 4, "acceptability": 5}},
+                 {"kind": "understood", "case": rid, "value": "partly"}):
+        assert c.post("/api/study/live", json=body, headers=h | {"X-User": "F-102"}).json()["ok"]
+    live = c.get("/api/study/admin", headers=coord).json()["analysis"]["live"]
+    assert live["reply_reading_confirmed"] == 1 and live["clarity"] == 4 and live["understood"] == {"partly": 1}
+    assert c.get("/api/study/admin", headers={"X-User": "F-102"}).status_code == 403

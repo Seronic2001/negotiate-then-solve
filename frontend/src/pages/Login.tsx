@@ -1,5 +1,6 @@
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Avatar, Label, Mark } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -67,6 +68,9 @@ export default function Login() {
           </div>
           <h2 className="font-serif text-[26px] font-semibold">Sign in</h2>
           <p className="mt-1 text-[13.5px] text-ink-3">Demo sign-in: choose who you are. The college login replaces this in production.</p>
+          <Link to="/study" className="mt-3 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-brand hover:underline">
+            Taking part in the study? Enter your code <ArrowRight size={14} />
+          </Link>
           {error && (
             <p className="mt-6 rounded-md border border-bad/30 p-4 text-[13.5px] text-bad">
               Cannot reach the server ({error.message}). Start it with <code className="font-mono">uv run nts-web</code>.
