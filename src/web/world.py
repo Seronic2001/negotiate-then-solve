@@ -75,7 +75,7 @@ VIEWS: dict[str, set[str]] = {
     "handbook": _EVERYONE,
     "how": _EVERYONE,
     "new": _EVERYONE - {"dean"},  # the Dean rules on escalations, not requests
-    "inbox": {"coordinator"} | _TEACHERS,  # negotiation only ever asks teaching staff
+    "inbox": _EVERYONE,  # where each person hears from the timetable office: messages, changes, replies
     "approvals": {"coordinator"},
     "history": {"coordinator"},  # timetable versions, proposals and rollback; everyone else sees the latest published
     "documents": {"coordinator"},  # adding and removing policy documents

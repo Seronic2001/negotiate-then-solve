@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS extras (id TEXT PRIMARY KEY, body TEXT NOT NULL, week
 CREATE TABLE IF NOT EXISTS ledger (n INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events (n INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT, at TEXT NOT NULL,
                                    kind TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS seen (person TEXT NOT NULL, item TEXT NOT NULL, n INTEGER NOT NULL,
+                                 PRIMARY KEY (person, item));
 """
 
 
@@ -214,6 +216,19 @@ class Store:
             args.append(kind)
         rows = self._exec(sql + " ORDER BY n" + (f" LIMIT {int(limit)}" if limit else ""), tuple(args)).fetchall()
         return [{"n": n, "case": c, "at": a, "kind": k, **json.loads(b)} for n, c, a, k, b in rows]
+
+    # -- what each person has read in their inbox ----------------------------------
+
+    def seen(self, person: str) -> dict[str, int]:
+        """Inbox item -> the last event of it ``person`` has read (a later event makes it unread again)."""
+        return dict(self._exec("SELECT item, n FROM seen WHERE person=?", (person,)).fetchall())
+
+    def mark_seen(self, person: str, items: dict[str, int]) -> None:
+        with self._lock:
+            self.db.executemany("INSERT INTO seen (person, item, n) VALUES (?,?,?) "
+                                "ON CONFLICT (person, item) DO UPDATE SET n=max(n, excluded.n)",
+                                [(person, i, n) for i, n in items.items()])
+            self.db.commit()
 
     def versions(self) -> list[dict]:
         rows = self._exec("SELECT version, parent, approved_by, published, case_id, created_at, body "

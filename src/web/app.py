@@ -207,6 +207,111 @@ def _inbox_item(w: World, i: InboxItem) -> dict:
             "answered_by": i.answered_by}
 
 
+# ---------------------------------------------------------------------------
+# The inbox: everything addressed to one person, in one list
+# ---------------------------------------------------------------------------
+
+S = RequestStatus
+_REQUEST_TITLE = {
+    S.AWAITING_APPROVAL: "Your request is waiting for approval",
+    S.CLARIFICATION: "A question about your request",
+    S.DENIED: "Your request was declined",
+    S.REFUSED: "Your request could not be accepted",
+    S.ESCALATED: "Your request was sent up for a decision",
+    S.ANSWERED: "An answer to your question",
+    S.WITHDRAWN: "You withdrew your request",
+}
+
+
+def _event_time(at: str) -> str:
+    """Events are logged in local time; inbox items are compared in UTC."""
+    return datetime.fromisoformat(at).astimezone(UTC).isoformat()
+
+
+def _feed(w: World, u: dict, decides, handles) -> list[dict]:
+    """What ``u`` is told, newest first: negotiation messages, changes to their timetable, news of
+    their own requests, and requests waiting on them. ``unread`` items have an event the person has not
+    opened yet; ``needs_you`` ones wait for an answer or a decision."""
+    me = u["id"]
+    seen = w.store.seen(me)
+    last: dict[str, dict] = {}
+    settled: dict[str, dict] = {}  # case -> its last "published" or "withdrawn" event
+    for e in w.store.events(limit=None):
+        if e["case"]:
+            last[e["case"]] = e
+            if e["kind"] in (S.PUBLISHED.value, S.WITHDRAWN.value):
+                settled[e["case"]] = e
+    out: list[dict] = []
+
+    def add(key: str, n: int, kind: str, case: Case | None, title: str, text: str, at: str, *,
+            sender: str | None = None, needs_you: bool = False, **more) -> None:
+        out.append({"id": key, "n": n, "kind": kind, "case": case.id if case else None, "title": title,
+                    "text": plain(text), "at": at, "from": sender, "from_name": w.name_of(sender) if sender else None,
+                    "status": case.status.value if case else None, "request": case.request.raw_text if case else None,
+                    "needs_you": needs_you, "unread": needs_you or seen.get(key, 0) < n, **more})
+
+    for i in w.inbox.items.values():
+        if i.to != me and me != COORDINATOR:
+            continue
+        mine, n = i.to == me, 2 if i.reply else 1
+        case = w.orch.cases.get(i.case_id) if i.case_id else None
+        item = _inbox_item(w, i)
+        add(f"msg:{i.id}", n, "negotiation", case,
+            "A clash with your timetable" if mine else f"Negotiation with {w.name_of(i.to)}",
+            i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=mine and i.reply is None,
+            message=item)
+        if not mine:
+            out[-1]["unread"] = False  # the office follows these; they are not addressed to it
+
+    for case in w.orch.cases.values():
+        ev = last.get(case.id)
+        if ev is None:
+            continue
+        at, n = _event_time(ev["at"]), ev["n"]
+        own = case.request.sender_id == me
+        done = settled.get(case.id)
+        # someone else's request changed my timetable (or what I gave way for was withdrawn)
+        if not own and me in case.notices and done is not None:
+            withdrawn = done["kind"] == S.WITHDRAWN.value
+            add(f"change:{case.id}", done["n"], "change", case,
+                "A change you agreed to no longer applies" if withdrawn else "Your timetable has changed",
+                case.notices[me], _event_time(done["at"]),
+                sender=case.request.sender_id if withdrawn else done.get("approver") or COORDINATOR,
+                version=done.get("version"))
+        if own:
+            status = case.status
+            if status == S.PUBLISHED:
+                version = done.get("version") if done else None
+                if version is None:
+                    title, text = "Your request already fits the timetable", case.reply
+                else:
+                    who = w.name_of(done.get("approver") or COORDINATOR)
+                    title = "Your request was approved"
+                    text = f"Approved by {who}; the timetable now includes it (version {version})."
+                    if me in case.notices:
+                        text += " " + case.notices[me]
+                add(f"req:{case.id}", n, "request", case, title, text, at, sender=COORDINATOR, version=version)
+            elif status == S.FORWARDED:
+                answer = case.handled
+                add(f"req:{case.id}", n, "request", case,
+                    f"A reply from {w.name_of(answer['by'])}" if answer else "Your message was passed to the timetable office",
+                    case.reply, at, sender=answer["by"] if answer else COORDINATOR)
+            elif status in _REQUEST_TITLE and case.reply:
+                add(f"req:{case.id}", n, "request", case, _REQUEST_TITLE[status], case.reply, at,
+                    sender=(case.decision or {}).get("by") or COORDINATOR, needs_you=status == S.CLARIFICATION)
+        # waiting on me
+        if me == COORDINATOR and case.status == S.AWAITING_APPROVAL:
+            add(f"approve:{case.id}", n, "action", case, "A change is waiting for your approval", case.request.raw_text,
+                at, sender=case.request.sender_id, needs_you=True, action="approve")
+        if case.status == S.ESCALATED and decides(u, case):
+            add(f"decide:{case.id}", n, "action", case, "Escalated to you for a decision", case.request.raw_text, at,
+                sender=case.request.sender_id, needs_you=True, action="decide")
+        if handles(u, case):
+            add(f"forward:{case.id}", n, "action", case, "A message passed to you for a reply", case.request.raw_text,
+                at, sender=case.request.sender_id, needs_you=True, action="reply")
+    return sorted(out, key=lambda x: x["at"], reverse=True)
+
+
 def _reading(w: World, m: Message, r: Reply) -> str:
     """A typed reply in plain words, for the sender to confirm."""
     days = ", ".join(FULL_DAY.get(d, d) for d in r.counter_days or [])
@@ -408,6 +513,10 @@ class HandleBody(BaseModel):
     note: str
 
 
+class SeenBody(BaseModel):
+    items: dict[str, int]  # inbox item -> the event of it now read
+
+
 class AutopilotBody(BaseModel):
     person: str
     on: bool
@@ -535,7 +644,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             "my_decisions": sum(1 for c in cases.values() if c.status == RequestStatus.ESCALATED and decides(u, c)),
             # messages forwarded to the office and not answered yet (listed on the Approvals page)
             "my_forwarded": sum(1 for c in cases.values() if handles(u, c)),
-            "my_inbox": sum(1 for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None),
+            "my_inbox": sum(1 for i in _feed(w, u, decides, handles) if i["unread"]),
             "published_version": cur.version if cur else None,
             "gini": ledger.gini(teaching, SEMESTER),
             "negotiations": {"agreed": sum(o.status == "agreed" for o in outcomes),
@@ -756,6 +865,16 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         w = W()
         items = [i for i in w.inbox.items.values() if i.to == u["id"] or u["id"] == COORDINATOR]
         return [_inbox_item(w, i) for i in sorted(items, key=lambda i: -i.created)]
+
+    @app.get("/api/feed")
+    def feed(u: dict = Depends(user)) -> list[dict]:
+        """Everything addressed to this person: the one place they hear from the timetable office."""
+        return _feed(W(), u, decides, handles)
+
+    @app.post("/api/feed/seen")
+    def feed_seen(body: SeenBody, u: dict = Depends(user)) -> dict:
+        W().store.mark_seen(u["id"], body.items)
+        return {"ok": True}
 
     @app.post("/api/inbox/{item_id}/reply")
     def reply(item_id: str, body: ReplyBody, u: dict = Depends(user)) -> dict:
