@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from .schemas import (
     Constraint,
     ConstraintType,
+    Placement,
     Role,
     Scope,
     Source,
@@ -65,6 +66,17 @@ class Session(BaseModel):
     room_type: RoomType = RoomType.LECTURE
     equipment: list[str] = Field(default_factory=list)
     size: int | None = None  # overrides the sum of group sizes (e.g. ITC-2007 enrolments)
+
+
+class ExtraClass(BaseModel):
+    """A class held in one week only (an extra class asked for by its teacher): a copy of one of the
+    teacher's weekly sessions, at a placement that was free in that week. Kept in the store, not in
+    the instance, so solves of other weeks never see it."""
+
+    session: Session
+    week: int
+    placement: Placement
+    request: str | None = None
 
 
 class Calendar(BaseModel):

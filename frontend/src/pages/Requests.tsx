@@ -11,7 +11,7 @@ import type { Status } from "../lib/types";
 
 type Filter = "all" | "active" | "done" | "exits";
 const ACTIVE: Status[] = ["received", "classified", "policy_checked", "compiled", "solved", "negotiating", "fairness_audited", "awaiting_approval"];
-const EXITS: Status[] = ["refused", "denied", "clarification_requested", "escalated", "forwarded"];
+const EXITS: Status[] = ["refused", "denied", "clarification_requested", "escalated", "forwarded", "withdrawn"];
 
 export default function Requests() {
   const { can } = useAuth();

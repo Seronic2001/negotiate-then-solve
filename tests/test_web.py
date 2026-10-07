@@ -190,6 +190,59 @@ def test_answering_a_clarification_reruns_the_same_case(client):
     assert c.post(f"/api/cases/{rid}/clarify", json={"text": "x"}, headers=h).status_code == 409
 
 
+def test_the_office_answers_a_forwarded_message(client):
+    c, _ = client
+    rid = c.post("/api/requests", json={"text": "Two of our classes clash on Monday morning."},
+                 headers=as_("ST-G-01")).json()["id"]
+    d = wait_for(c, rid, {"forwarded"}, user="ST-G-01")
+    assert d["forwarded_to"] == "coordinator" and not d["can_handle"]  # the sender cannot answer it
+    assert c.get("/api/overview", headers=as_(COORDINATOR)).json()["my_forwarded"] >= 1
+    assert c.get(f"/api/cases/{rid}", headers=as_(COORDINATOR)).json()["can_handle"]
+    assert c.post(f"/api/cases/{rid}/handle", json={"note": "ok"}, headers=as_("ST-G-01")).status_code == 403
+    assert c.post(f"/api/cases/{rid}/handle", json={"note": "  "}, headers=as_(COORDINATOR)).status_code == 422
+    d = c.post(f"/api/cases/{rid}/handle", json={"note": "Booked Lab 2 at 3 pm."}, headers=as_(COORDINATOR)).json()
+    assert d["status"] == "forwarded" and d["answer"]["note"] == "Booked Lab 2 at 3 pm."
+    assert d["reply"].endswith("Booked Lab 2 at 3 pm.")
+    mine = next(x for x in c.get("/api/cases", headers=as_("ST-G-01")).json() if x["id"] == rid)
+    assert mine["handled"] and not c.get(f"/api/cases/{rid}", headers=as_(COORDINATOR)).json()["can_handle"]
+    assert c.post(f"/api/cases/{rid}/handle", json={"note": "again"}, headers=as_(COORDINATOR)).status_code == 409
+
+
+def test_the_sender_withdraws_a_request_that_changed_nothing(client):
+    c, _ = client
+    text = "Our lab and lecture clash on Friday afternoon."
+    rid = c.post("/api/requests", json={"text": text}, headers=as_("ST-G-02")).json()["id"]
+    d = wait_for(c, rid, {"forwarded"}, user="ST-G-02")
+    assert d["can_withdraw"] and not c.get(f"/api/cases/{rid}", headers=as_(COORDINATOR)).json()["can_withdraw"]
+    assert c.post(f"/api/cases/{rid}/withdraw", headers=as_(COORDINATOR)).status_code == 403
+    d = c.post(f"/api/cases/{rid}/withdraw", headers=as_("ST-G-02")).json()
+    assert d["status"] == "withdrawn" and not d["forwarded_to"]  # off the office's list
+    assert c.post(f"/api/cases/{rid}/withdraw", headers=as_("ST-G-02")).status_code == 409
+    again = c.post("/api/requests", json={"text": text}, headers=as_("ST-G-02"))
+    assert again.status_code == 200 and again.json()["id"] != rid  # withdrawn: not a duplicate any more
+
+
+def test_an_extra_class_from_request_to_the_week_timetable(client):
+    c, world = client
+    rid = c.post("/api/requests", json={"text": "On Thursday in week 13 I want an extra class to be scheduled."},
+                 headers=as_("F-105")).json()["id"]
+    d = wait_for(c, rid, {"clarification_requested", "awaiting_approval"}, user="F-105")
+    if d["status"] == "clarification_requested":  # Dr. Das teaches more than one class
+        assert "Which class" in d["reply"]
+        title = world.instance.course_title(next(s for s in world.instance.sessions if s.faculty == "F-105").course)
+        assert c.post(f"/api/cases/{rid}/clarify", json={"text": title}, headers=as_("F-105")).status_code == 200
+        d = wait_for(c, rid, {"awaiting_approval"}, user="F-105")
+    assert d["extra"]["placement"]["day"] == "Thu" and d["proposal"]["week"] == 13
+    row = next(r for r in d["proposal"]["diff"] if r["extra"])
+    assert row["before"] is None and "extra" in row["session_name"]
+    assert any(a["id"] == rid for a in c.get("/api/approvals", headers=as_(COORDINATOR)).json())
+    c.post(f"/api/approvals/{rid}/approve", headers=as_(COORDINATOR)).raise_for_status()
+    tt = c.get("/api/timetable?week=13", headers=as_("F-105")).json()
+    assert any(e["extra"] and e["faculty"] == "F-105" for e in tt["entries"])
+    week = next(w for w in c.get("/api/calendar", headers=as_("F-105")).json()["weeks"] if w["week"] == 13)
+    assert any(x["extra"] for x in week["classes"])
+
+
 def test_every_case_opens(client):
     """Each case page's JSON is plain (numpy values from routing once made some answer 500)."""
     c, world = client

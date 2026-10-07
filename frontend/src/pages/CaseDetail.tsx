@@ -1,12 +1,13 @@
 import clsx from "clsx";
-import { AlertTriangle, ArrowLeft, Cpu } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Cpu, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { EventTimeline, Lifecycle } from "../components/Lifecycle";
 import { ConstraintCard, DiffTable, GroundedExplanation, MessageBubble } from "../components/Negotiation";
 import { ClarifyForm } from "../components/Clarify";
 import { decider, EscalationPanel } from "../components/Escalation";
-import { Avatar, Badge, Card, CardHeader, Collapse, EmptyState, Json, Label, Meter, Skeleton, StatusBadge, Tabs, Toast } from "../components/ui";
+import { ForwardedPanel } from "../components/Forwarded";
+import { Avatar, Badge, Button, Card, CardHeader, Collapse, EmptyState, Json, Label, Meter, Skeleton, StatusBadge, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ago, num, pct, ROLE_LABEL, secs } from "../lib/meta";
@@ -54,7 +55,18 @@ export default function CaseDetail() {
             <span className="font-mono text-[12px]">· {c.id}</span>
           </p>
         </div>
-        <StatusBadge status={c.status} live={c.running} />
+        <div className="flex items-center gap-2">
+          {c.can_withdraw && (
+            <Withdraw
+              c={c}
+              onDone={(msg) => {
+                setToast(msg);
+                void refresh();
+              }}
+            />
+          )}
+          <StatusBadge status={c.status} live={c.running} />
+        </div>
       </div>
 
       <Card className="mb-6 px-5 py-4">
@@ -66,6 +78,18 @@ export default function CaseDetail() {
           <EscalationPanel
             c={c}
             onDecided={(msg) => {
+              setToast(msg);
+              void refresh();
+            }}
+          />
+        </div>
+      )}
+
+      {c.forwarded_to === "coordinator" && (
+        <div className="mb-6">
+          <ForwardedPanel
+            c={c}
+            onHandled={(msg) => {
               setToast(msg);
               void refresh();
             }}
@@ -93,7 +117,46 @@ export default function CaseDetail() {
   );
 }
 
+/** The sender takes the request back while nothing it asked for is in the published timetable. */
+function Withdraw({ c, onDone }: { c: Detail; onDone: (msg: string) => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.withdraw(c.id);
+      setConfirming(false);
+      onDone("Withdrawn. Anything it set in motion has been undone.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!confirming)
+    return (
+      <Button size="sm" icon={Undo2} onClick={() => setConfirming(true)}>
+        Withdraw
+      </Button>
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[13px] text-ink-2">{error ?? "Withdraw this request?"}</span>
+      <Button size="sm" onClick={() => setConfirming(false)} disabled={busy}>
+        Keep it
+      </Button>
+      <Button size="sm" variant="danger" icon={Undo2} loading={busy} onClick={go}>
+        Withdraw
+      </Button>
+    </div>
+  );
+}
+
 function outcomeText(c: Detail): string | null {
+  if (c.extra?.placement)
+    return `An extra ${c.extra.label} class fits on ${c.extra.placement.text}, week ${c.extra.week}. It was placed in a free hour, so no other class moves.`;
   const o = c.outcome;
   if (!o) return null;
   if (o.status === "agreed") {

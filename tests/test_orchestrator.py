@@ -246,3 +246,140 @@ def test_a_room_closure_cancels_what_has_nowhere_else_to_go(world):
     teacher = inst.session_by_id[lost[0]].faculty
     assert "make-up" in c.notices[teacher]
     assert all(p.room not in shut for p in v.assignment.values())
+
+
+def test_withdrawing_a_negotiated_request_undoes_everything_it_set_in_motion(world):
+    _, orch, store, owners = world
+    orch.submit(req("R-1", owners["R-A"], "REQUEST-A"))
+    v = orch.approve("R-1", "C-TT")
+    active, ledger = {c.id for c in store.constraints()}, store.ledger()
+    b = orch.submit(req("R-2", owners["R-B"], "REQUEST-B"))
+    assert b.status == S.AWAITING_APPROVAL and b.outcome.concessions and b.outcome.relaxed
+    with pytest.raises(ValueError):
+        orch.withdraw("R-1", owners["R-A"])  # published a change: a new request undoes it, not this
+    orch.withdraw("R-2", owners["R-B"])
+    assert b.status == S.WITHDRAWN and "withdrew" in b.reply
+    assert {c.id for c in store.constraints()} == active  # set-aside preferences back, its own gone
+    assert store.ledger() == ledger  # nobody is counted as having conceded for it
+    assert set(b.notices) == {e.stakeholder for e in b.outcome.concessions}
+    assert store.current_version().version == v.version and not orch.pending()
+    with pytest.raises(ValueError):
+        orch.approve("R-2", "C-TT")
+    with pytest.raises(ValueError):
+        orch.withdraw("R-2", owners["R-B"])  # already closed
+
+
+def test_withdrawing_a_request_that_already_fitted_takes_it_out_of_force(world):
+    sc, orch, store, owners = world
+    who = owners["R-A"]
+    busy = {(p.day, p.slot) for s, p in store.current_version().assignment.items()
+            if next(x for x in sc.instance.sessions if x.id == s).faculty == who}
+    day, slot = next((d, t) for d in sc.instance.calendar.days for t in range(sc.instance.calendar.slots_per_day)
+                     if (d, t) not in busy)
+    orch.parser.outputs["FREE-HOUR"] = ParseOutput(request_type="preference", action="compile", constraints=[
+        DraftConstraint(type="avoid", hard=False, scope_kind="faculty", scope_id=who, days=[day], slots=[slot])])
+    c = orch.submit(req("R-8", who, "FREE-HOUR"))
+    assert c.status == S.PUBLISHED and orch.withdrawable(c) is None
+    orch.withdraw("R-8", who)
+    assert c.status == S.WITHDRAWN and not any(x.source.request == "R-8" for x in store.constraints())
+
+
+def test_withdrawing_a_replacement_brings_back_the_earlier_constraint(world):
+    _, orch, store, owners = world
+    orch.submit(req("R-6", owners["R-A"], "REQUEST-A"))
+    orch.approve("R-6", "C-TT")
+    c = orch.submit(req("R-7", owners["R-A"], "CHANGE-A"))
+    assert c.superseded and orch.withdrawable(c) is None
+    orch.withdraw("R-7", owners["R-A"])
+    active = {x.id for x in store.constraints()}
+    assert set(c.superseded) <= active and not {x.id for x in c.constraints} & active
+
+
+def test_only_requests_that_stopped_can_be_withdrawn(world):
+    _, orch, _store, owners = world
+    q = orch.submit(req("R-9", owners["R-A"], "lunch"))
+    assert q.status == S.ANSWERED and "closed" in orch.withdrawable(q)
+
+
+def _extra_world(world):
+    _, orch, _, _ = world
+    orch.parser.outputs["extra class"] = ParseOutput(request_type="preference", action="investigate")
+    return world
+
+
+def test_an_extra_class_goes_into_a_free_hour_and_nothing_else_moves(world):
+    sc, orch, store, owners = _extra_world(world)
+    inst = sc.instance
+    before = dict(store.current_version().assignment)
+    c = orch.submit(req("R-20", "F-303", "I want an extra class on Thursday in week 5"))
+    assert c.status == S.AWAITING_APPROVAL, c.reply
+    assert c.route.endswith("+extra") and "Digital Logic" in c.reply and "Thursday" in c.reply
+    p = c.proposal
+    assert p.week == 5 and set(p.assignment) - set(before) == {"X-R-20"}
+    assert {s: q for s, q in p.assignment.items() if s != "X-R-20"} == before  # nothing else moved
+    x = p.assignment["X-R-20"]
+    assert x.day == "Thu" and x.slot != inst.calendar.lunch_slot
+    template = inst.session_by_id[c.extra["template"]]
+    for s in inst.sessions:  # the teacher, the section and the room are all free then
+        q = before[s.id]
+        if q.day == x.day and q.slot == x.slot:
+            assert s.faculty != "F-303" and not set(s.groups) & set(template.groups) and q.room != x.room
+
+    v = orch.approve("R-20", "C-TT")
+    assert store.current_version(5).assignment["X-R-20"] == x and "X-R-20" not in store.current_version(None).assignment
+    assert "Extra class" in c.notices["F-303"] and all(f"ST-{g}" in c.notices for g in template.groups)
+    assert v.week == 5
+
+    # a semester change published later is carried into week 5: the extra class stays, and nothing
+    # is put on top of it
+    a = orch.submit(req("R-21", owners["R-A"], "REQUEST-A"))
+    assert a.status == S.AWAITING_APPROVAL and a.proposal.week is None, a.reply
+    orch.approve("R-21", "C-TT")
+    assert any(e["kind"] == "carried" and e["week"] == 5 for e in store.events())
+    w5 = store.current_version(5).assignment
+    assert w5["X-R-20"] == x
+    for s in inst.sessions:
+        q = w5.get(s.id)
+        if q and q.day == x.day and q.slot == x.slot:
+            assert s.faculty != "F-303" and not set(s.groups) & set(template.groups) and q.room != x.room
+
+
+def test_an_extra_class_asks_for_the_week_and_offers_free_times(world):
+    _, orch, store, _ = _extra_world(world)
+    c = orch.submit(req("R-22", "F-303", "Could I have an extra class on Friday?"))
+    assert c.status == S.CLARIFICATION and "Which week" in c.reply
+    c = orch.submit(req("R-23", "F-303", "I want an extra class at 1 pm in week 6"))  # the lunch hour
+    assert c.status == S.CLARIFICATION and "no free hour" in c.reply and "Free times that week" in c.reply
+    assert not store.extras(6)
+
+
+def test_withdrawing_an_extra_class_takes_it_out(world):
+    _, orch, store, _ = _extra_world(world)
+    c = orch.submit(req("R-24", "F-303", "I want an extra class in week 7"))
+    assert c.status == S.AWAITING_APPROVAL and store.extras(7)
+    orch.withdraw("R-24", "F-303")
+    assert not store.extras(7) and not any(x.source.request == "R-24" for x in store.constraints())
+
+
+def test_an_extra_class_question_stays_a_question(world):
+    _, orch, _, owners = _extra_world(world)
+    q = orch.submit(req("R-25", owners["R-A"], "lunch: are extra classes allowed then?"))
+    assert q.status == S.ANSWERED
+
+
+def test_the_extra_reader_asks_which_class():
+    from agents.extra import ExtraReader
+    from core.instance import Session
+    sc = build("contention", 1, seed=11)
+    inst = sc.instance.model_copy(update={"sessions": [*sc.instance.sessions, Session(
+        id="S-X", course="CG-EXTRA", kind="lecture", faculty="F-303",
+        groups=["G-A"])], "course_titles": {**sc.instance.course_titles, "CG-EXTRA": "Robotics"}})
+    for k in ("session_by_id", "group_by_id"):
+        inst.__dict__.pop(k, None)
+    r = ExtraReader(inst)
+    asked = r.read("An extra class in week 3 please", "F-303")
+    assert asked.question and "Digital Logic" in asked.question and "Robotics" in asked.question
+    named = r.read("An extra Robotics class in week 3 please", "F-303")
+    assert named.question is None and named.template.id == "S-X" and named.week == 3
+    answered = r.read("An extra class in week 3 please Robotics, actually week 4", "F-303")
+    assert answered.template.id == "S-X" and answered.week == 4  # the last week named wins

@@ -16,7 +16,7 @@ const MAIN: { status: Status; short: string }[] = [
   { status: "awaiting_approval", short: "Approval" },
   { status: "published", short: "Published" },
 ];
-const EXITS: Status[] = ["refused", "denied", "clarification_requested", "escalated", "answered", "forwarded"];
+const EXITS: Status[] = ["withdrawn", "refused", "denied", "clarification_requested", "escalated", "answered", "forwarded"];
 
 /** The request lifecycle (proposal Figure 2), lit up from the event log. */
 export function Lifecycle({ events, status, live }: { events: EventRow[]; status: Status; live?: boolean }) {

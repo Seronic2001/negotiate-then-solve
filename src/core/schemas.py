@@ -189,6 +189,7 @@ class RequestStatus(str, Enum):
     ESCALATED = "escalated"
     ANSWERED = "answered"  # policy question answered from the handbook
     FORWARDED = "forwarded"  # clash report or out-of-scope message passed to a person
+    WITHDRAWN = "withdrawn"  # taken back by the sender before it changed the published timetable
 
 
 _S = RequestStatus
@@ -197,17 +198,18 @@ TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.CLASSIFIED: frozenset({_S.POLICY_CHECKED, _S.REFUSED, _S.ANSWERED, _S.FORWARDED}),
     _S.POLICY_CHECKED: frozenset({_S.COMPILED, _S.DENIED, _S.ESCALATED, _S.CLARIFICATION}),
     _S.COMPILED: frozenset({_S.SOLVED, _S.CLARIFICATION}),
-    _S.CLARIFICATION: frozenset({_S.RECEIVED}),
+    _S.CLARIFICATION: frozenset({_S.RECEIVED, _S.WITHDRAWN}),
     _S.SOLVED: frozenset({_S.FAIRNESS_AUDITED, _S.NEGOTIATING}),
     _S.NEGOTIATING: frozenset({_S.FAIRNESS_AUDITED, _S.ESCALATED}),
     _S.FAIRNESS_AUDITED: frozenset({_S.AWAITING_APPROVAL, _S.PUBLISHED}),  # nothing moved: nothing to approve
-    _S.AWAITING_APPROVAL: frozenset({_S.PUBLISHED, _S.NEGOTIATING}),
+    _S.AWAITING_APPROVAL: frozenset({_S.PUBLISHED, _S.NEGOTIATING, _S.WITHDRAWN}),
     _S.REFUSED: frozenset(),
     _S.DENIED: frozenset(),
-    _S.PUBLISHED: frozenset(),
-    _S.ESCALATED: frozenset({_S.COMPILED, _S.DENIED}),  # a person with the authority grants or declines it
+    _S.PUBLISHED: frozenset({_S.WITHDRAWN}),  # only one that moved nothing (Orchestrator.withdrawable)
+    _S.ESCALATED: frozenset({_S.COMPILED, _S.DENIED, _S.WITHDRAWN}),  # a person with the authority grants or declines it
     _S.ANSWERED: frozenset(),
-    _S.FORWARDED: frozenset(),
+    _S.FORWARDED: frozenset({_S.WITHDRAWN}),
+    _S.WITHDRAWN: frozenset(),
 }
 
 

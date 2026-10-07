@@ -28,7 +28,8 @@ export type Status =
   | "published"
   | "escalated"
   | "answered"
-  | "forwarded";
+  | "forwarded"
+  | "withdrawn";
 
 export interface EventRow {
   n: number;
@@ -40,6 +41,10 @@ export interface EventRow {
 
 export interface CaseSummary {
   escalated_to?: string | null;
+  /** Who a forwarded message went to: "coordinator", or "office" (outside the timetable). */
+  forwarded_to?: string | null;
+  /** The coordinator has answered it. */
+  handled?: boolean;
   id: string;
   sender: string;
   sender_name: string;
@@ -132,6 +137,8 @@ export interface InboxItem {
 export interface DiffRow {
   session: string;
   session_name: string;
+  /** An extra class, held in this week only. */
+  extra?: boolean;
   faculty: string | null;
   faculty_name: string | null;
   groups: string[];
@@ -197,6 +204,14 @@ export interface CaseDetail extends CaseSummary {
   decision?: null | { by: string; by_name: string; granted: boolean; note: string; set_aside?: string[] };
   /** This viewer is the one the escalation was sent to, and it is still open. */
   can_decide?: boolean;
+  /** The coordinator's answer to a forwarded message. */
+  answer?: null | { by: string; by_name: string; note: string; at: string };
+  /** This viewer is the coordinator and the forwarded message is still unanswered. */
+  can_handle?: boolean;
+  /** This viewer sent it, and nothing it asked for is in the published timetable yet. */
+  can_withdraw?: boolean;
+  /** An extra class: which class and week, and where it is held once a free time was found. */
+  extra?: null | { template: string | null; week: number | null; session?: string; label?: string; placement: PlacementView | null };
   reply: string;
   notices: Record<string, string>;
   inbox: InboxItem[];
@@ -211,6 +226,7 @@ export interface Overview {
   total: number;
   pending_approvals: number;
   my_decisions?: number;
+  my_forwarded?: number;
   my_inbox: number;
   published_version: number | null;
   gini: number;
@@ -244,6 +260,8 @@ export interface TestRun {
 
 export interface TimetableEntry {
   session: string;
+  /** An extra class, held in this week only. */
+  extra?: boolean;
   course: string;
   title: string;
   kind: "lecture" | "tutorial" | "practical";

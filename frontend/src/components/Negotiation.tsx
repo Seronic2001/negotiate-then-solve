@@ -218,12 +218,15 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
                 <p className="font-medium">{r.session_name.replace(/^the /, "")}</p>
               </td>
               <td className="py-2.5 pr-3 text-ink-2">{r.faculty_name}</td>
-              <td className="py-2.5 pr-3 text-ink-3 line-through decoration-bad/50">{r.before ? `${r.before.day} ${r.before.time} · ${r.before.room}` : "—"}</td>
+              <td className={clsx("py-2.5 pr-3 text-ink-3", r.before && "line-through decoration-bad/50")}>
+                {r.before ? `${r.before.day} ${r.before.time} · ${r.before.room}` : r.extra ? "New" : "—"}
+              </td>
               <td className="py-2.5 pr-3 text-ink-3">
                 <ArrowRight size={14} />
               </td>
               <td className={clsx("py-2.5 font-medium", r.after || !r.before ? "text-ok" : "text-bad")}>
                 {r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : r.before ? "Cancelled this week (make-up owed)" : "—"}
+                {r.extra && !r.before && <span className="ml-2 text-[12px] font-normal text-ink-3">extra class, this week only</span>}
               </td>
             </tr>
           ))}

@@ -13,6 +13,7 @@ import sqlite3
 import threading
 from datetime import datetime
 
+from core.instance import ExtraClass
 from core.schemas import (
     ConcessionEntry,
     Constraint,
@@ -30,10 +31,15 @@ CREATE TABLE IF NOT EXISTS constraints (id TEXT PRIMARY KEY, body TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS versions (version INTEGER PRIMARY KEY, body TEXT NOT NULL, parent INTEGER,
                                      approved_by TEXT, published INTEGER NOT NULL DEFAULT 0, case_id TEXT,
                                      created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS extras (id TEXT PRIMARY KEY, body TEXT NOT NULL, week INTEGER NOT NULL,
+                                   active INTEGER NOT NULL, request_id TEXT);
 CREATE TABLE IF NOT EXISTS ledger (n INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events (n INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT, at TEXT NOT NULL,
                                    kind TEXT NOT NULL, body TEXT NOT NULL);
 """
+
+
+EXTRA_PREFIX = "X-"  # session ids of extra classes (ExtraClass), never used by the instance's own sessions
 
 
 class _Rows(list):
@@ -52,6 +58,11 @@ class Store:
         self.db.executescript(SCHEMA)
         self._lock = threading.Lock()
 
+    def ensure_schema(self) -> None:
+        """Add tables a database saved by an older version lacks (after ``deserialize``)."""
+        with self._lock:
+            self.db.executescript(SCHEMA)
+
     def _exec(self, sql: str, args: tuple = ()) -> _Rows:
         # rows are read under the lock: the connection is shared, and another thread's
         # statement or commit can reset a cursor that is still being read
@@ -63,8 +74,10 @@ class Store:
     # -- requests ----------------------------------------------------------------
 
     def add_request(self, r: Request, dedupe_key: str | None = None) -> bool:
-        """False if an identical request (same key) is already stored."""
-        if dedupe_key and self._exec("SELECT 1 FROM requests WHERE dedupe_key=?", (dedupe_key,)).fetchone():
+        """False if an identical request (same key) is already stored; a withdrawn one does not count,
+        so the sender can send it again."""
+        if dedupe_key and self._exec("SELECT 1 FROM requests WHERE dedupe_key=? AND status!=?",
+                                     (dedupe_key, RequestStatus.WITHDRAWN.value)).fetchone():
             return False
         self._exec("INSERT INTO requests VALUES (?,?,?,?,?)",
                    (r.id, r.model_dump_json(), r.status.value, dedupe_key, r.thread_id))
@@ -96,15 +109,42 @@ class Store:
     def set_active(self, cid: str, active: bool) -> None:
         self._exec("UPDATE constraints SET active=? WHERE id=?", (int(active), cid))
 
+    def request_constraints(self, request_id: str) -> list[str]:
+        """IDs of the constraints a request added (its own, and any a negotiation reply added for it)."""
+        return [cid for (cid,) in self._exec("SELECT id FROM constraints WHERE request_id=?", (request_id,)).fetchall()]
+
     def constraints(self, active_only: bool = True) -> list[Constraint]:
         sql = "SELECT body FROM constraints" + (" WHERE active=1" if active_only else "")
         return [Constraint.model_validate_json(b) for (b,) in self._exec(sql).fetchall()]
+
+    # -- extra classes ---------------------------------------------------------------
+
+    def add_extra(self, x: ExtraClass, active: bool = True) -> None:
+        self._exec("INSERT OR REPLACE INTO extras VALUES (?,?,?,?,?)",
+                   (x.session.id, x.model_dump_json(), x.week, int(active), x.request))
+
+    def set_extras_active(self, request_id: str, active: bool) -> None:
+        self._exec("UPDATE extras SET active=? WHERE request_id=?", (int(active), request_id))
+
+    def extras(self, week: int | None = None, active_only: bool = True) -> list[ExtraClass]:
+        """Extra classes, all weeks or one; withdrawn ones too with ``active_only=False`` (old versions
+        still name them)."""
+        sql, args = "SELECT body FROM extras WHERE 1=1", []
+        if week is not None:
+            sql += " AND week=?"
+            args.append(week)
+        if active_only:
+            sql += " AND active=1"
+        return [ExtraClass.model_validate_json(b) for (b,) in self._exec(sql + " ORDER BY id", tuple(args)).fetchall()]
 
     # -- timetable versions ----------------------------------------------------------
 
     def propose_version(self, assignment: dict[str, Placement], case_id: str,
                         week: int | None = None, cancelled: list[str] | None = None) -> TimetableVersion:
         cur = self.current_version(week) or self.current_version()
+        if week is not None:  # the week's extra classes are held wherever they were placed
+            assignment = {**{s: p for s, p in assignment.items() if not s.startswith(EXTRA_PREFIX)},
+                          **{x.session.id: x.placement for x in self.extras(week)}}
         (n,) = self._exec("SELECT COALESCE(MAX(version), 0) FROM versions").fetchone()
         v = TimetableVersion(version=n + 1, assignment=assignment, parent=cur.version if cur else None, week=week,
                              cancelled=sorted(cancelled or []))
@@ -146,6 +186,14 @@ class Store:
 
     def record_concession(self, e: ConcessionEntry) -> None:
         self._exec("INSERT INTO ledger (body) VALUES (?)", (e.model_dump_json(),))
+
+    def remove_concession(self, e: ConcessionEntry) -> bool:
+        """Take one recorded concession back out of the ledger (its request was withdrawn)."""
+        row = self._exec("SELECT n FROM ledger WHERE body=? ORDER BY n DESC LIMIT 1", (e.model_dump_json(),)).fetchone()
+        if row is None:
+            return False
+        self._exec("DELETE FROM ledger WHERE n=?", (row[0],))
+        return True
 
     def ledger(self) -> list[ConcessionEntry]:
         return [ConcessionEntry.model_validate_json(b) for (b,) in

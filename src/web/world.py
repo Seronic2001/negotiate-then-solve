@@ -324,7 +324,7 @@ class World:
         # (its unanswered messages are closed); one waiting for a person stays as it was
         waiting = {RequestStatus.PUBLISHED, RequestStatus.REFUSED, RequestStatus.DENIED, RequestStatus.ANSWERED,
                    RequestStatus.FORWARDED, RequestStatus.AWAITING_APPROVAL, RequestStatus.ESCALATED,
-                   RequestStatus.CLARIFICATION}
+                   RequestStatus.CLARIFICATION, RequestStatus.WITHDRAWN}
         for item in list(self.inbox.items.values()):
             if item.reply is None:
                 self.inbox.answer(item.id, Reply(decision="no_reply"), "restart")
@@ -378,6 +378,7 @@ class World:
         keep = {id(self.instance): self.instance}
         with self.store._lock:
             self.store.db.deserialize(snap["db"])
+        self.store.ensure_schema()  # a state saved before a table was added
         self.orch.cases = copy.deepcopy(snap["cases"], keep)  # a fresh copy, so it can be restored again
         items: dict[str, InboxItem] = {}
         for iid, case_id, to, message, created, reply, by, at in copy.deepcopy(snap["inbox"], keep):

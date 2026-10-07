@@ -179,7 +179,7 @@ function Sidebar({
   const { sees, can } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? (ov?.pending_approvals ?? 0) + (ov?.my_decisions ?? 0) : 0) ?? 0;
+  const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? (ov?.pending_approvals ?? 0) + (ov?.my_decisions ?? 0) + (ov?.my_forwarded ?? 0) : 0) ?? 0;
   const status = ov?.seeding ? "Loading demo history…" : ov?.published_version != null ? `Timetable v${ov.published_version} published` : "Connecting…";
 
   return (

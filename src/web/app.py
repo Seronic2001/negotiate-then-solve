@@ -41,12 +41,14 @@ from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
 from core.graph import add_conflict, build_graph
+from core.instance import Session
 from core.schemas import Placement, Request, RequestStatus, Tier
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour
 from language.llm import FREE_TIER, LLMError
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
+from pipeline.store import EXTRA_PREFIX
 
 from .wording import TIER_LABEL, plain
 from .wording import TIER_WHO as TIER_WHO_PLAIN
@@ -107,7 +109,10 @@ def _summary(w: World, r: Request, case: Case | None) -> dict:
             "rounds": case.outcome.rounds if case and case.outcome else 0,
             "running": r.id in w.threads and w.threads[r.id].is_alive(),
             # who an escalation went to, so each person's home page lists only the decisions that are theirs
-            "escalated_to": case.outcome.escalation.to if case and case.outcome and case.outcome.escalation else None}
+            "escalated_to": case.outcome.escalation.to if case and case.outcome and case.outcome.escalation else None,
+            # who a forwarded message went to, and whether the coordinator has answered it yet
+            "forwarded_to": case.forwarded_to if case else None,
+            "handled": bool(case and case.handled)}
 
 
 def _case_detail(w: World, case: Case) -> dict:
@@ -157,6 +162,10 @@ def _case_detail(w: World, case: Case) -> dict:
         d["proposal"] = None
     d["fairness"] = case.fairness
     d["decision"] = None if case.decision is None else {**case.decision, "by_name": w.name_of(case.decision["by"])}
+    x = case.extra
+    d["extra"] = None if x is None else {**x, "placement": _placement(w, Placement(**x["placement"]))
+                                         if x.get("placement") else None}
+    d["answer"] = None if case.handled is None else {**case.handled, "by_name": w.name_of(case.handled["by"])}
     d["reply"] = plain(case.reply)
     d["notices"] = {k: plain(v) for k, v in case.notices.items()}
     d["inbox"] = [_inbox_item(w, i) for i in w.inbox.items.values() if i.case_id == case.id]
@@ -164,12 +173,25 @@ def _case_detail(w: World, case: Case) -> dict:
     return d
 
 
+def _sessions(w: World) -> dict[str, Session]:
+    """The weekly sessions and every extra class (withdrawn ones too: old versions still name them)."""
+    return {**w.instance.session_by_id, **{x.session.id: x.session for x in w.store.extras(active_only=False)}}
+
+
+def _session_name(w: World, sid: str, sessions: dict[str, Session]) -> str:
+    if not sid.startswith(EXTRA_PREFIX) or sid not in sessions:
+        return session_name(w.instance, sid)
+    s = sessions[sid]
+    return f"the extra {w.instance.course_title(s.course)} {s.kind.value} ({sid})"
+
+
 def _diff(w: World, before: dict[str, Placement], after: dict[str, Placement]) -> list[dict]:
     out = []
+    sessions = _sessions(w)
     for sid in sorted(set(before) | set(after)):
         if before.get(sid) != after.get(sid):
-            s = w.instance.session_by_id.get(sid)
-            out.append({"session": sid, "session_name": session_name(w.instance, sid),
+            s = sessions.get(sid)
+            out.append({"session": sid, "session_name": _session_name(w, sid, sessions), "extra": sid.startswith(EXTRA_PREFIX),
                         "faculty": s.faculty if s else None, "faculty_name": w.name_of(s.faculty) if s else None,
                         "groups": s.groups if s else [],
                         "before": _placement(w, before.get(sid)), "after": _placement(w, after.get(sid))})
@@ -210,11 +232,12 @@ def _reading(w: World, m: Message, r: Reply) -> str:
 def _timetable(w: World, assignment: dict[str, Placement]) -> list[dict]:
     inst = w.instance
     rows = []
-    for s in inst.sessions:
+    extras = [x.session for x in w.store.extras(active_only=False) if x.session.id in assignment]
+    for s in [*inst.sessions, *extras]:
         p = assignment.get(s.id)
         if p is None:
             continue
-        rows.append({"session": s.id, "course": s.course, "title": inst.course_title(s.course), "kind": s.kind.value,
+        rows.append({"session": s.id, "extra": s.id.startswith(EXTRA_PREFIX), "course": s.course, "title": inst.course_title(s.course), "kind": s.kind.value,
                      "faculty": s.faculty, "faculty_name": w.name_of(s.faculty), "groups": s.groups,
                      "group_names": [inst.group_by_id[g].name for g in s.groups], "duration": s.duration,
                      "day": p.day, "slot": p.slot, "room": p.room,
@@ -381,6 +404,10 @@ class DecisionBody(BaseModel):
     note: str = ""
 
 
+class HandleBody(BaseModel):
+    note: str
+
+
 class AutopilotBody(BaseModel):
     person: str
     on: bool
@@ -506,6 +533,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             "pending_approvals": len(w.orch.pending()),
             # escalations sent to this person and still open (the Approvals page lists them too)
             "my_decisions": sum(1 for c in cases.values() if c.status == RequestStatus.ESCALATED and decides(u, c)),
+            # messages forwarded to the office and not answered yet (listed on the Approvals page)
+            "my_forwarded": sum(1 for c in cases.values() if handles(u, c)),
             "my_inbox": sum(1 for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None),
             "published_version": cur.version if cur else None,
             "gini": ledger.gini(teaching, SEMESTER),
@@ -577,10 +606,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         start = date.fromisoformat(w.semester.state.semester_start)
         start -= timedelta(days=start.weekday())  # weeks run from Monday
         n_weeks = inst.calendar.weeks
+        sessions = _sessions(w)  # extra classes are only in the week they were added to
         if u["id"].startswith("ST-"):
-            mine = {s.id for s in inst.sessions if u["id"][3:] in s.groups}
+            mine = {s.id for s in sessions.values() if u["id"][3:] in s.groups}
         else:
-            mine = {s.id for s in inst.sessions if s.faculty == u["id"]}
+            mine = {s.id for s in sessions.values() if s.faculty == u["id"]}
         semester = w.store.current_version()
         rows = []
         for n in range(1, n_weeks + 1):
@@ -589,8 +619,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             placed = v.assignment if v else {}
             cancelled = set(v.cancelled) & mine if v else set()
             classes = [{"day": p.day, "slot": p.slot, "time": hour(p.slot), "room": p.room, "session": sid,
-                        "title": inst.course_title(inst.session_by_id[sid].course),
-                        "kind": inst.session_by_id[sid].kind.value, "cancelled": sid in cancelled}
+                        "title": inst.course_title(sessions[sid].course), "extra": sid.startswith(EXTRA_PREFIX),
+                        "kind": sessions[sid].kind.value, "cancelled": sid in cancelled}
                        for sid in sorted(mine)
                        if (p := placed.get(sid) or (semester.assignment.get(sid) if sid in cancelled and semester else None))]
             classes.sort(key=lambda c: (inst.calendar.days.index(c["day"]), c["slot"]))
@@ -640,7 +670,17 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(403)
         if c is None:
             return {**_summary(w, r, None), "events": w.store.events(case_id)}
-        return _case_detail(w, c) | {"can_decide": c.status == RequestStatus.ESCALATED and decides(u, c)}
+        return _case_detail(w, c) | {"can_decide": c.status == RequestStatus.ESCALATED and decides(u, c),
+                                     "can_handle": handles(u, c), "can_withdraw": withdraws(w, u, c)}
+
+    def withdraws(w: World, u: dict, case: Case) -> bool:
+        """The sender, while nothing the request asked for is in the published timetable."""
+        running = case.id in w.threads and w.threads[case.id].is_alive()
+        return u["id"] == case.request.sender_id and not running and w.orch.withdrawable(case) is None
+
+    def handles(u: dict, case: Case) -> bool:
+        """A message forwarded to the coordinator, still unanswered, and this is the coordinator."""
+        return u["id"] == COORDINATOR and case.forwarded_to == "coordinator" and case.handled is None
 
     def decides(u: dict, case: Case) -> bool:
         """The person an escalation was sent to: "coordinator", "dean", "hod", or the heads by id."""
@@ -666,6 +706,38 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(409, why)
         w.decide(case_id, u["id"], body.grant, body.note.strip())
         return {"status": "deciding"}
+
+    @app.post("/api/cases/{case_id}/handle")
+    def handle(case_id: str, body: HandleBody, u: dict = Depends(user)) -> dict:
+        """The coordinator answers a message forwarded to them; the answer becomes the sender's reply."""
+        w = W()
+        c = w.orch.cases.get(case_id)
+        if c is None:
+            raise HTTPException(404)
+        if u["id"] != COORDINATOR:
+            raise HTTPException(403, "only the timetable office answers forwarded messages")
+        try:
+            w.orch.handle(case_id, u["id"], body.note, name=w.name_of(u["id"]))
+        except ValueError as e:
+            raise HTTPException(409 if body.note.strip() else 422, str(e)) from None
+        return _case_detail(w, c)
+
+    @app.post("/api/cases/{case_id}/withdraw")
+    def withdraw(case_id: str, u: dict = Depends(user)) -> dict:
+        """The sender takes a request back; everything it set in motion is undone."""
+        w = W()
+        c = w.orch.cases.get(case_id)
+        if c is None:
+            raise HTTPException(404)
+        if u["id"] != c.request.sender_id:
+            raise HTTPException(403, "only the sender can withdraw a request")
+        if c.id in w.threads and w.threads[c.id].is_alive():
+            raise HTTPException(409, "it is still being worked on; try again when it stops")
+        try:
+            w.orch.withdraw(case_id, u["id"])
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        return _case_detail(w, c)
 
     @app.get("/api/events")
     def events(after: int = 0, case: str | None = None, limit: int = 200, u: dict = Depends(user)) -> list[dict]:

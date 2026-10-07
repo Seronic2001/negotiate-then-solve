@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, BadgeCheck, Bell, ExternalLink, Gavel, MessagesSquare, Scale, TriangleAlert, Users, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ForwardedList } from "../components/Forwarded";
 import { DiffTable } from "../components/Negotiation";
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, PageHeader, Skeleton, Toast } from "../components/ui";
 import { api } from "../lib/api";
@@ -17,6 +18,8 @@ export default function Approvals() {
   // escalations sent to the office: not yet a change to publish, but a decision only it can make
   const { data: all } = useApi(() => api.cases("all"), [], 3000);
   const decisions = (all ?? []).filter((c) => c.status === "escalated" && c.escalated_to === "coordinator");
+  // messages the system could not act on, passed to the office for a reply
+  const forwarded = (all ?? []).filter((c) => c.forwarded_to === "coordinator" && !c.handled);
 
   const list = (data ?? []).filter((c) => !gone.has(c.id));
   return (
@@ -26,7 +29,8 @@ export default function Approvals() {
         subtitle="Nothing is published until you approve it."
       />
       {decisions.length > 0 && <Decisions cases={decisions} />}
-      {decisions.length > 0 && <h2 className="mb-3 text-[13px] font-medium text-ink-3">Changes to publish</h2>}
+      {forwarded.length > 0 && <ForwardedList cases={forwarded} />}
+      {decisions.length + forwarded.length > 0 && <h2 className="mb-3 text-[13px] font-medium text-ink-3">Changes to publish</h2>}
       {loading && !data ? (
         <Skeleton className="h-80" />
       ) : list.length ? (

@@ -85,6 +85,7 @@ function Entry({ e, changed, index, onPick }: { e: TimetableEntry; changed: bool
       <p className="flex items-center gap-1 truncate text-[11.5px] font-semibold text-ink">
         <Icon size={11} style={{ color: c }} />
         {e.title}
+        {e.extra && <span className="rounded bg-brand/15 px-1 text-[9.5px] font-medium text-brand">extra</span>}
         {e.duration > 1 && <span className="ml-auto text-[10px] font-normal text-ink-3">{e.duration}h</span>}
       </p>
       <p className="truncate text-[10.5px] text-ink-2">{e.faculty_name}</p>

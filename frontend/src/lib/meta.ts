@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   ScanText,
   TriangleAlert,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 import type { Role, Status } from "./types";
@@ -37,6 +38,7 @@ export const STATUS: Record<Status, { label: string; tone: Tone; icon: LucideIco
   escalated: { label: "Escalated", tone: "warn", icon: TriangleAlert, terminal: true },
   answered: { label: "Answered", tone: "ok", icon: MessageSquareReply, terminal: true },
   forwarded: { label: "Forwarded", tone: "muted", icon: Send, terminal: true },
+  withdrawn: { label: "Withdrawn", tone: "muted", icon: Undo2, terminal: true },
 };
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -82,6 +84,8 @@ export const EVENT_LABEL: Record<string, string> = {
   escalated: "Escalated",
   answered: "Answered",
   forwarded: "Forwarded",
+  withdrawn: "Withdrawn by the sender",
+  handled: "Answered by the timetable office",
   approval_refused: "Approval refused",
   bootstrap: "Timetable bootstrapped",
   seeded: "Demo history loaded",

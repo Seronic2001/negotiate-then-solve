@@ -137,6 +137,10 @@ export const api = {
   reject: (id: string, reason: string) => post<{ status: string }>(`/approvals/${id}/reject`, { reason }),
   /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
   decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),
+  /** The coordinator answers a message forwarded to them; the answer becomes the sender's reply. */
+  handle: (id: string, note: string) => post<CaseDetail>(`/cases/${id}/handle`, { note }),
+  /** The sender takes a request back; everything it set in motion is undone. */
+  withdraw: (id: string) => post<CaseDetail>(`/cases/${id}/withdraw`, {}),
   versions: () => call<VersionRow[]>("/versions"),
   calendar: () => call<CalendarView>("/calendar"),
   weeklyChanges: () => call<WeeklyChange[]>("/weekly-changes"),

@@ -232,6 +232,11 @@ export default function Timetable() {
               <Badge tone={picked.kind === "practical" ? "warn" : "info"}>
                 {picked.kind === "practical" && <FlaskConical size={11} />} {picked.kind}
               </Badge>
+              {picked.extra && (
+                <Badge tone="brand" className="ml-1.5">
+                  extra class, week {tt?.week}
+                </Badge>
+              )}
               <h3 className="mt-3 text-xl font-semibold">{picked.title}</h3>
               <p className="font-mono text-[12px] text-ink-3">{picked.session}</p>
               <div className="mt-6 space-y-3 text-[14px]">
