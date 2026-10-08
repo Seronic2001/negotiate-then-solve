@@ -256,8 +256,10 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         mine, n = i.to == me, 2 if i.reply else 1
         case = w.orch.cases.get(i.case_id) if i.case_id else None
         item = _inbox_item(w, i)
+        choice = i.message.explanation_mode == "choice"
         add(f"msg:{i.id}", n, "negotiation", case,
-            "A clash with your timetable" if mine else f"Negotiation with {w.name_of(i.to)}",
+            ("Choose a time for your request" if choice else "A clash with your timetable") if mine else
+            (f"A time for {w.name_of(i.to)} to choose" if choice else f"Negotiation with {w.name_of(i.to)}"),
             i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=mine and i.reply is None,
             message=item)
         if not mine:
