@@ -249,7 +249,7 @@ class Orchestrator:
             self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
             return case
 
-        case.constraints = case.parse.constraints
+        case.constraints = self._on_named_day(case, case.parse.constraints)
         case.superseded = self._supersede(case)
         self.store.add_constraints(case.constraints, request_id=case.id)
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
@@ -421,6 +421,31 @@ class Orchestrator:
         self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=[session.id])
         return case
 
+    def _on_named_day(self, case: Case, constraints: list[Constraint]) -> list[Constraint]:
+        """"On Thursday move my Machine Learning class before lunch" means the Machine Learning lecture
+        that is on Thursday. A parser names a course's session without seeing the timetable, so a placement
+        pinned to a day and times moves to the course's other session of that kind when the one named is
+        not on that day and exactly one other is: otherwise it would add a second lecture to the day."""
+        sessions = self.instance.session_by_id
+        out = []
+        for c in constraints:
+            s = sessions.get(c.scope.session) if c.scope.session else None
+            if s is None or c.type != ConstraintType.PREFER or not c.when.days or not c.when.slots:
+                out.append(c)
+                continue
+            week = c.valid.from_week if c.valid.from_week == c.valid.to_week else None
+            base = self.store.current_version(week) or self.store.current_version()
+            placed = _regular(base.assignment) if base else {}
+            days = set(c.when.days)
+            on_day = [o.id for o in self.instance.sessions if o.id != s.id and o.course == s.course
+                      and o.kind == s.kind and o.faculty == s.faculty and o.id in placed and placed[o.id].day in days]
+            if s.id in placed and placed[s.id].day not in days and len(on_day) == 1:
+                self.store.log(case.id, "retargeted", constraint=c.id, named=s.id, to=on_day[0],
+                               day=placed[on_day[0]].day)
+                c = c.model_copy(update={"scope": c.scope.model_copy(update={"session": on_day[0]})})
+            out.append(c)
+        return out
+
     def _supersede(self, case: Case) -> list[str]:
         """A newer request from the same owner replaces their earlier active
         constraint of the same type, tier and scope ("actually, Friday
@@ -572,7 +597,7 @@ class Orchestrator:
             return self._place_extra(case)
         set_aside = self.overrides(case)
         if not case.constraints:  # sent up by the policy check before it was compiled
-            case.constraints = case.parse.constraints
+            case.constraints = self._on_named_day(case, case.parse.constraints)
             case.superseded = self._supersede(case)
             self.store.add_constraints(case.constraints, request_id=case.id)
         for c in case.constraints:

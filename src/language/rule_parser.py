@@ -91,10 +91,9 @@ class RuleParser:
             return list(range(max(1, _slot(int(m[1]), m[2]))))
         if m := re.search(r"after\s+(\d{1,2})(?::\d\d)?\s*(am|pm)", low):
             return list(range(min(spd - 1, _slot(int(m[1]), m[2])), spd))
-        if re.search(r"after lunch|afternoon", low):
-            return self.afternoon
-        if "morning" in low:
-            return self.morning
+        # "move it before lunch as I won't be available after lunch": the first one is the ask, the rest the reason
+        if m := re.search(r"\b(?:before (?:lunch|noon)|pre-lunch|morning)|\b(?:after lunch|afternoon)", low):
+            return self.afternoon if m[0].startswith(("after", "afternoon")) else self.morning
         times = [_slot(int(h), ap) for h, ap in _TIME.findall(low)]
         times = [t for t in times if 0 <= t < spd]
         return sorted(set(times)) or None
