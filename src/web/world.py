@@ -233,7 +233,9 @@ class World:
             negotiator_factory=self._negotiator, system_one=self.system_one, tau=self.tau,
             fast_parser=RuleParser(self.instance), policy_agent=self.policy,
             responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER,
-            swap_reader=self._swap_reader())
+            swap_reader=self._swap_reader(),
+            # a person picks the time; not while the start-up history replays, nor in a scored test run
+            offer_choices=lambda: not (self.seeding or self.restoring or self.test_data))
         self.orch.bootstrap(policy_constraints(self.instance), approved_by=COORDINATOR)
         self.started = datetime.now(UTC)
         self.threads: dict[str, threading.Thread] = {}
