@@ -256,8 +256,10 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         mine, n = i.to == me, 2 if i.reply else 1
         case = w.orch.cases.get(i.case_id) if i.case_id else None
         item = _inbox_item(w, i)
+        choice = i.message.explanation_mode == "choice"
         add(f"msg:{i.id}", n, "negotiation", case,
-            "A clash with your timetable" if mine else f"Negotiation with {w.name_of(i.to)}",
+            ("Choose a time for your request" if choice else "A clash with your timetable") if mine else
+            (f"A time for {w.name_of(i.to)} to choose" if choice else f"Negotiation with {w.name_of(i.to)}"),
             i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=mine and i.reply is None,
             message=item)
         if not mine:
@@ -1250,6 +1252,49 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     return app
 
 
+def _newest(paths: list[Path]) -> float:
+    """Latest modification time among the given files and everything under the given folders."""
+    times = [0.0]
+    for p in paths:
+        if p.is_dir():
+            times += [f.stat().st_mtime for f in p.rglob("*") if f.is_file()]
+        elif p.exists():
+            times.append(p.stat().st_mtime)
+    return max(times)
+
+
+def build_frontend(force: bool = False) -> None:
+    """Build frontend/dist with npm when it is missing or older than the sources (npm install first if needed)."""
+    import shutil
+    import subprocess
+    import sys
+
+    fe = ROOT / "frontend"
+    if not (fe / "package.json").exists():
+        return
+    built = fe / "dist" / "index.html"
+    sources = [fe / "src", fe / "public", fe / "index.html", fe / "package.json", fe / "package-lock.json",
+               fe / "vite.config.ts", fe / "tsconfig.json"]
+    if not force and built.exists() and built.stat().st_mtime >= _newest(sources):
+        return
+    npm = shutil.which("npm")
+    if npm is None:
+        print("nts-web: npm not found, cannot build the front end (install Node.js, or pass --no-build)"
+              + ("; serving the existing build" if built.exists() else "; only /api will be served"), file=sys.stderr)
+        return
+    # npm writes node_modules/.package-lock.json on every install: older than package-lock.json means stale packages
+    installed = fe / "node_modules" / ".package-lock.json"
+    lock = fe / "package-lock.json"
+    steps = []
+    if not installed.exists() or (lock.exists() and lock.stat().st_mtime > installed.stat().st_mtime):
+        steps.append([npm, "install"])
+    steps.append([npm, "run", "build"])
+    for cmd in steps:
+        print(f"nts-web: {' '.join(cmd[1:])} in frontend/ ...", flush=True)
+        if subprocess.run(cmd, cwd=fe).returncode != 0:
+            sys.exit(f"nts-web: 'npm {' '.join(cmd[1:])}' failed (fix the error above, or pass --no-build)")
+
+
 def run() -> None:
     import argparse
 
@@ -1259,7 +1304,14 @@ def run() -> None:
     ap.add_argument("--parser", choices=["offline", "gemini", "local"], help="NTS_PARSER")
     ap.add_argument("--test-data", type=int, metavar="N", nargs="?", const=20,
                     help="benchmark department, replaying N held-out test requests (default 20) instead of the demo history")
+    build = ap.add_mutually_exclusive_group()
+    build.add_argument("--no-build", action="store_true",
+                       help="do not build the front end at start-up (NTS_BUILD=0); serve frontend/dist as it is")
+    build.add_argument("--rebuild", action="store_true", help="rebuild the front end even if it looks up to date")
     args = ap.parse_args()
+    # the UI is built only when its sources changed since the last build (npm install too when packages changed)
+    if not args.no_build and os.environ.get("NTS_BUILD") != "0":
+        build_frontend(force=args.rebuild)
     if args.parser:
         os.environ["NTS_PARSER"] = args.parser
     if args.test_data is not None:
