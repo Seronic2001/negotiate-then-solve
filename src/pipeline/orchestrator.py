@@ -35,7 +35,7 @@ from agents.extra import (
     when_text,
 )
 from agents.ledger import ConcessionLedger
-from agents.negotiation import Negotiator, Outcome, Responder
+from agents.negotiation import Message, Negotiator, Offer, Outcome, Responder
 from agents.policy import PolicyAgent, PolicyDecision, Verdict
 from agents.swap import (
     RuleSwapReader,
@@ -46,7 +46,18 @@ from agents.swap import (
 )
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import ExtraClass, Instance
-from core.schemas import Constraint, ConstraintType, Placement, Request, RequestStatus, Role, Tier, TimetableVersion
+from core.schemas import (
+    Constraint,
+    ConstraintType,
+    Placement,
+    Request,
+    RequestStatus,
+    Role,
+    Scope,
+    Tier,
+    TimetableVersion,
+    When,
+)
 from core.semantics import PLACEMENT_TYPES, room_compatible, sessions_in_scope, violates
 from core.solver import TimetableSolver
 from core.validator import validate_constraint, verify_timetable
@@ -57,6 +68,7 @@ from language.rule_parser import RuleParser
 from .store import EXTRA_PREFIX, Store
 
 S = RequestStatus
+CHOICES = 3  # times offered to a sender whose request fits in more than one way
 
 
 class NotAuthorised(PermissionError):
@@ -135,7 +147,10 @@ class Orchestrator:
         semester: str = "current",
         negotiator_factory: Callable[[], Negotiator] | None = None,
         swap_reader=None,
+        offer_choices: Callable[[], bool] | None = None,
     ) -> None:
+        """``offer_choices``: whether, right now, a sender whose request fits in more than one way is
+        asked which time they prefer (``_let_sender_choose``); never when omitted."""
         self.instance = instance
         self.store = store
         self.parser = parser
@@ -150,6 +165,7 @@ class Orchestrator:
         self.negotiator_factory = negotiator_factory
         self.swap_reader = swap_reader or RuleSwapReader(instance)
         self.extra_reader = ExtraReader(instance)
+        self.offer_choices = offer_choices
         self.cases: dict[str, Case] = {}
 
     # -- setup -------------------------------------------------------------------
@@ -249,7 +265,7 @@ class Orchestrator:
             self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
             return case
 
-        case.constraints = case.parse.constraints
+        case.constraints = self._on_named_day(case, case.parse.constraints)
         case.superseded = self._supersede(case)
         self.store.add_constraints(case.constraints, request_id=case.id)
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
@@ -421,6 +437,31 @@ class Orchestrator:
         self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=[session.id])
         return case
 
+    def _on_named_day(self, case: Case, constraints: list[Constraint]) -> list[Constraint]:
+        """"On Thursday move my Machine Learning class before lunch" means the Machine Learning lecture
+        that is on Thursday. A parser names a course's session without seeing the timetable, so a placement
+        pinned to a day and times moves to the course's other session of that kind when the one named is
+        not on that day and exactly one other is: otherwise it would add a second lecture to the day."""
+        sessions = self.instance.session_by_id
+        out = []
+        for c in constraints:
+            s = sessions.get(c.scope.session) if c.scope.session else None
+            if s is None or c.type != ConstraintType.PREFER or not c.when.days or not c.when.slots:
+                out.append(c)
+                continue
+            week = c.valid.from_week if c.valid.from_week == c.valid.to_week else None
+            base = self.store.current_version(week) or self.store.current_version()
+            placed = _regular(base.assignment) if base else {}
+            days = set(c.when.days)
+            on_day = [o.id for o in self.instance.sessions if o.id != s.id and o.course == s.course
+                      and o.kind == s.kind and o.faculty == s.faculty and o.id in placed and placed[o.id].day in days]
+            if s.id in placed and placed[s.id].day not in days and len(on_day) == 1:
+                self.store.log(case.id, "retargeted", constraint=c.id, named=s.id, to=on_day[0],
+                               day=placed[on_day[0]].day)
+                c = c.model_copy(update={"scope": c.scope.model_copy(update={"session": on_day[0]})})
+            out.append(c)
+        return out
+
     def _supersede(self, case: Case) -> list[str]:
         """A newer request from the same owner replaces their earlier active
         constraint of the same type, tier and scope ("actually, Friday
@@ -492,18 +533,24 @@ class Orchestrator:
         case.fairness = self._audit(outcome)
         self._advance(case, S.FAIRNESS_AUDITED, **case.fairness)
 
-        moved = moved_sessions(baseline or {}, outcome.result.assignment)
+        assignment = outcome.result.assignment
+        moved = moved_sessions(baseline or {}, assignment)
+        chosen = None
+        if outcome.status == "feasible" and moved and not cancelled:
+            assignment, chosen = self._let_sender_choose(case, assignment, baseline, week, neg)
+            moved = moved_sessions(baseline or {}, assignment)
         if not moved and not cancelled and not outcome.notices.get(case.request.sender_id):
             # the timetable already meets it: nothing to approve or publish, but it stays in force
             case.reply = ("Your request already fits the timetable, so nothing needed to move. "
                           "It is recorded, and later changes will keep to it.")
             self._advance(case, S.PUBLISHED, version=None, moved=[])
             return case
-        case.proposal = self.store.propose_version(outcome.result.assignment, case.id, week=week,
-                                                   cancelled=sorted(cancelled))
+        case.proposal = self.store.propose_version(assignment, case.id, week=week, cancelled=sorted(cancelled))
         case.reply = ("Your request can be met. The change is waiting for the coordinator's approval."
                       if not outcome.notices.get(case.request.sender_id) else
                       " ".join(outcome.notices[case.request.sender_id]))
+        if chosen:
+            case.reply = f"{chosen} The change is waiting for the coordinator's approval."
         if cancelled:
             others = len(set(moved) - cancelled)
             case.reply = (f"Recorded: {' and '.join(closed)} closed in week {week}. "
@@ -513,6 +560,60 @@ class Orchestrator:
                           + ". Their teachers and sections are told once the timetable office approves the change.")
         self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=moved)
         return case
+
+    def _let_sender_choose(self, case: Case, assignment: Mapping[str, Placement], baseline, week: int | None,
+                           neg: Negotiator) -> tuple[Mapping[str, Placement], str | None]:
+        """A request that fits in more than one way: the sender picks the time. Up to ``CHOICES``
+        solver-checked timetables that place the sender's moved classes at different times (not
+        only in other rooms) and move no more classes than the solver's own answer; one option,
+        or no one to ask, keeps that answer. No choice by the deadline takes option A."""
+        sender = case.request.sender_id
+        sessions = self.instance.session_by_id
+        moved = moved_sessions(baseline or {}, assignment)
+        own = [sid for sid in moved if sid in sessions and sessions[sid].faculty == sender]
+        if not own or sender not in self.responders or self.offer_choices is None or not self.offer_choices():
+            return assignment, None
+        options = [dict(assignment)]
+        cons, forbid = self.store.constraints(), []
+        while len(options) < CHOICES:
+            for sid in own:  # this time is taken: the next option puts every one of them elsewhere
+                p = options[-1][sid]
+                forbid.append(Constraint(id=f"CHOICE-X-{sid}-{p.day}{p.slot}", type=ConstraintType.AVOID, hard=True,
+                                         tier=Tier.OPERATIONAL, scope=Scope(session=sid),
+                                         when=When(days=[p.day], slots=[p.slot])))
+            res = TimetableSolver(self.instance, [*cons, *forbid], week=week, baseline=baseline,
+                                  time_limit=neg.time_limit, presolve=neg.presolve, workers=neg.workers,
+                                  seed=neg.seed, skip=neg.skip).solve()
+            if not res.ok or len(moved_sessions(baseline or {}, res.assignment)) > len(moved):
+                break
+            options.append(dict(res.assignment))
+        if len(options) < 2:
+            return assignment, None
+
+        def when(a: Mapping[str, Placement]) -> str:
+            return "; ".join(f"{session_name(self.instance, sid)} on {placement_text(self.instance, a[sid])}"
+                             for sid in own)
+
+        keys = list("ABCDEFGH"[:len(options)])
+        offers = [Offer(key=k, drop=[], placements={sid: a[sid] for sid in own},
+                        moved=len(moved_sessions(baseline or {}, a))) for k, a in zip(keys, options)]
+        others = len(moved) - len(own)
+        text = ("Your request can be met in more than one way. Which time do you prefer? Each option has been "
+                "checked by the solver and " + (f"moves {others} other class{'' if others == 1 else 'es'}."
+                                                if others else "moves no other class.")
+                + " Without an answer by the deadline, option A is used.\n\nOptions:\n"
+                + "\n".join(f"{k}) {when(a)}" for k, a in zip(keys, options)))
+        message = Message(round=0, to=sender, mus=[], offers=offers, text=text, explanation_mode="choice",
+                          faithfulness=1.0)
+        self.store.log(case.id, "choice_offered", to=sender, options={k: when(a) for k, a in zip(keys, options)})
+        reply = self.responders[sender].respond(message)
+        picked = (reply.choice or "").strip().upper() if reply.decision == "accept" else ""
+        k = picked if picked in keys else "A"
+        self.store.log(case.id, "choice_made", choice=k, reply=reply.decision, defaulted=k != picked)
+        a = options[keys.index(k)]
+        said = (f"You chose option {k}: {when(a)}." if k == picked else
+                f"No time was chosen, so option A is used: {when(a)}.")
+        return a, said
 
     def _audit(self, outcome: Outcome) -> dict:
         teaching = sorted({s.faculty for s in self.instance.sessions})
@@ -572,7 +673,7 @@ class Orchestrator:
             return self._place_extra(case)
         set_aside = self.overrides(case)
         if not case.constraints:  # sent up by the policy check before it was compiled
-            case.constraints = case.parse.constraints
+            case.constraints = self._on_named_day(case, case.parse.constraints)
             case.superseded = self._supersede(case)
             self.store.add_constraints(case.constraints, request_id=case.id)
         for c in case.constraints:

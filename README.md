@@ -23,7 +23,7 @@ uv sync                       # create .venv and install dependencies
 uv run pytest -m "not slow"   # fast tests (< 1 min)
 uv run pytest                 # includes a full department-size solve
 uv run python -m evaluation.demo     # generate a department, solve it, run UC3
-uv run nts-web                # web app on http://127.0.0.1:8000 (build the frontend first, see below)
+uv run nts-web                # web app on http://127.0.0.1:8000 (builds the frontend first; needs Node.js)
 ```
 
 ## Running the project
@@ -57,16 +57,21 @@ Choose it with `NTS_LOCAL_MODEL=<name>` (the web app) or `--local-model <name>`
 model file name, so give every model file its own name (e.g.
 `qwen3.5-2b-v2.Q5_K_M.gguf`).
 
-**2. Build the front end and start the app** (Windows, PowerShell, from
-`negotiate-then-solve/`):
+**2. Start the app** (Windows, PowerShell, from `negotiate-then-solve/`):
 
 ```powershell
 uv sync
-cd frontend; npm install; npm run build; cd ..
 uv run nts-web --parser local        # fine-tuned model via llama-server in WSL
 # uv run nts-web                     # offline rule-based parser, no model needed
 # uv run nts-web --parser gemini     # Gemini (keys in .env)
 ```
+
+`nts-web` builds the front end before it starts (`npm install` when
+`node_modules` is missing or `package-lock.json` changed, then `npm run build`),
+so Node.js and npm must be on `PATH`. The build is skipped when `frontend/dist`
+is newer than every source file, so a restart with no front-end changes starts
+immediately. `--rebuild` forces a build; `--no-build` (or `NTS_BUILD=0`) serves
+`frontend/dist` as it is.
 
 Open http://127.0.0.1:8000. For UI development, also run `npm run dev` in
 `frontend/` and use http://localhost:5173 (it proxies `/api` to :8000).
@@ -598,8 +603,8 @@ faculty member in the text).
 ## Web app (React + TypeScript front end, FastAPI back end)
 
 ```sh
-cd frontend && npm install && npm run build && cd ..
-uv run nts-web                       # API + built UI on http://127.0.0.1:8000
+uv run nts-web                       # builds the UI if its sources changed, then API + UI on http://127.0.0.1:8000
+uv run nts-web --rebuild             # always rebuild the UI first (--no-build / NTS_BUILD=0: never)
 NTS_PARSER=gemini uv run nts-web     # System Two + policy agent on Gemini instead of offline rules
 NTS_PARSER=local uv run nts-web      # parser and policy agent on the fine-tuned model (llama-server; NTS_LOCAL_URL, default http://localhost:8080/v1)
 uv run nts-web --parser local --test-data 20   # benchmark department; replays 20 held-out test requests (NTS_TEST_DATA)

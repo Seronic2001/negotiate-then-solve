@@ -244,6 +244,8 @@ function Thread({
   const [error, setError] = useState<string | null>(null);
   const m = item.message;
   const answered = !!item.reply;
+  // the sender's own request fits in more than one way: they pick a time, there is nothing to give up
+  const choosing = m.explanation_mode === "choice";
 
   const act = async (label: string, fn: () => Promise<unknown>, msg: string) => {
     setBusy(label);
@@ -262,7 +264,11 @@ function Thread({
     <div className="space-y-6">
       <Card>
         <CardHeader
-          title={mine ? "A clash with your timetable" : `A clash for ${item.to_name}`}
+          title={
+            choosing
+              ? mine ? "Choose a time for your request" : `A time for ${item.to_name} to choose`
+              : mine ? "A clash with your timetable" : `A clash for ${item.to_name}`
+          }
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
               {item.case && (
@@ -352,11 +358,17 @@ function Thread({
                       icon={Check}
                       disabled={!choice || mode !== "pick"}
                       loading={busy === "accept"}
-                      onClick={() => act("accept", () => api.reply(item.id, { decision: "accept", choice: choice!, text: `Option ${choice} works for me.` }), `Accepted option ${choice}. The solver re-solves now.`)}
+                      onClick={() =>
+                        act(
+                          "accept",
+                          () => api.reply(item.id, { decision: "accept", choice: choice!, text: `Option ${choice} works for me.` }),
+                          choosing ? `Chose option ${choice}. It goes to the timetable office for approval.` : `Accepted option ${choice}. The solver re-solves now.`,
+                        )
+                      }
                     >
-                      {choice ? `Accept option ${choice}` : "Pick an option"}
+                      {choice ? `${choosing ? "Choose" : "Accept"} option ${choice}` : "Pick an option"}
                     </Button>
-                    {mode === "counter" ? (
+                    {choosing ? null : mode === "counter" ? (
                       <Button
                         icon={Undo2}
                         disabled={!cDays.length || to < from}
@@ -382,14 +394,16 @@ function Thread({
                         Suggest another time
                       </Button>
                     )}
-                    <Button
-                      variant="danger"
-                      icon={X}
-                      loading={busy === "reject"}
-                      onClick={() => act("reject", () => api.reply(item.id, { decision: "reject", text: "None of these work for me." }), "Declined. The negotiator will ask again or move on.")}
-                    >
-                      Decline
-                    </Button>
+                    {!choosing && (
+                      <Button
+                        variant="danger"
+                        icon={X}
+                        loading={busy === "reject"}
+                        onClick={() => act("reject", () => api.reply(item.id, { decision: "reject", text: "None of these work for me." }), "Declined. The negotiator will ask again or move on.")}
+                      >
+                        Decline
+                      </Button>
+                    )}
                   </>
                 )}
                 {canSimulate && (
@@ -405,9 +419,11 @@ function Thread({
         </div>
       </Card>
       {mine && <RateMessage item={item} />}
-      <Collapse title="Why these options (the facts behind the message)">
+      {!choosing && (
+        <Collapse title="Why these options (the facts behind the message)">
           <GroundedExplanation m={m} />
         </Collapse>
+      )}
     </div>
   );
 }

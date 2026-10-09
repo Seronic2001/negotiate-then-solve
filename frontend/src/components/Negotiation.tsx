@@ -146,7 +146,8 @@ export function OfferCard({
         ))}
       </div>
       <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] text-ink-3">
-        Moves {offer.moved} class{offer.moved === 1 ? "" : "es"} · cost {offer.cost.toFixed(2)}
+        Moves {offer.moved} class{offer.moved === 1 ? "" : "es"}
+        {offer.drop.length > 0 && ` · cost ${offer.cost.toFixed(2)}`}
       </p>
     </button>
   );
@@ -161,7 +162,8 @@ export function MessageBubble({ m, reply }: { m: MessageView; reply?: { decision
         </div>
         <div className="min-w-0 flex-1 rounded-lg border border-line bg-panel p-4">
           <p className="mb-2 text-xs text-ink-3">
-            Round {m.round} · to <span className="font-medium text-ink-2">{m.to_name}</span>
+            {m.explanation_mode === "choice" ? "Choice of time" : `Round ${m.round}`} · to{" "}
+            <span className="font-medium text-ink-2">{m.to_name}</span>
           </p>
           <p className="whitespace-pre-line text-[13.5px] leading-relaxed">{m.text.split("\n\nOptions:")[0]}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
