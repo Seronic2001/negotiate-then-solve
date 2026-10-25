@@ -110,3 +110,35 @@ def test_router_mode_needs_a_model_and_names_it(server, tmp_path, monkeypatch):
     server.reply = '{"verdict": "allowed", "explanation": "x"}'
     client.generate("s", "p", PolicyOutput)
     assert server.requests[-1]["model"] == "qwen3.5-4b-nts.Q8_0"
+
+
+def test_calls_to_one_server_are_capped_per_process(server, tmp_path, monkeypatch):
+    """Beyond NTS_LOCAL_CONCURRENCY a call waits in the client, not in the server's queue (where the wait
+    counted against its timeout)."""
+    import time
+
+    import language.local as local
+
+    monkeypatch.setenv("NTS_LOCAL_CONCURRENCY", "2")
+    monkeypatch.setattr(local, "_SLOTS", {})
+    clients = [LocalClient(base_url=server.url, cache_dir=tmp_path) for _ in range(2)]  # shared across clients
+    inside, most, lock = 0, 0, threading.Lock()
+
+    def slow(self, path, payload=None, *, root=False):
+        nonlocal inside, most
+        with lock:
+            inside += 1
+            most = max(most, inside)
+        time.sleep(0.1)
+        with lock:
+            inside -= 1
+        return {"choices": [{"message": {"content": '{"verdict": "allowed", "explanation": "ok"}'}}], "usage": {}}
+
+    monkeypatch.setattr(LocalClient, "_request", slow)
+    threads = [threading.Thread(target=clients[i % 2].generate, args=("s", f"p{i}", PolicyOutput),
+                                kwargs={"use_cache": False}) for i in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert most == 2

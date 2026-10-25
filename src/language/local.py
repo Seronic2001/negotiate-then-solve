@@ -41,6 +41,19 @@ from pydantic import BaseModel, ValidationError
 
 from .llm import InvalidOutput, LLMError, Usage
 
+# calls in flight to one server from this process, across every client of it (NTS_LOCAL_CONCURRENCY, default 4:
+# the GPU server's slots). Beyond it a call waits here, not in the server's queue, where the wait counted
+# against its timeout and an evaluation's workers or a busy app timed out each other's calls.
+_SLOTS: dict[str, threading.BoundedSemaphore] = {}
+_SLOTS_LOCK = threading.Lock()
+
+
+def _slots(base_url: str) -> threading.BoundedSemaphore:
+    with _SLOTS_LOCK:
+        if base_url not in _SLOTS:
+            _SLOTS[base_url] = threading.BoundedSemaphore(max(1, int(os.environ.get("NTS_LOCAL_CONCURRENCY", "4"))))
+        return _SLOTS[base_url]
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -175,9 +188,10 @@ class LocalClient:
             payload["model"] = self.server_model
         if self.lora is not None:
             payload["lora"] = self.lora
-        started = time.monotonic()
-        resp = self._request("/chat/completions", payload)
-        latency = time.monotonic() - started
+        with _slots(self.base_url):  # waiting for a slot does not count against the timeout
+            started = time.monotonic()
+            resp = self._request("/chat/completions", payload)
+            latency = time.monotonic() - started
         try:
             text = resp["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as e:
