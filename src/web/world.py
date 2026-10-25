@@ -605,12 +605,11 @@ class World:
             make_parser = lambda c: SystemTwoParser(self.instance, c)  # noqa: E731
             make_policy = lambda c: PolicyAgent(self.rules, c, self.instance, retriever=kind)  # noqa: E731
         else:
-            # the local model parses (compiler prompt) and reviews (policy prompt): one multi-task model, or a
-            # base with an adapter per task (NTS_ADAPTERS: language.adapters)
+            # the local model parses (intents, or the compiler prompt) and reviews (policy prompt): one multi-task
+            # model, or a base with an adapter per task (NTS_ADAPTERS: language.adapters)
             import urllib.request
 
-            from language.adapters import registry, task_clients
-            from language.compiler import CompilerParser
+            from language.adapters import registry, request_reader, task_clients
 
             url = os.environ.get("NTS_LOCAL_URL", "http://localhost:8080/v1")
             adapters = registry()
@@ -625,12 +624,8 @@ class World:
                 lambda: task_clients(base_url=url, reg=adapters,
                                      timeout=float(os.environ.get("NTS_LOCAL_TIMEOUT", "120"))),
                 probe=probe, on_change=self._model_changed)
-            if os.environ.get("NTS_INTENTS") == "1":  # a model trained on intents (language.intent_compiler)
-                from language.intent_compiler import IntentCompilerParser
-
-                make_parser = lambda c: IntentCompilerParser(self.instance, _task(c, "compile"))  # noqa: E731
-            else:
-                make_parser = lambda c: CompilerParser(self.instance, _task(c, "compile"))  # noqa: E731
+            # intents with an adapter registry or NTS_INTENTS=1, else the compiler prompt (language.adapters)
+            make_parser = lambda c: request_reader(self.instance, _task(c, "compile"), adapters)  # noqa: E731
             make_policy = lambda c: PolicyAgent(self.rules, _task(c, "policy"), self.instance, retriever=kind)  # noqa: E731
         self.lookup_adapter = adapters.adapter_for("lookup") if self.parser_mode == "local" and adapters else None
         self.model_link.usable()  # connect now if it can; it is tried again later if not

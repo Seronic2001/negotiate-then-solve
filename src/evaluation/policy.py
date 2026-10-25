@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -140,22 +139,20 @@ def main() -> None:
     instance = Instance.model_validate_json(args.instance.read_text(encoding="utf-8"))
     corpus = load_jsonl(args.corpus, instance)
     if args.local:
-        from language.adapters import local_client, registry
-        from language.compiler import CompilerParser
-        from language.intent_compiler import IntentCompilerParser
+        from language.adapters import local_client, registry, request_reader
 
         reg = registry(args.adapters)
         policy_client = local_client("policy", base_url=args.local_url, timeout=600, server_model=args.local_model,
                                      adapter=args.adapter, reg=reg)
         reader = local_client("compile", base_url=args.local_url, timeout=600, server_model=args.local_model,
                               reg=reg, schema=args.schema) if reg else policy_client
-        # NTS_INTENTS=1: the model reads intents (language.intent_compiler), as in the web app
-        parser = (IntentCompilerParser if os.environ.get("NTS_INTENTS") == "1" else CompilerParser)(instance, reader)
+        parser = request_reader(instance, reader, reg)  # as the web app reads requests
     else:
         parser = SystemTwoParser(instance, GeminiClient(args.parser_model or default_model()))
         policy_client = GeminiClient(args.policy_model or default_model())
     agent = PolicyAgent(load_handbook(args.handbook), policy_client, instance, k=args.k, retriever=args.retriever)
     report = eval_policy(corpus, instance, parser, agent, split=args.split, limit=args.limit, workers=args.workers)
+    report["reader"] = type(parser).__name__  # which pipeline the score is of
     print("Policy:", json.dumps({k: v for k, v in report.items() if k != "rows"}, indent=1))
     out = args.out or Path("runs") / f"policy-{datetime.now():%Y%m%d-%H%M%S}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
