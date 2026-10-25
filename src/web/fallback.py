@@ -101,6 +101,15 @@ def _reset(e: BaseException) -> bool:
     return False
 
 
+# set on a thread reading a request that may wait for the model (``web.world.World._hold``): an outage of the
+# request reader then raises ``ModelAway`` instead of handing the request to the stand-in
+WAIT_FOR_MODEL = threading.local()
+
+
+class ModelAway(Exception):
+    """The request reader's model went away during the call, and the request may wait for it."""
+
+
 class Fallback:
     """One component: ``build(client)`` while the model is reachable, ``backup`` otherwise. A call
     that fails falls back for that call; an outage also marks the link down."""
@@ -120,6 +129,8 @@ class Fallback:
 
     def _call(self, method: str, *args, **kwargs):
         p = self.primary()
+        if p is None and self._waits():
+            raise ModelAway(self.link.error or "the model is not reachable")
         if p is not None:
             try:
                 out = getattr(p, method)(*args, **kwargs)
@@ -128,6 +139,8 @@ class Fallback:
             except Exception as e:  # noqa: BLE001 - the stand-in answers instead
                 if _outage(e):
                     self.link.failed(e)
+                    if self._waits():
+                        raise ModelAway(f"{type(e).__name__}: {e}") from e
                 print(f"[model] {self.name}: {type(e).__name__}: {str(e)[:160]}; rule-based stand-in used",
                       flush=True)
         self._used.who = "rules"
@@ -155,8 +168,14 @@ class Fallback:
         except Exception as e:  # noqa: BLE001 - the plain parse (and its stand-in) answers instead
             if _outage(e):
                 self.link.failed(e)
+                if self._waits():
+                    raise ModelAway(f"{type(e).__name__}: {e}") from e
             print(f"[model] {self.name}: {type(e).__name__}: {str(e)[:160]}; parsed without intents", flush=True)
             return None
+
+    def _waits(self) -> bool:
+        """Whether this call reads a request that may wait for the model, rather than go to the stand-in."""
+        return self.name == "parser" and getattr(WAIT_FOR_MODEL, "on", False)
 
     def review(self, *args, **kwargs):
         return self._call("review", *args, **kwargs)

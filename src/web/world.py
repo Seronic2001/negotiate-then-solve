@@ -718,9 +718,18 @@ class World:
             return
 
         def run() -> None:
+            from .fallback import WAIT_FOR_MODEL, ModelAway
+
             _local.case = request.id
+            # the model going away while it reads this request: held, as if it had been away on arrival
+            WAIT_FOR_MODEL.on = form is None and self._may_hold(request)
             try:
-                self.orch.submit(request, form)
+                try:
+                    self.orch.submit(request, form)
+                except ModelAway:
+                    WAIT_FOR_MODEL.on = False
+                    if not self._hold(request):  # a question or a message for another office: the stand-in reads it
+                        self.orch.submit(request, form)
             except Exception as e:  # noqa: BLE001 - surfaced to the UI through the event log
                 self.store.log(request.id, "error", error=f"{type(e).__name__}: {e}")
 
@@ -736,8 +745,7 @@ class World:
         wrong on 20%, where the fine-tuned reader is right on 99.8%). Questions about the rules and messages for
         another office go ahead: the stand-ins handle them well. A request held ``NTS_HOLD_MINUTES`` (10) goes
         ahead on the stand-in after all, so nothing waits for ever."""
-        if (self.parser_mode not in ("gemini", "local") or self.model_link is None or request.id in self._released
-                or self.seeding or self.restoring or self.test_data):
+        if not self._may_hold(request):
             return False
         if request.id not in self.held:
             if self.model_link.usable():
@@ -755,6 +763,11 @@ class World:
         if first:
             self.store.log(request.id, "held", reason=self.model_link.error or "the model is not reachable")
         return True
+
+    def _may_hold(self, request: Request) -> bool:
+        """Whether a request could wait for the model at all: the app runs with one, and nothing else rules it out."""
+        return not (self.parser_mode not in ("gemini", "local") or self.model_link is None
+                    or request.id in self._released or self.seeding or self.restoring or self.test_data)
 
     def _rule_reading(self, request: Request) -> str:
         try:
