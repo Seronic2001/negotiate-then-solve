@@ -400,6 +400,9 @@ def main() -> None:
     ap.add_argument("--sim-local", action="store_true", help="run the stakeholder simulators locally too")
     ap.add_argument("--local-url", default="http://localhost:8080/v1")
     ap.add_argument("--local-model", default=None, help="model to run on a router-mode server (default NTS_LOCAL_MODEL)")
+    ap.add_argument("--local-adapter", default=None,
+                    help="LoRA adapter on the local server's base model for the agent and local simulators "
+                         "(its GGUF name, e.g. nts-read100); the same one for every configuration")
     ap.add_argument("--local-max-tokens", type=int, default=2048)
     ap.add_argument("--subset", type=int, default=None,
                     help="run every configuration on a stratified subset of this many scenarios (Tier 2)")
@@ -433,7 +436,7 @@ def main() -> None:
             from language.local import LocalClient
 
             local = LocalClient(base_url=args.local_url, max_tokens=args.local_max_tokens, timeout=600,
-                                server_model=args.local_model)
+                                server_model=args.local_model, adapter=args.local_adapter)
         agent = local if args.local else GeminiClient(args.agent_model or default_model("agent"))
         sim = local if args.sim_local else GeminiClient(default_model("simulator"))
 
