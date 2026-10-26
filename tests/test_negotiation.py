@@ -282,6 +282,50 @@ def test_family_scenarios_are_reproducible_and_cover_every_family():
     assert simulators(build("contention", 1, seed=11))[owner].rng is None  # legacy: deterministic
 
 
+# -- hard tier --------------------------------------------------------------------------
+
+
+def test_unusual_family_only_takes_another_time_of_day():
+    kw = {"stated_slots": [5, 6, 7], "all_slots": list(range(8)), "conceded_recently": False}
+    odd = apply_family(_profile(), "unusual", **kw)
+    assert [(w.days, w.slots) for w in odd.windows] == [(["Wed"], [0, 1, 2, 3, 4])] and not odd.reveal
+    assert not apply_family(Profile(owner="F-201"), "unusual", **kw).windows  # no flexibility is invented
+
+
+def test_hard_scenarios_are_reproducible_on_one_worker():
+    a = build("multi", 1, seed=5, family="unusual", prefix="H", workers=1)
+    b = build("multi", 1, seed=5, family="unusual", prefix="H", workers=1)
+    assert a.id == "H-001-multi" and a == b  # baseline and oracle included
+
+
+def test_multi_asks_one_of_three_stakeholders():
+    sc = build("multi", 1, seed=5, prefix="H", workers=1)
+    assert len(sc.profiles) == 3 and sc.oracle.status == "agree" and sc.oracle.concessions == 1
+    out = _resolve(sc)
+    assert out.status == "agreed" and len({e.stakeholder for e in out.concessions}) == 1
+
+
+def test_joint_needs_two_concessions_outside_single_owner_options():
+    sc = build("joint", 1, seed=5, prefix="H", workers=1)
+    assert sc.oracle.status == "agree" and sc.oracle.concessions == 2
+    out = _resolve(sc)  # every minimal correction set has two owners: ours cannot offer one
+    assert out.status == "escalated" and out.escalation.reason == "no option a single owner can accept"
+
+
+@pytest.mark.slow
+def test_scale_plants_contention_in_a_generated_department():
+    sc = build("scale", 1, seed=5, prefix="H", workers=1)
+    assert len(sc.instance.sessions) > 60 and sc.oracle.status in ("agree", "escalate")
+    assert {c.room.equipment[0] for c in sc.planted if c.room} == {"routers"}
+
+
+def _resolve(sc):
+    neg = Negotiator(sc.instance, priority=PriorityModel(sc.instance, baseline=sc.baseline),
+                     explainer=Explainer(sc.instance), time_limit=20, workers=1)
+    return neg.resolve(sc.constraints, {p.owner: Simulator(sc.instance, p) for p in sc.profiles},
+                       baseline=sc.baseline, week=sc.week)
+
+
 def test_invented_offers_are_checked_but_still_shown():
     """A1/B3: the solver check measures the invalid-candidate rate (H1a)
     without filtering what the LLM proposed."""

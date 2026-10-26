@@ -275,9 +275,9 @@ def objective_gaps(rows: list[dict], scenarios: dict[str, Scenario]) -> tuple[li
     return gaps, tier_worse
 
 
-def _spread(ledgers: list[ConcessionLedger]) -> dict:
+def _spread(ledgers: list[ConcessionLedger], people: list[str] = STAKEHOLDERS) -> dict:
     """Burden dispersion per run's ledger (one semester per seed), averaged."""
-    per = [led.dispersion(STAKEHOLDERS, SEMESTER) for led in ledgers]
+    per = [led.dispersion(people, SEMESTER) for led in ledgers]
     return {k: mean([p.get(k) for p in per]) for k in ("gini", "max", "cv", "total")} if per else {}
 
 
@@ -289,7 +289,9 @@ def summarise(rows: list[dict], scenarios: dict[str, Scenario], ledgers: list[Co
     escalate_pred = [r["status"] in ("escalated", "failed") for r in rows]
     tp = sum(g and p for g, p in zip(escalate_gold, escalate_pred, strict=True))
     produced = [r["valid"] for r in rows if r.get("valid") is not None]
-    spread = _spread(ledgers or [])
+    # the four faculty of the small departments, plus anyone else the run's conflicts involve (hard tier)
+    owners = {p.owner for r in rows for p in scenarios[r["scenario"]].profiles}
+    spread = _spread(ledgers or [], sorted(owners | set(STAKEHOLDERS)))
     tools = sum((Counter(r.get("tools", {})) for r in rows), Counter())
     return {
         "n": len(rows),

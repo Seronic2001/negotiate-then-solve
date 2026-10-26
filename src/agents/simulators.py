@@ -14,7 +14,10 @@ exploiting a deterministic reply rule:
 * ``flexible``: any time on the days that work, and volunteers one;
 * ``cost_sensitive``: only small changes (the same time of day);
 * ``history_sensitive``: refuses acceptable offers more often after having
-  conceded recently, independent of the negotiator's ledger.
+  conceded recently, independent of the negotiator's ledger;
+* ``unusual`` (hard tier only): only a time of day other than the one asked
+  for works, on one day, and it is never volunteered: the "unusual slot" an
+  option list that starts from the time asked for is least likely to reach.
 
 With ``refuse_p`` an acceptable offer is refused anyway, and with
 ``silence_p`` a message goes unanswered; both draw from the simulator's own
@@ -54,8 +57,9 @@ class Window(BaseModel):
         return f"{days} from {hour(min(self.slots))} to {hour(max(self.slots) + 1)}"
 
 
-Family = Literal["strict", "flexible", "cost_sensitive", "history_sensitive"]
+Family = Literal["strict", "flexible", "cost_sensitive", "history_sensitive", "unusual"]
 FAMILIES: tuple[Family, ...] = ("strict", "flexible", "cost_sensitive", "history_sensitive")
+HARD_FAMILIES: tuple[Family, ...] = (*FAMILIES, "unusual")
 REFUSE_P = 0.1  # chance of refusing an acceptable offer anyway
 SILENCE_P = 0.05  # chance of not answering a message
 RELUCTANT_P = 0.5  # refusal chance for a history-sensitive stakeholder who conceded recently
@@ -93,6 +97,10 @@ def apply_family(profile: Profile, family: Family, *, stated_slots: list[int] | 
         p.windows = [w for w in near if w.slots]
     elif family == "history_sensitive" and conceded_recently:
         p.refuse_p = RELUCTANT_P
+    elif family == "unusual":
+        other = [s for s in all_slots if s not in (stated_slots or [])]
+        p.windows = [Window(days=w.days[:1] if w.days else None, slots=other) for w in p.windows[:1]]
+        p.reveal = False
     return p
 
 
