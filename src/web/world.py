@@ -249,7 +249,7 @@ class World:
         teaching = sorted({s.faculty for s in self.instance.sessions})
         self.orch = Orchestrator(
             self.instance, self.store, parser=self.parser, negotiator=self._negotiator(),
-            negotiator_factory=self._negotiator, system_one=self.system_one, tau=self.tau,
+            system_one=self.system_one, tau=self.tau,
             use_fast_path=self._fast_path_now,
             fast_parser=RuleParser(self.instance), policy_agent=self.policy,
             responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER,

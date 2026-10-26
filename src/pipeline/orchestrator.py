@@ -161,7 +161,6 @@ class Orchestrator:
         responders: Mapping[str, Responder] | None = None,
         approvers: Iterable[str] = ("C-TT",),
         semester: str = "current",
-        negotiator_factory: Callable[[], Negotiator] | None = None,
         swap_reader=None,
         offer_choices: Callable[[], bool] | None = None,
         current_week: Callable[[], int | None] | None = None,
@@ -195,7 +194,6 @@ class Orchestrator:
         self.responders = dict(responders or {})
         self.approvers = set(approvers)
         self.semester = semester
-        self.negotiator_factory = negotiator_factory
         self.swap_reader = swap_reader or RuleSwapReader(instance)
         self.extra_reader = ExtraReader(instance)
         self.offer_choices = offer_choices
@@ -738,7 +736,7 @@ class Orchestrator:
         # "already met" only by the published timetable: met by a change still waiting, it waits with it
         live = base is not None and base.version == getattr(
             self.store.current_version(week) or self.store.current_version(), "version", None)
-        neg = self.negotiator_factory() if self.negotiator_factory else self.negotiator
+        neg = self.negotiator  # one for every case: each negotiation binds its own state
         cancelled, closed = self._cancelled(week)
         if live and set(cancelled) == set(base.cancelled) and self._already_met(case, base, week):
             # checked directly, not by the solver: a solve cut short by its time limit could move
