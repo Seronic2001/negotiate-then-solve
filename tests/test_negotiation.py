@@ -341,6 +341,22 @@ def test_counter_proposal_in_a_joint_conflict_is_checked_as_part_of_the_repair()
     assert out.proposals >= 1 and out.proposals_verified == out.proposals
 
 
+def test_a_neighbourhood_too_small_falls_back_to_the_whole_timetable(monkeypatch):
+    """A conflict that only the classes held in place create is not negotiated: the negotiation moves to the
+    whole timetable and ends as it would there."""
+    from pathlib import Path
+
+    import agents.negotiation as N
+    from evaluation.benchmark import load
+
+    path = Path(__file__).resolve().parents[1] / "data" / "scenarios.jsonl"
+    sc = next(s for s in load(path) if s.id == "S-017-contention")  # an equivalent lab: nobody gives way
+    whole = _resolve(sc, local=False)
+    monkeypatch.setattr(N, "neighbourhood", lambda *a, **k: set())  # every class held where it is
+    out = _resolve(sc)
+    assert out.status == whole.status == "feasible" and any("whole timetable" in t for t in out.trace)
+
+
 def test_declined_options_move_the_search_to_other_parts_of_the_week():
     """Each option is in its own (day, part of day); a declined one rules its part out for the next round,
     which offers the rest of the asked time of day first and then the other part of the day."""
@@ -371,6 +387,30 @@ def test_scale_plants_contention_in_a_generated_department():
     assert {c.room.equipment[0] for c in sc.planted if c.room} == {"routers"}
 
 
+@pytest.mark.slow
+def test_contention_is_negotiated_in_the_full_department(monkeypatch):
+    """The brief's department (about 210 sessions): the whole timetable does not answer within the solver's
+    time limit, the conflict's neighbourhood does, and the conflict is proved on its own classes."""
+    import evaluation.benchmark as B
+    from core.generator import generate_department
+    from core.instance import policy_constraints
+    from core.solver import TimetableSolver
+
+    monkeypatch.setattr(B, "generate_department", lambda seed, **kw: generate_department(seed))
+    parts = B.scale(random.Random(5), "FULL")
+    inst = parts["inst"]
+    base = policy_constraints(inst)
+    baseline = TimetableSolver(inst, base, time_limit=300, workers=1).solve()
+    assert len(inst.sessions) > 200 and baseline.ok
+    neg = Negotiator(inst, priority=PriorityModel(inst, baseline=baseline.assignment), explainer=Explainer(inst),
+                     time_limit=20, workers=1, presolve=False)
+    out = neg.resolve([*base, *parts["planted"]], {p.owner: Simulator(inst, p) for p in parts["profiles"]},
+                      baseline=baseline.assignment)
+    assert out.status in ("agreed", "escalated") and not any("not checked" in t for t in out.trace)
+    if out.status == "agreed":
+        assert out.valid
+
+
 def test_pipeline_scores_what_the_negotiator_scores():
     """The scenario through the request pipeline (submit one request after another, approve) ends where the
     negotiator alone does: a pending change is not cheaper to keep than a later request is to move."""
@@ -388,9 +428,9 @@ def test_pipeline_scores_what_the_negotiator_scores():
     assert piped["valid"] == direct["valid"] and set(piped["pipeline"]) == {"R-A", "R-B"}
 
 
-def _resolve(sc):
+def _resolve(sc, local=True):
     neg = Negotiator(sc.instance, priority=PriorityModel(sc.instance, baseline=sc.baseline),
-                     explainer=Explainer(sc.instance), time_limit=20, workers=1)
+                     explainer=Explainer(sc.instance), time_limit=20, workers=1, local=local)
     return neg.resolve(sc.constraints, {p.owner: Simulator(sc.instance, p) for p in sc.profiles},
                        baseline=sc.baseline, week=sc.week)
 

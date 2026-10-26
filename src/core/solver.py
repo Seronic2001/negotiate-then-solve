@@ -6,6 +6,12 @@ guarded by an assumption literal ``a_k`` so it can be switched on or off
 (``a_k => C_k``); that is what conflict analysis and negotiation work on.
 Soft constraints and, in repair mode, the number of moved sessions form the
 objective.
+
+A repair can be restricted to a neighbourhood (``free``): every other session
+keeps its baseline placement, which shrinks the model to the part of the
+department a conflict touches. Feasible within a neighbourhood is feasible
+outright; infeasible within one is not proof, so callers check a conflict
+found there against the whole timetable (``agents.negotiation``).
 """
 
 from __future__ import annotations
@@ -109,9 +115,11 @@ class _Model:
         baseline: Mapping[str, Placement] | None,
         disruption_weight: int,
         skip: frozenset[str] = frozenset(),
+        frozen: Mapping[str, Placement] | None = None,
     ) -> None:
         self.instance = instance
         self.skip = skip  # sessions not held this week (cancelled): they get no placement
+        self.frozen = dict(frozen or {})  # sessions held where they are: one candidate each
         self.model = cp_model.CpModel()
         self.x: dict[str, dict[Key, cp_model.IntVar]] = {}
         self._fac_cov: dict[tuple[str, int, int], list[cp_model.IntVar]] = defaultdict(list)
@@ -134,6 +142,12 @@ class _Model:
             var = self.x.get(sid, {}).get(key)
             if var is not None:
                 self.keep.append(var)
+        # the search starts from the baseline: a repair usually leaves most of it in place, and without a
+        # hint each check builds a whole timetable from nothing (seconds per check in a department)
+        kept = set(map(id, self.keep))
+        for sid in (baseline or {}):
+            for v in self.x.get(sid, {}).values():
+                self.model.add_hint(v, id(v) in kept)
         self.disruption_weight = disruption_weight
 
     def _build_physical(self) -> None:
@@ -145,9 +159,12 @@ class _Model:
                 continue
             cands: dict[Key, cp_model.IntVar] = {}
             rooms = [r for r in inst.rooms if room_compatible(inst, s, r)]
+            at = self.frozen.get(s.id)
             for d in range(n_days):
                 for p in range(spd - s.duration + 1):
                     for r in rooms:
+                        if at is not None and (d, p, r.id) != (inst.day_index(at.day), at.slot, at.room):
+                            continue
                         v = m.new_bool_var(f"x[{s.id},{d},{p},{r.id}]")
                         cands[(d, p, r.id)] = v
                         for dd, q in occupied(s, d, p):
@@ -221,7 +238,10 @@ class TimetableSolver:
         disruption_weight: int = 1,
         presolve: bool = True,
         skip: Iterable[str] = (),
+        free: Iterable[str] | None = None,
     ) -> None:
+        """``free``: the sessions a repair may move (a neighbourhood); every other session with a baseline
+        placement stays there. None: every session may move."""
         active = [c for c in constraints if c.active_in(week)]
         ids = [c.id for c in active]
         if len(ids) != len(set(ids)):
@@ -239,6 +259,7 @@ class TimetableSolver:
         # per feasibility check); interactive use turns it off.
         self.presolve = presolve
         self.skip = frozenset(skip)  # sessions cancelled this week (pipeline.orchestrator.closures)
+        self.free = None if free is None else frozenset(free)
         self._feas: _Model | None = None
 
     # -- building and running -------------------------------------------------
@@ -246,7 +267,8 @@ class TimetableSolver:
     def build(self) -> _Model:
         hard = [c for c in self.constraints.values() if c.hard]
         soft = [c for c in self.constraints.values() if not c.hard]
-        return _Model(self.instance, hard, soft, self.baseline, self.disruption_weight, self.skip)
+        frozen = ({s: p for s, p in self.baseline.items() if s not in self.free} if self.free is not None else None)
+        return _Model(self.instance, hard, soft, self.baseline, self.disruption_weight, self.skip, frozen)
 
     def run(self, m: _Model) -> tuple[str, cp_model.CpSolver | _Replay]:
         path = None
@@ -379,3 +401,29 @@ class TimetableSolver:
             objective=solver.objective_value,
             wall_time=wall,
         )
+
+
+def neighbourhood(instance: Instance, constraints: Iterable[Constraint], baseline: Mapping[str, Placement],
+                  week: int | None = None) -> set[str]:
+    """The sessions a repair of ``baseline`` is likely to move: those it places against an active placement
+    constraint (or does not place), and those that share a teacher or a section with them or sit in a room
+    one of them could use. A repair restricted to these leaves the rest of the department where it is."""
+    inst = instance
+    seeds = {s.id for s in inst.sessions if s.id not in baseline}
+    for c in constraints:
+        if c.type not in PLACEMENT_TYPES or not c.active_in(week):
+            continue
+        for s in sessions_in_scope(inst, c.scope):
+            p = baseline.get(s.id)
+            if p is not None and violates(inst, c, s, inst.day_index(p.day), p.slot, inst.room_by_id[p.room]):
+                seeds.add(s.id)
+    out = set(seeds)
+    for sid in seeds:
+        s = inst.session_by_id[sid]
+        rooms = {r.id for r in inst.rooms if room_compatible(inst, s, r)}
+        for o in inst.sessions:
+            p = baseline.get(o.id)
+            if (o.faculty == s.faculty or set(o.groups) & set(s.groups)
+                    or (p is not None and p.room in rooms)):
+                out.add(o.id)
+    return out

@@ -54,7 +54,7 @@ from core.schemas import (
     When,
 )
 from core.semantics import PLACEMENT_TYPES, sessions_in_scope, violates
-from core.solver import SolveResult, TimetableSolver
+from core.solver import SolveResult, SolverTimeout, TimetableSolver, neighbourhood
 from language.llm import InvalidOutput
 
 from .explainer import (
@@ -411,7 +411,10 @@ class Negotiator:
         presolve: bool = True,
         workers: int = 8,
         seed: int = 0,
+        local: bool = True,
     ) -> None:
+        """``local``: solve each negotiation within the neighbourhood of its conflict (``core.solver``), with
+        every conflict checked against the whole timetable and the whole timetable used when it differs."""
         if option_source != "mcs" and option_client is None:
             raise ValueError("LLM-invented options need option_client")
         self.instance = instance
@@ -435,6 +438,8 @@ class Negotiator:
         # each run; experiments use one worker so paired configurations see the
         # same options
         self.workers, self.seed = workers, seed
+        self.local = local
+        self.free: frozenset[str] | None = None  # the sessions this problem's repairs may move (per problem)
         self.stakeholders = sorted({s.faculty for s in instance.sessions})  # people who teach
         self.skip: frozenset[str] = frozenset()  # sessions cancelled in the week being solved (per problem)
         self.reference: dict[str, Placement] | None = None  # what disruption is counted against (per problem)
@@ -464,10 +469,10 @@ class Negotiator:
 
     # -- helpers ---------------------------------------------------------------
 
-    def _solver(self, cons: Mapping[str, Constraint], week, baseline) -> TimetableSolver:
+    def _solver(self, cons: Mapping[str, Constraint], week, baseline, whole: bool = False) -> TimetableSolver:
         return TimetableSolver(self.instance, cons.values(), week=week, baseline=baseline,
                                time_limit=self.time_limit, presolve=self.presolve, workers=self.workers,
-                               seed=self.seed, skip=self.skip)
+                               seed=self.seed, skip=self.skip, free=None if whole else self.free)
 
     def _conceded(self, c: Constraint, assignment: Mapping[str, Placement]) -> dict[str, Placement]:
         """Sessions whose placement in ``assignment`` breaks ``c``."""
@@ -597,6 +602,29 @@ class Negotiator:
                 break
         return (target, offers[: self.k]) if offers else None
 
+    def _conflict_is_real(self, out: Outcome, cons, mus: list[str], week, baseline) -> bool:
+        """Is a conflict found within the neighbourhood one in the whole timetable too? First among the
+        conflict's own classes alone: leaving every other class out only makes a timetable easier, so a
+        conflict there is one everywhere (a cheap proof). Else against the whole timetable; when that takes
+        longer than the time limit, the neighbourhood's answer stands and the trace says so."""
+        mine = {s.id for i in mus for s in sessions_in_scope(self.instance, cons[i].scope)}
+        if len(mine) < len(self.instance.sessions):
+            fields = {f: getattr(self.instance, f) for f in type(self.instance).model_fields}
+            alone = type(self.instance)(**(fields | {"sessions": [s for s in self.instance.sessions if s.id in mine]}))
+            few = TimetableSolver(alone, [cons[i] for i in mus], week=week, time_limit=self.time_limit,
+                                  presolve=self.presolve, workers=self.workers, seed=self.seed,
+                                  skip=self.skip & mine)
+            try:
+                if not few.is_feasible(mus):
+                    return True
+            except SolverTimeout:
+                pass
+        try:
+            return not self._solver(cons, week, baseline, whole=True).is_feasible(mus)
+        except SolverTimeout:
+            out.trace.append(f"round {out.rounds}: conflict not checked against the whole timetable (time limit)")
+            return True
+
     def _band(self, slot: int) -> int:
         """Morning (0) or afternoon (1): the part of the day a class starting at ``slot`` is in."""
         cal = self.instance.calendar
@@ -658,7 +686,7 @@ class Negotiator:
                 prefer(other if last <= asked_bands else asked)
             res = TimetableSolver(self.instance, [*base, *extra.values()], week=week, baseline=baseline,
                                   time_limit=self.time_limit, presolve=self.presolve, workers=self.workers,
-                                  seed=self.seed, skip=self.skip).solve()
+                                  seed=self.seed, skip=self.skip, free=self.free).solve()
             if not res.ok:
                 break
             alts.append(({sid: res.assignment[sid] for sid in first}, self._moved(res.assignment, baseline)))
@@ -675,7 +703,12 @@ class Negotiator:
         for c in self._pins(target, offer.placements, tier, "CHK"):
             trial[c.id] = c
         solver = self._solver(trial, week, baseline)
-        return solver.is_feasible(solver.hard_ids)
+        if solver.is_feasible(solver.hard_ids):
+            return True
+        if self.free is None:
+            return False
+        whole = self._solver(trial, week, baseline, whole=True)  # it may need classes outside the neighbourhood
+        return whole.is_feasible(whole.hard_ids)
 
     def _llm_offers(self, cons, mus, target: str, exclude: Mapping[str, set[tuple[str, int]]] | None = None,
                     rejected: Iterable[Offer] = ()) -> list[Offer]:
@@ -761,6 +794,9 @@ class Negotiator:
         asked: dict[str, int] = {}
         reminded: set[str] = set()  # owners sent the same message again after no reply
         declined: dict[str, set[tuple[str, int]]] = {}  # session -> (day, band) already offered and declined
+        if self.local and baseline:
+            free = neighbourhood(self.instance, cons.values(), baseline, week)
+            self.free = frozenset(free) if len(free) < len(baseline) else None
         while True:
             solver = self._solver(cons, week, baseline)
             if solver.is_feasible(solver.hard_ids):
@@ -768,6 +804,11 @@ class Negotiator:
                     out.status, out.step = "agreed", 3
                 return self._finish(out, cons, solver if tip is baseline else self._solver(cons, week, tip))
             mus = find_mus(solver)
+            if self.free is not None and not self._conflict_is_real(out, cons, mus, week, baseline):
+                # only the classes held in place made this a conflict: negotiate over the whole timetable
+                self.free = None
+                out.trace.append(f"round {out.rounds}: neighbourhood too small, whole timetable")
+                continue
             out.trace.append(f"round {out.rounds}: MUS {mus}")
             out.mus_log.append(list(mus))
             self._emit("conflict", round=out.rounds + 1, mus=list(mus))
