@@ -23,8 +23,9 @@ cost-sensitive, history-sensitive; balanced within each kind) that reshapes
 the hidden profiles and makes replies stochastic (``agents.simulators``).
 
 Hard tier (``--hard``, ``data/scenarios-hard.jsonl``, 30 scenarios, reported
-separately from the 60): cases the standard kinds leave out, where options
-restricted to single-owner minimal correction sets may lose.
+separately from the 60): cases the standard kinds leave out: more than two
+stakeholders, repairs that need several of them to give way, a hidden time
+outside what was asked, and a department-size timetable.
 
 * ``multi``: three stakeholders, two GPU labs: two new requests and a third
   colleague's earlier agreement want the same afternoon; one must give way,
@@ -67,7 +68,15 @@ from pydantic import BaseModel, Field
 
 from agents.ledger import ConcessionLedger
 from agents.priority import PriorityModel
-from agents.simulators import FAMILIES, HARD_FAMILIES, Family, Profile, Simulator, Window, apply_family
+from agents.simulators import (
+    FAMILIES,
+    HARD_FAMILIES,
+    Family,
+    Profile,
+    Simulator,
+    Window,
+    apply_family,
+)
 from core.generator import SURNAMES, generate_department
 from core.instance import (
     Faculty,

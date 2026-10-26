@@ -738,13 +738,8 @@ class Orchestrator:
         # "already met" only by the published timetable: met by a change still waiting, it waits with it
         live = base is not None and base.version == getattr(
             self.store.current_version(week) or self.store.current_version(), "version", None)
-        ledger = ConcessionLedger(self.store.ledger())
         neg = self.negotiator_factory() if self.negotiator_factory else self.negotiator
-        neg.ledger = ledger
-        neg.priority.ledger = ledger
-        neg.priority.baseline = dict(baseline or {})
         cancelled, closed = self._cancelled(week)
-        neg.skip = frozenset(cancelled)
         if live and set(cancelled) == set(base.cancelled) and self._already_met(case, base, week):
             # checked directly, not by the solver: a solve cut short by its time limit could move
             # classes nobody asked to move
@@ -761,9 +756,11 @@ class Orchestrator:
                 self._advance(case, S.NEGOTIATING)
             self.store.log(case.id, f"negotiation_{kind}", **data)
 
-        neg.listener = on_event
         t = time.perf_counter()
-        outcome = neg.resolve(self.store.constraints(), self.responders, baseline=baseline, week=week)
+        published = self.store.current_version(week) or self.store.current_version()
+        outcome = neg.resolve(self.store.constraints(), self.responders, baseline=baseline or {}, week=week,
+                              skip=cancelled, ledger=ConcessionLedger(self.store.ledger()), listener=on_event,
+                              reference=_regular(published.assignment) if published else None)
         case.timings["solve_and_negotiate"] = time.perf_counter() - t
         case.outcome = outcome
         if case.status == S.COMPILED:
@@ -792,7 +789,7 @@ class Orchestrator:
         moved = moved_sessions(baseline or {}, assignment)
         chosen = None
         if outcome.status == "feasible" and moved and not cancelled:
-            assignment, chosen = self._let_sender_choose(case, assignment, baseline, week, neg)
+            assignment, chosen = self._let_sender_choose(case, assignment, baseline, week, neg, cancelled)
             moved = moved_sessions(baseline or {}, assignment)
         unmet = outcome.notices.get(case.request.sender_id)
         if live and not moved and not cancelled and not unmet:
@@ -812,32 +809,36 @@ class Orchestrator:
             return case
         case.proposal = self.store.propose_version(assignment, case.id, week=week, cancelled=sorted(cancelled),
                                                    parent=base)
-        case.reply = ("Your request can be met. The change is waiting for the coordinator's approval."
-                      if not outcome.notices.get(case.request.sender_id) else
-                      " ".join(outcome.notices[case.request.sender_id]))
-        if chosen:
-            case.reply = f"{chosen} The change is waiting for the coordinator's approval."
-        if agreed := self._agreed_text(case, outcome, assignment, moved):
-            case.reply = f"{agreed} The change is waiting for the coordinator's approval."
-        if not moved and not cancelled and (under := self.builds_on(case)):
-            case.reply = (f"Your request is met by {under.id}, which is waiting for the coordinator's approval: "
-                          "yours is approved after it, and nothing else has to move.")
-        if mine := self._absent(week, only=case.id):
-            others = len(set(moved) - cancelled)
-            n = len(mine)
-            case.reply = (f"Recorded: you are away in week {week}. Your {n} {'class' if n == 1 else 'classes'} then "
-                          f"{'is' if n == 1 else 'are'} cancelled for that week, with no make-up class, as you asked"
-                          + (f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else "")
-                          + ". Your sections are told once the timetable office approves the change.")
-        elif cancelled and closed:
-            others = len(set(moved) - cancelled)
-            case.reply = (f"Recorded: {' and '.join(closed)} closed in week {week}. "
-                          f"{len(cancelled)} {'class has' if len(cancelled) == 1 else 'classes have'} no other room "
-                          "that week and will be cancelled, with a make-up owed"
-                          + (f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else "")
-                          + ". Their teachers and sections are told once the timetable office approves the change.")
+        case.reply = self._proposal_reply(case, outcome, assignment, moved, week, cancelled, closed, chosen)
         self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=moved)
         return case
+
+    def _proposal_reply(self, case: Case, outcome, assignment: Mapping[str, Placement], moved: list[str],
+                        week: int | None, cancelled: set[str], closed: list[str], chosen: str | None) -> str:
+        """What the sender of a change now waiting for approval is told; the most specific account first."""
+        waiting = "The change is waiting for the coordinator's approval."
+        others = len(set(moved) - cancelled)
+        also = f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else ""
+        if mine := self._absent(week, only=case.id):
+            n = len(mine)
+            return (f"Recorded: you are away in week {week}. Your {n} {'class' if n == 1 else 'classes'} then "
+                    f"{'is' if n == 1 else 'are'} cancelled for that week, with no make-up class, as you asked"
+                    + also + ". Your sections are told once the timetable office approves the change.")
+        if cancelled and closed:
+            return (f"Recorded: {' and '.join(closed)} closed in week {week}. "
+                    f"{len(cancelled)} {'class has' if len(cancelled) == 1 else 'classes have'} no other room "
+                    "that week and will be cancelled, with a make-up owed"
+                    + also + ". Their teachers and sections are told once the timetable office approves the change.")
+        if not moved and not cancelled and (under := self.builds_on(case)):
+            return (f"Your request is met by {under.id}, which is waiting for the coordinator's approval: "
+                    "yours is approved after it, and nothing else has to move.")
+        if agreed := self._agreed_text(case, outcome, assignment, moved):
+            return f"{agreed} {waiting}"
+        if chosen:
+            return f"{chosen} {waiting}"
+        if notices := outcome.notices.get(case.request.sender_id):
+            return " ".join(notices)
+        return f"Your request can be met. {waiting}"
 
     def _agreed_text(self, case: Case, outcome, assignment: Mapping[str, Placement], moved: list[str]) -> str | None:
         """What a sender who gave something up in the negotiation ends up with: where their classes are, and what
@@ -858,7 +859,7 @@ class Orchestrator:
                 + (f", instead of {' and '.join(asked)} as you first asked." if asked else "."))
 
     def _let_sender_choose(self, case: Case, assignment: Mapping[str, Placement], baseline, week: int | None,
-                           neg: Negotiator) -> tuple[Mapping[str, Placement], str | None]:
+                           neg: Negotiator, cancelled: Iterable[str]) -> tuple[Mapping[str, Placement], str | None]:
         """A request that fits in more than one way: the sender picks the time. Up to ``CHOICES``
         solver-checked timetables that place the sender's moved classes at different times (not
         only in other rooms) and move no more classes than the solver's own answer; one option,
@@ -879,7 +880,7 @@ class Orchestrator:
                                          when=When(days=[p.day], slots=[p.slot])))
             res = TimetableSolver(self.instance, [*cons, *forbid], week=week, baseline=baseline,
                                   time_limit=neg.time_limit, presolve=neg.presolve, workers=neg.workers,
-                                  seed=neg.seed, skip=neg.skip).solve()
+                                  seed=neg.seed, skip=frozenset(cancelled)).solve()
             if not res.ok or len(moved_sessions(baseline or {}, res.assignment)) > len(moved):
                 break
             options.append(dict(res.assignment))

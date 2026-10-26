@@ -305,11 +305,63 @@ def test_multi_asks_one_of_three_stakeholders():
     assert out.status == "agreed" and len({e.stakeholder for e in out.concessions}) == 1
 
 
-def test_joint_needs_two_concessions_outside_single_owner_options():
+def test_joint_correction_set_is_agreed_one_owner_at_a_time():
+    """Every minimal correction set has two owners: each is offered their own part of the same verified
+    repair (naming the other), and what the first agrees to is held while the second is asked."""
     sc = build("joint", 1, seed=5, prefix="H", workers=1)
     assert sc.oracle.status == "agree" and sc.oracle.concessions == 2
-    out = _resolve(sc)  # every minimal correction set has two owners: ours cannot offer one
-    assert out.status == "escalated" and out.escalation.reason == "no option a single owner can accept"
+    out = _resolve(sc)
+    assert out.status == "agreed" and out.valid
+    first = out.messages[0]
+    assert all(len(o.joint) == 1 and o.joint[0] != first.to for o in first.offers)
+    assert all({cons.owner for cons in sc.constraints if cons.id in o.drop} == {first.to} for o in first.offers)
+    assert len({e.stakeholder for e in out.concessions}) == 2
+
+
+def test_counter_proposal_in_a_joint_conflict_is_checked_as_part_of_the_repair():
+    """Alone, one owner's move cannot end a conflict two must give way in: their own proposal is verified
+    with the other part of the repair given up too, not rejected for leaving the rest of the conflict."""
+    sc = build("joint", 1, seed=5, prefix="H", workers=1)
+    sims = {p.owner: Simulator(sc.instance, p) for p in sc.profiles}
+
+    class Proposer:
+        def __init__(self, owner):
+            self.owner, self.done = owner, False
+
+        def respond(self, message):
+            if self.done:
+                return sims[self.owner].respond(message)
+            self.done = True
+            (_sid, p), = message.offers[0].placements.items()  # the same place, proposed in their own words
+            return Reply(decision="propose", proposal=p)
+
+    neg = Negotiator(sc.instance, priority=PriorityModel(sc.instance, baseline=sc.baseline),
+                     explainer=Explainer(sc.instance), time_limit=20, workers=1)
+    out = neg.resolve(sc.constraints, {o: Proposer(o) for o in sims}, baseline=sc.baseline, week=sc.week)
+    assert out.proposals >= 1 and out.proposals_verified == out.proposals
+
+
+def test_declined_options_move_the_search_to_other_parts_of_the_week():
+    """Each option is in its own (day, part of day); a declined one rules its part out for the next round,
+    which offers the rest of the asked time of day first and then the other part of the day."""
+    inst, cons = uc3_lab_contention()
+
+    class No:
+        def __init__(self):
+            self.seen = []
+
+        def respond(self, message):
+            self.seen.append(message.offers)
+            return Reply(decision="reject")
+
+    a, b = No(), No()
+    neg = Negotiator(inst, priority=PriorityModel(inst), explainer=Explainer(inst), workers=1)
+    neg.resolve(cons, {"F-201": a, "F-202": b})
+    asked = a if a.seen else b
+    band = neg._band
+    rounds = [[(sid, p.day, band(p.slot)) for o in offers for sid, p in o.placements.items()] for offers in asked.seen]
+    assert all(len(set(r)) == len(r) for r in rounds)  # distinct parts within a round
+    assert not set(rounds[0]) & set(rounds[1])  # declined parts are not offered again
 
 
 @pytest.mark.slow
@@ -317,6 +369,23 @@ def test_scale_plants_contention_in_a_generated_department():
     sc = build("scale", 1, seed=5, prefix="H", workers=1)
     assert len(sc.instance.sessions) > 60 and sc.oracle.status in ("agree", "escalate")
     assert {c.room.equipment[0] for c in sc.planted if c.room} == {"routers"}
+
+
+def test_pipeline_scores_what_the_negotiator_scores():
+    """The scenario through the request pipeline (submit one request after another, approve) ends where the
+    negotiator alone does: a pending change is not cheaper to keep than a later request is to move."""
+    from pathlib import Path
+
+    from evaluation.benchmark import load
+    from evaluation.negotiation import run_negotiation, run_pipeline
+
+    # S-007: the two requests cost the same to move; counted against R-A's waiting change, R-B looked cheaper
+    path = Path(__file__).resolve().parents[1] / "data" / "scenarios.jsonl"
+    sc = next(s for s in load(path) if s.id == "S-007-contention")
+    direct = run_negotiation(sc, "ours", ConcessionLedger(), None, None)
+    piped = run_pipeline(sc, "ours", ConcessionLedger(), None, None)
+    assert piped["status"] == direct["status"] and piped["conceders"] == direct["conceders"]
+    assert piped["valid"] == direct["valid"] and set(piped["pipeline"]) == {"R-A", "R-B"}
 
 
 def _resolve(sc):

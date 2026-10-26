@@ -8,6 +8,8 @@ baselines B1-B4 and the oracle, and ablations A1-A3, on the 60 scenarios.
     uv run python -m evaluation.negotiation --configs ours-llm,B4 --local --sim-local --seeds 0
     # Gemini check of the main comparison on a stratified subset
     uv run python -m evaluation.negotiation --configs ours-llm,B4 --subset 20
+    # the same scenarios through the request pipeline the app runs (submit, negotiate, approve)
+    uv run python -m evaluation.negotiation --offline --pipeline
 
 Configurations (brief Table, Section 5.2):
 
@@ -133,22 +135,108 @@ def _scored(sc: Scenario, relaxed: list[str], moved: int | None) -> dict:
     return {"objective": cost, "tiers": tiers}
 
 
-def run_negotiation(sc: Scenario, config: str, shared: ConcessionLedger, agent, sim, run_seed: int = 0) -> dict:
+def _negotiator(sc: Scenario, config: str, ledger: ConcessionLedger, agent) -> Negotiator:
     source, flat, mode, replies = CONFIGS[config]
-    ledger = ConcessionLedger([*shared.entries, *sc.ledger])
     pm = PriorityModel(sc.instance, ledger=ledger, semester=SEMESTER, baseline=sc.baseline, flat=flat)
     explainer = Explainer(sc.instance, mode=mode, client=agent if mode != "template" else None)
     parser = {"llm": ReplyParser(agent, sc.instance) if replies == "llm" else None,
               "rule": RuleReplyParser(sc.instance), "scripted": None}[replies]
-    neg = Negotiator(sc.instance, priority=pm, explainer=explainer, ledger=ledger, semester=SEMESTER,
-                     reply_parser=parser, option_source=source, option_client=agent, use_ledger=not flat,
-                     time_limit=20, workers=WORKERS)
-    voiced = replies != "scripted"
-    sims = simulators(sc, client=sim if voiced else None, structured=not voiced, run_seed=run_seed)
-    out = neg.resolve(sc.constraints, sims, baseline=sc.baseline, week=sc.week, private=sc.private,
-                      raw_requests=sc.raw_requests)
-    shared.entries.extend(out.concessions)
+    return Negotiator(sc.instance, priority=pm, explainer=explainer, ledger=ledger, semester=SEMESTER,
+                      reply_parser=parser, option_source=source, option_client=agent, use_ledger=not flat,
+                      time_limit=20, workers=WORKERS)
+
+
+def _simulators(sc: Scenario, config: str, sim, run_seed: int):
+    voiced = CONFIGS[config][3] != "scripted"
+    return simulators(sc, client=sim if voiced else None, structured=not voiced, run_seed=run_seed)
+
+
+def run_negotiation(sc: Scenario, config: str, shared: ConcessionLedger, agent, sim, run_seed: int = 0) -> dict:
+    ledger = ConcessionLedger([*shared.entries, *sc.ledger])
+    neg = _negotiator(sc, config, ledger, agent)
+    out = neg.resolve(sc.constraints, _simulators(sc, config, sim, run_seed), baseline=sc.baseline, week=sc.week,
+                      private=sc.private, raw_requests=sc.raw_requests)
+    if out.status != "escalated":  # an escalated conflict changes nothing yet: what was agreed on the way is no burden
+        shared.entries.extend(out.concessions)
     assignment = out.result.assignment if out.result and out.result.ok else None
+    return _row(sc, out, assignment)
+
+
+class _Given:
+    """A request whose constraints are already read (as a form gives them): the scenario's own, so the
+    pipeline is scored on what happens after reading."""
+
+    def __init__(self, sc: Scenario) -> None:
+        self.by_request: dict[str, list] = {}
+        for c in sc.planted:
+            self.by_request.setdefault(c.source.request or "R-?", []).append(c)
+
+    def parse(self, request):
+        from language.parsing import ParseOutput, ParseResult
+
+        return ParseResult(request=request, output=ParseOutput(request_type="preference", action="compile"),
+                           constraints=list(self.by_request[request.id]))
+
+
+def run_pipeline(sc: Scenario, config: str, shared: ConcessionLedger, agent, sim, run_seed: int = 0) -> dict:
+    """The scenario through the request pipeline the app runs (``Orchestrator``), not the negotiator alone:
+    the base timetable is published, each planted request is submitted in turn with its constraints as read,
+    and every change waiting for approval is approved in order. The row describes what was published."""
+    from core.schemas import Channel, Request, Role
+    from pipeline.orchestrator import Orchestrator
+    from pipeline.store import Store
+
+    store = Store()
+    for e in [*shared.entries, *sc.ledger]:
+        store.record_concession(e)
+    sims = _simulators(sc, config, sim, run_seed)
+    orch = Orchestrator(sc.instance, store, parser=_Given(sc), negotiator=_negotiator(sc, config, ConcessionLedger(), agent),
+                        responders=sims, semester=SEMESTER)
+    orch.bootstrap(sc.base, sc.baseline)
+    before = len(store.ledger())
+    cases = []
+    for rid, cons in _Given(sc).by_request.items():
+        owner = cons[0].owner
+        role = (sc.instance.faculty_by_id[owner].role if owner in sc.instance.faculty_by_id else
+                Role.LAB_INCHARGE if owner else Role.EXAM_CELL)
+        cases.append(orch.submit(Request(id=rid, channel=Channel.PORTAL, sender_id=owner or "S-EXAM", role=role,
+                                         raw_text=sc.raw_requests.get(rid, ""), received_at=datetime(2026, 8, 3))))
+    for case in sorted(orch.pending(), key=lambda c: c.proposal.version):
+        orch.approve(case.id, "C-TT")
+    shared.entries.extend(store.ledger()[before:])
+    outcomes = [c.outcome for c in cases if c.outcome is not None]
+    out = _merge(outcomes, escalated=any(c.status.value == "escalated" for c in cases))
+    v = store.current_version(sc.week) or store.current_version()
+    assignment = v.assignment if out.status != "escalated" and v is not None else None
+    row = _row(sc, out, assignment)
+    row["pipeline"] = {c.id: c.status.value for c in cases}
+    return row
+
+
+def _merge(outcomes: list, escalated: bool):
+    """One scenario's outcome from the negotiations of its requests: escalated if any request was,
+    agreed if any was settled by negotiation, else feasible."""
+    from agents.negotiation import Outcome
+
+    out = Outcome(status="escalated" if escalated else
+                  "agreed" if any(o.status == "agreed" for o in outcomes) else "feasible", step=1)
+    for o in outcomes:
+        out.rounds += o.rounds
+        out.messages += o.messages
+        out.replies += o.replies
+        out.relaxed += o.relaxed
+        out.concessions += o.concessions
+        out.constraints = o.constraints
+        out.escalation = out.escalation or o.escalation
+        out.option_calls += o.option_calls
+        out.filtered += o.filtered
+        out.proposals += o.proposals
+        out.proposals_verified += o.proposals_verified
+        out.clarifications += o.clarifications
+    return out
+
+
+def _row(sc: Scenario, out, assignment: dict[str, Placement] | None) -> dict:
     agreed = [c for c in out.constraints if c.hard]
     conceders = {c.stakeholder for c in out.concessions}
     moved = _moved(sc, assignment) if assignment else None
@@ -416,6 +504,9 @@ def main() -> None:
                     help="comma-separated run seeds for the stakeholders' stochastic replies; only "
                          f"{','.join(PRIMARY)} (and offline ours) repeat over them, the rest use the first "
                          f"(default: {','.join(map(str, SEEDS))} with --plan, else 0)")
+    ap.add_argument("--pipeline", action="store_true",
+                    help="run the negotiating configurations through the request pipeline the app runs "
+                         "(Orchestrator: submit, solve and negotiate, approve) instead of the negotiator alone")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
 
@@ -442,7 +533,7 @@ def main() -> None:
         agent = local if args.local else GeminiClient(args.agent_model or default_model("agent"))
         sim = local if args.sim_local else GeminiClient(default_model("simulator"))
 
-    report: dict = {"scenarios": str(args.scenarios), "configs": {}, "seeds": seeds,
+    report: dict = {"scenarios": str(args.scenarios), "pipeline": args.pipeline, "configs": {}, "seeds": seeds,
                     "subset": args.subset, "ablation_subset": args.ablation_subset, "b1_subset": args.b1_subset,
                     "models": {"agent": getattr(agent, "model", None), "simulator": getattr(sim, "model", None)}}
     all_rows: dict[str, list[dict]] = {}
@@ -465,7 +556,8 @@ def main() -> None:
                 elif config == "oracle":
                     row = run_oracle(sc)
                 else:
-                    row = run_negotiation(sc, config, shared, agent, sim, run_seed=seed)
+                    run = run_pipeline if args.pipeline else run_negotiation
+                    row = run(sc, config, shared, agent, sim, run_seed=seed)
                 row.update(scenario=sc.id, seed=seed, kind=sc.kind, family=sc.family, expected=sc.expected,
                            wall_s=time.perf_counter() - t)
                 rows.append(row)
