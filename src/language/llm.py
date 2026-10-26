@@ -26,9 +26,10 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar
+from zoneinfo import ZoneInfo
 
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseModel, ValidationError
@@ -157,6 +158,12 @@ class KeyStats:
     disabled: bool = False
 
 
+def quota_day() -> str:
+    """The day a daily quota counts in: Google resets it at midnight Pacific time, not at local midnight, so a
+    key used up in the (Indian) morning is usable again that afternoon."""
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+
+
 @dataclass
 class PooledKey:
     index: int
@@ -235,7 +242,7 @@ class ApiKeyPool:
         return self.rpd * len(active)
 
     def has_available_keys(self) -> bool:
-        today_str = date.today().isoformat()
+        today_str = quota_day()
         with self._lock:
             for k in self.keys:
                 if k.disabled or k.exhausted_today:
@@ -258,7 +265,7 @@ class ApiKeyPool:
         The caller MUST sleep for `wait_seconds` (if > 0) outside the lock,
         then invoke the API.
         """
-        today_str = date.today().isoformat()
+        today_str = quota_day()
         now = time.time()
         with self._lock:
             candidates: list[PooledKey] = []
@@ -331,7 +338,7 @@ class ApiKeyPool:
             return selected, wait_seconds
 
     def mark_exhausted(self, key: PooledKey, reason: str = "") -> None:
-        today_str = date.today().isoformat()
+        today_str = quota_day()
         with self._lock:
             key.exhausted_today = True
             key.disable_reason = reason
