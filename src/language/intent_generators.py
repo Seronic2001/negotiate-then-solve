@@ -30,7 +30,20 @@ from core.instance import Instance
 from .corpus import FULL_DAY, hour
 from .intent_compiler import clock
 from .intent_corpus import CLUBS, PROGRAMMES, Gen, IntentExample, _Ctx, _examples, _ref
-from .intents import Avoid, ClassRef, ClubBooking, IntentOutput, LoadLimit, Move, Only, Period, TimeSpec, Unavailable
+from .intents import (
+    Avoid,
+    Cancel,
+    ClassRef,
+    ClubBooking,
+    IntentOutput,
+    LoadLimit,
+    Move,
+    Only,
+    Period,
+    TimeSpec,
+    Unavailable,
+    Who,
+)
 from .lexicon import placement_is_hard
 
 
@@ -416,6 +429,111 @@ def vague(ctx: _Ctx, t: int):
     return text, IntentOutput(action="clarify", topic=topic, missing=missing, question=question), {}, False
 
 
+def _plural(k: str) -> str:
+    return "classes" if k == "class" else f"{k}s"
+
+
+def exception(ctx: _Ctx, t: int):
+    """A request with a day it must not use said after it ("..., but not on Friday", "any day except
+    Wednesday"): the exception is a reading of its own beside the request, never dropped. A plain exception is
+    a wish (the labelling rule)."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    if ctx.week >= cal.weeks:
+        return None
+    mine = ctx.mine()
+    if not mine:
+        return None
+    w = rng.randint(ctx.week + 1, cal.weeks)
+    i = rng.randrange(len(cal.days) - 1)
+    away = cal.days[i:i + rng.choice([1, 2])]
+    x = rng.choice([d for d in cal.days if d not in away])
+    X, gone = FULL_DAY[x], " and ".join(FULL_DAY[d] for d in away)
+    s = rng.choice(mine)
+    d, _, h = ctx.at(s)
+    k, title = ctx.kind_word(s), ctx.title(s)
+    off = Unavailable(time=TimeSpec(days=away), period=Period(weeks=[w]))
+    not_x = Avoid(time=TimeSpec(days=[x]), period=Period(weeks=[w]))
+    course = Avoid(who=Who(kind="course", id=s.course), time=TimeSpec(days=[x]))
+    elsewhere = [e for e in cal.days if e not in (d, x)]
+    move = f"Please move my {FULL_DAY[d]} {h} {k} to another day, just not {X}."
+    texts = [(f"I'm away on {gone} of week {w}. Please hold the make-up classes that week, but not on {X}.",
+              [off, not_x]),
+             (f"My {title} classes can go on any day except {X}.", [course]),
+             (move, [Move(which=_ref(s, ctx, k, course=False), to=TimeSpec(days=elsewhere),
+                          hard=placement_is_hard(move))]),
+             (f"Week {w}: I can't come in on {gone}. Make-up classes are fine any day except {X}.", [off, not_x]),
+             (f"I'll miss {gone} in week {w}; make up the classes that week, only not on {X} please.",
+              [off, not_x]),
+             (f"Any day apart from {X} works for my {title} classes.", [course])]
+    text, found = texts[t]
+    return text, IntentOutput(action="compile", intents=found), {}, False
+
+
+def only_times(ctx: _Ctx, t: int):
+    """The only part of the day someone can (a must) or would like to (a wish) teach, from a week on or for
+    the semester: "From week 15 onwards I can only teach in the afternoons"."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    if ctx.week >= cal.weeks:
+        return None
+    w = rng.randint(ctx.week + 1, cal.weeks)
+    part, parts = rng.choice([("morning", "mornings"), ("afternoon", "afternoons")])
+    texts = [(f"From week {w} onwards I can only teach in the {parts}.", Period(from_week=w), True),
+             (f"From week {w} on I'd prefer to teach only in the {parts}.", Period(from_week=w), False),
+             (f"For the rest of the semester I can only do {parts}.", Period(relative="rest_of_semester"), True),
+             (f"Ideally I'd teach just {parts} this semester.", Period(), False),
+             (f"Starting week {w}, {parts} are the only time I can teach.", Period(from_week=w), True),
+             (f"If it can be managed, only {parts} for me from week {w}.", Period(from_week=w), False)]
+    text, period, hard = texts[t]
+    gold = Only(time=TimeSpec(part=part), period=period, hard=hard)
+    return text, IntentOutput(action="compile", intents=[gold]), {}, False
+
+
+def compound(ctx: _Ctx, t: int):
+    """Two different requests in one message, each read on its own: a cancellation beside a move or a wish,
+    an absence beside a move. A class is named by what the message says of it and nothing more: a cancelled
+    lecture named by its day only gets no time (the only one of that course and kind that day)."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    mine = ctx.mine()
+    if len(mine) < 2:
+        return None
+    a, b = rng.sample(mine, 2)
+    da, _, ha = ctx.at(a)
+    db, _, hb = ctx.at(b)
+    if (da, ha) == (db, hb):
+        return None
+    ka, kb = ctx.kind_word(a), ctx.kind_word(b)
+    Da, Db, title_a = FULL_DAY[da], FULL_DAY[db], ctx.title(a)
+    pw, period = ctx.period()
+    to_words, to = ctx.to_time(b, ctx.other_day(db))
+    words, time = _when(ctx)
+    move_b = f"could my {Db} {hb} {kb} move to {to_words}?"
+    moved = Move(which=_ref(b, ctx, kb, course=False), to=to, hard=placement_is_hard(move_b))
+    by_time = Cancel(which=_ref(a, ctx, ka, course=False), period=period)
+    by_course = Cancel(which=_ref(a, ctx, ka, course=True), period=period)
+    same_day = [s for s in mine if s.course == a.course and s.kind == a.kind and ctx.timetable[s.id].day == da]
+    by_day = Cancel(which=ClassRef(course=a.course, kind=None if ka == "class" else a.kind.value, day=da),
+                    period=period)
+    if ctx.week >= cal.weeks:
+        return None
+    w = rng.randint(ctx.week + 1, cal.weeks)
+    x = rng.choice(cal.days)
+    off = Unavailable(time=TimeSpec(days=[x]), period=Period(weeks=[w]))
+    texts = [(f"Please cancel my {Da} {ha} {ka} {pw}, and {move_b}", [by_time, moved]),
+             ((f"Two things: my {title_a} {ka} on {Da} at {ha} is off {pw}; also, if possible, no classes for me "
+               f"{words}."), [by_course, Avoid(time=time)]),
+             (f"I can't teach on {FULL_DAY[x]} in week {w}, no make-up needed. Separately, {move_b}", [off, moved]),
+             (f"Cancel my {title_a} {ka} on {Da} {pw}. And I'd rather not teach {words}.",
+              [by_day, Avoid(time=time)] if len(same_day) == 1 else None),
+             (f"{move_b[0].upper() + move_b[1:]} And please cancel my {title_a} {ka} on {Da} at {ha} {pw}.",
+              [moved, by_course]),
+             ((f"{pw[0].upper() + pw[1:]} my {Da} {ha} {ka} won't happen, please cancel it. Also keep me free "
+               f"{words} if you can."), [by_time, Avoid(time=time)])]
+    text, found = texts[t]
+    if found is None:
+        return None
+    return text, IntentOutput(action="compile", intents=found), {}, False
+
+
 REGISTRY: list[Generator] = [
     Generator("firmness", firmness, 6, (4, 5), "firmness"),
     Generator("only_firmness", only_firmness, 6, (4, 5), "firmness"),
@@ -431,6 +549,12 @@ REGISTRY: list[Generator] = [
     # "this semester" said outright, yet asked for)
     Generator("difficulty", difficulty, 6, (4, 5), "difficulty"),
     Generator("dated", dated, 8, (6, 7), "dated"),
+    # intents-v7: what the full pipeline's reading missed (the request battery of 2026-10-26): an exception
+    # said after a request ("but not on Friday") dropped, "I can only teach afternoons" read as a wish, and a
+    # message of two different requests misread (a time made up for a class named by its day)
+    Generator("exception", exception, 6, (4, 5), "exceptions"),
+    Generator("only_times", only_times, 6, (4, 5), "only_times"),
+    Generator("compound", compound, 6, (4, 5), "compound"),
 ]
 SENDERS = {"club_more": "student_or_teacher"}
 

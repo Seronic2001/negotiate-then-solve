@@ -1,8 +1,8 @@
 {
  "schema": 4,
- "recipe": "intents-v6",
- "recipe_sha": "d4555e323402638c",
- "code": "b6147c4+dirty",
+ "recipe": "intents-v7",
+ "recipe_sha": "b2e17c194730488d",
+ "code": "c86e9b7+dirty",
  "sources": {
   "base": {
    "test": 417,
@@ -11,31 +11,34 @@
   },
   "generators": {
    "clubs": 40,
+   "compound": 40,
    "dated": 40,
    "difficulty": 40,
+   "exceptions": 40,
    "firmness": 80,
    "moves": 40,
    "multi": 40,
+   "only_times": 40,
    "periods": 40,
    "reasons": 40,
    "terms": 40,
-   "train": 890,
+   "train": 1140,
    "vague": 40,
-   "val": 100
+   "val": 120
   },
   "mined": {
    "train": 122
   },
   "human": {},
   "augment": {
-   "train": 622,
+   "train": 707,
    "changed meaning": 1,
-   "unchanged": 37
+   "unchanged": 42
   }
  },
  "fingerprints": {
-  "train": "bf70d21722e91660",
-  "val": "72b43e4b2b0461d2",
+  "train": "738f40addf33f995",
+  "val": "2d07945cbb4975fa",
   "test": "0fb72ff322ff89a9",
   "firmness": "4e2251768d1f7a3a",
   "moves": "b314e127d2d7ace4",
@@ -47,6 +50,9 @@
   "terms": "8bc3f84c7df8802b",
   "difficulty": "dac2935d3411b39f",
   "dated": "cd33a518e57a70a9",
+  "exceptions": "0ccfe9a2db4db29c",
+  "only_times": "caf3c0df4b815cb3",
+  "compound": "67c77a475c2e043f",
   "test-typo": "710c97ca9762bc39",
   "test-noisy": "c7fdcc1547db8aa9"
  },
@@ -68,11 +74,11 @@
  },
  "report": {
   "train": {
-   "rows": 2719,
+   "rows": 3054,
    "origin": {
-    "augment": 622,
+    "augment": 707,
     "base": 1087,
-    "generators": 890,
+    "generators": 1140,
     "mined": 120
    },
    "kind": {
@@ -81,14 +87,17 @@
     "clash_report": 139,
     "club_booking": 103,
     "club_more": 104,
+    "compound": 113,
     "dated": 102,
     "difficulty": 112,
+    "exception": 115,
     "extra_class": 84,
     "firmness": 107,
     "load_limit": 61,
     "move": 107,
     "multi": 111,
     "only_firmness": 105,
+    "only_times": 107,
     "out_of_scope": 58,
     "policy_question": 59,
     "preference": 226,
@@ -106,29 +115,29 @@
    "action": {
     "answer": 59,
     "clarify": 173,
-    "compile": 2226,
+    "compile": 2561,
     "investigate": 139,
     "out_of_scope": 58,
     "withdraw": 64
    },
    "firmness": {
-    "hard": 450,
+    "hard": 501,
     "none": 1526,
-    "soft": 743
+    "soft": 1027
    },
    "augment": {
-    "casual": 158,
-    "noisy": 166,
-    "none": 2097,
-    "shorthand": 130,
-    "typo": 168
+    "casual": 179,
+    "noisy": 189,
+    "none": 2347,
+    "shorthand": 148,
+    "typo": 191
    }
   },
   "val": {
-   "rows": 247,
+   "rows": 267,
    "origin": {
     "base": 147,
-    "generators": 100
+    "generators": 120
    },
    "kind": {
     "avoid_between": 9,
@@ -136,14 +145,17 @@
     "clash_report": 11,
     "club_booking": 9,
     "club_more": 9,
+    "compound": 8,
     "dated": 15,
     "difficulty": 6,
+    "exception": 6,
     "extra_class": 2,
     "firmness": 8,
     "load_limit": 6,
     "move": 7,
     "multi": 9,
     "only_firmness": 11,
+    "only_times": 6,
     "out_of_scope": 2,
     "policy_question": 3,
     "preference": 28,
@@ -161,18 +173,18 @@
    "action": {
     "answer": 3,
     "clarify": 12,
-    "compile": 211,
+    "compile": 231,
     "investigate": 11,
     "out_of_scope": 2,
     "withdraw": 8
    },
    "firmness": {
-    "hard": 25,
+    "hard": 29,
     "none": 143,
-    "soft": 79
+    "soft": 95
    },
    "augment": {
-    "none": 247
+    "none": 267
    }
   },
   "test": {
@@ -396,6 +408,61 @@
    },
    "firmness": {
     "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "exceptions": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "exception": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "soft": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "only_times": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "only_times": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "compound": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "compound": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "soft": 40
    },
    "augment": {
     "none": 40
