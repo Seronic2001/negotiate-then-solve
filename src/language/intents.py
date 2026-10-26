@@ -619,6 +619,18 @@ def one_class(instance: Instance, ref: ClassRef, sender: str,
     raise Unresolved(f"Which class do you mean: {'; '.join(names[:4])}?", "session")
 
 
+_PLURAL = re.compile(r"\b(all|every|classes|lectures|labs|practicals|tutorials|sessions)\b", re.IGNORECASE)
+
+
+def _cancelled_classes(instance: Instance, ref: ClassRef, sender: str, timetable: Mapping[str, Placement] | None,
+                       text: str) -> list[str]:
+    """The classes a cancellation is for. "Cancel my classes in weeks 15-16" and "cancel my Computer Graphics
+    lectures" mean every class they fit, when they name no day or time; one class is asked about as before."""
+    if ref.session is None and ref.day is None and ref.time is None and _PLURAL.search(text):
+        return classes(instance, ref, sender, timetable)
+    return [one_class(instance, ref, sender, timetable)]
+
+
 def _one_kind(instance: Instance, found: list[str], question: str) -> list[str]:
     """``found`` when every session in it is a weekly meeting of one class (course, kind and groups)."""
     first: dict[tuple, str] = {}
@@ -834,9 +846,9 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
                                                                 "should the extra class be in"),
                                                     days(instance, intent.time), slots(instance, intent.time)))
                 case Cancel():
-                    compiled.cancels.append(CancelRef(one_class(instance, intent.which, sender, timetable),
-                                                      named_weeks(instance, intent.period, current_week,
-                                                                  "should the class be cancelled")))
+                    wks = named_weeks(instance, intent.period, current_week, "should the class be cancelled")
+                    for sid in _cancelled_classes(instance, intent.which, sender, timetable, request.raw_text):
+                        compiled.cancels.append(CancelRef(sid, wks))
                 case LoadLimit():
                     limits.append(intent)
                 case _:

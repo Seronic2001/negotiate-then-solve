@@ -271,6 +271,25 @@ def test_cancel(instance, teacher):
     assert (ref.session, ref.weeks) == (s.id, [5])
 
 
+def test_cancelling_classes_in_the_plural_cancels_every_one_they_fit(instance, teacher):
+    """"Cancel my <course> lectures in weeks 15-16" is every one of them; "my <course> lecture" without a day
+    or time is still asked about."""
+    tt = timetable(instance)
+    mine = [s for s in instance.sessions if s.faculty == teacher and s.kind.value == "lecture"]
+    course = next(c for c in {s.course for s in mine} if sum(s.course == c for s in mine) > 1)
+    wanted = sorted(s.id for s in mine if s.course == course)
+    ask = Cancel(which=ClassRef(course=course, kind="lecture"), period=Period(from_week=15, to_week=16))
+
+    def run(text):
+        return compile_intents(instance, request(teacher, text=text), IntentOutput(action="compile", intents=[ask]),
+                               timetable=tt, current_week=14)
+
+    c = run("Cancel my lectures of that course from week 15 to 16")
+    assert sorted(r.session for r in c.cancels) == wanted and all(r.weeks == [15, 16] for r in c.cancels)
+    c = run("Cancel my lecture of that course in weeks 15-16")
+    assert not c.cancels and c.missing == ["session"]
+
+
 def test_routed_actions_carry_no_intents(instance, teacher):
     for action, rtype in (("answer", "policy_question"), ("investigate", "clash_report"),
                           ("out_of_scope", "out_of_scope")):
