@@ -289,6 +289,44 @@ def test_an_absence_cancels_the_classes_it_misses_unless_make_up_classes_are_ask
         assert "No make-up class was asked for" in c.notices[who]
 
 
+@pytest.mark.parametrize("makeup", [False, True])
+def test_an_absence_over_several_weeks_is_repaired_in_every_one_of_them(world, makeup):
+    """Weeks 7-9: each week gets its own change (not only the first), and approving the request publishes
+    them all; between them the teacher's classes on that day are cancelled or held elsewhere every week."""
+    sc, orch, store, owners = world
+    who = owners["R-B"]
+    day = teaching_day(sc, store, who)
+    sessions = sc.instance.session_by_id
+    missed = {s for s, p in store.current_version().assignment.items() if sessions[s].faculty == who and p.day == day}
+    orch.parser.outputs["AWAY-WEEKS-7-9"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+        DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=who, days=[day],
+                        weeks=[7, 8, 9], justification="stated")])
+    c = orch.submit(req("R-3", who, "AWAY-WEEKS-7-9").model_copy(update={"makeup": makeup}))
+    assert c.status == S.AWAITING_APPROVAL and [c.proposal.week, *(v.week for v in c.more)] == [7, 8, 9]
+    assert "weeks 7-9" in c.reply
+    orch.approve("R-3", "C-TT")
+    for week in (7, 8, 9):
+        v = store.current_version(week)
+        assert v is not None and v.week == week
+        if makeup:
+            assert missed <= set(v.assignment) and all(v.assignment[s].day != day for s in missed)
+        else:
+            assert set(v.cancelled) == missed
+    assert store.current_version(10) is None  # the weeks after it keep the semester timetable
+
+
+def test_a_request_for_a_week_that_has_passed_is_asked_about(world):
+    _sc, orch, store, owners = world
+    who = owners["R-B"]
+    orch.current_week = lambda: 8
+    orch.parser.outputs["AWAY-WEEKS-5-9"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+        DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=who, weeks=[5, 6, 7, 8, 9],
+                        justification="stated")])
+    c = orch.submit(req("R-3", who, "AWAY-WEEKS-5-9"))
+    assert c.status == S.CLARIFICATION and c.reply.startswith("Week 5 has passed; it is week 8 now.")
+    assert not store.request_constraints("R-3")
+
+
 def test_a_semester_change_reaches_weeks_with_their_own_repair(world):
     sc, orch, store, owners = world
     who = owners["R-B"]

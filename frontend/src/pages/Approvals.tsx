@@ -129,6 +129,15 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
             · {c.sender_name} · {ago(c.received_at)} · proposes version {c.proposal?.version}
             {c.proposal?.week ? ` for week ${c.proposal.week}` : " (semester timetable)"}
           </p>
+          {!!c.proposal?.more?.length && (
+            <p className="mt-1 text-[12.5px] text-ink-2">
+              Approving also publishes{" "}
+              {c.proposal.more
+                .map((m) => `week ${m.week} (${m.diff.length} ${m.diff.length === 1 ? "change" : "changes"})`)
+                .join(", ")}
+              .
+            </p>
+          )}
           {c.proposal?.builds_on && (
             <p className="mt-1 text-[12.5px] text-ink-2">
               Builds on{" "}

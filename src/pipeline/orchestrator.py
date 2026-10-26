@@ -103,6 +103,7 @@ class Case:
     extra: dict | None = None  # an extra class: which class and week, and where it is held once found
     compiled: Compiled | None = None  # the resolved intents, when the parser reads intents
     form: IntentOutput | None = None  # the request as made with clicks (a form): read without a parser
+    more: list[TimetableVersion] = field(default_factory=list)  # the proposals for its further weeks, in order
 
     def intents(self, kind: type) -> list:
         """The parsed intents of type ``kind`` (none for a parser without intents)."""
@@ -357,6 +358,10 @@ class Orchestrator:
             case.timings["policy"] = time.perf_counter() - t
         self._advance(case, S.POLICY_CHECKED,
                       verdict=case.policy.verdict.value if case.policy else "not_checked")
+        if action == ExpectedAction.COMPILE and (passed := self._passed(case.parse.constraints)):
+            case.reply = passed
+            self._advance(case, S.CLARIFICATION, missing=["weeks"])
+            return case
         if action == ExpectedAction.CLARIFY:
             out = case.parse.output
             case.reply = (out.clarifying_question if out and out.clarifying_question else
@@ -380,6 +385,14 @@ class Orchestrator:
         self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
                       obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
         return self._solve(case)
+
+    def _passed(self, constraints: Iterable[Constraint]) -> str | None:
+        """The question to ask when a request names a week that is over (the form refuses the same)."""
+        now = self.current_week() if self.current_week else None
+        weeks = sorted({w for c in constraints for w in (c.when.weeks or [])})
+        if now is None or not weeks or weeks[0] >= now:
+            return None
+        return f"Week {weeks[0]} has passed; it is week {now} now. Which weeks do you mean?"
 
     # -- swaps (P-SWAP) ------------------------------------------------------------------
 
@@ -729,16 +742,37 @@ class Orchestrator:
         return out
 
     def _solve(self, case: Case) -> Case:
+        """Repair the timetable for the request, negotiating where it conflicts. A request for several weeks
+        is repaired in each of them (a week has its own timetable): the further weeks are settled first, and
+        if any of them escalates, so does the request; their changes are recorded only once it goes through,
+        and each becomes a proposal of its own, approved with the first."""
         weeks = sorted({w for c in case.constraints for w in (c.when.weeks or [])})
         week = weeks[0] if weeks else None
+        neg = self.negotiator  # one for every case: each negotiation binds its own state
+
+        def on_event(kind: str, data: dict) -> None:
+            if kind == "message" and case.status == S.COMPILED:
+                self._advance(case, S.SOLVED, feasible=False)
+                self._advance(case, S.NEGOTIATING)
+            self.store.log(case.id, f"negotiation_{kind}", **data)
+
+        t = time.perf_counter()
+        later = []
+        for w in weeks[1:]:
+            got = self._negotiate_week(w, neg, on_event)
+            if got[1].status == "escalated":
+                return self._escalate(case, got[1], week=w)
+            later.append(got)
+        case.timings["later_weeks"] = time.perf_counter() - t
+        more_to_do = any(moved or cancelled for _w, _o, _b, _a, moved, cancelled in later)
         base = self._tip(week)
         baseline = _regular(base.assignment) if base else None
         # "already met" only by the published timetable: met by a change still waiting, it waits with it
         live = base is not None and base.version == getattr(
             self.store.current_version(week) or self.store.current_version(), "version", None)
-        neg = self.negotiator  # one for every case: each negotiation binds its own state
         cancelled, closed = self._cancelled(week)
-        if live and set(cancelled) == set(base.cancelled) and self._already_met(case, base, week):
+        if (live and not more_to_do and set(cancelled) == set(base.cancelled)
+                and self._already_met(case, base, week)):
             # checked directly, not by the solver: a solve cut short by its time limit could move
             # classes nobody asked to move
             case.reply = ("Your request already fits the timetable, so nothing needed to move. "
@@ -747,12 +781,6 @@ class Orchestrator:
             self._advance(case, S.FAIRNESS_AUDITED)
             self._advance(case, S.PUBLISHED, version=None, moved=[])
             return case
-
-        def on_event(kind: str, data: dict) -> None:
-            if kind == "message" and case.status == S.COMPILED:
-                self._advance(case, S.SOLVED, feasible=False)
-                self._advance(case, S.NEGOTIATING)
-            self.store.log(case.id, f"negotiation_{kind}", **data)
 
         t = time.perf_counter()
         published = self.store.current_version(week) or self.store.current_version()
@@ -767,20 +795,11 @@ class Orchestrator:
         if outcome.status != "feasible" and case.status == S.SOLVED:
             self._advance(case, S.NEGOTIATING, rounds=outcome.rounds)
         if outcome.status == "escalated":
-            # until someone decides, the request is not in force: later requests must not run into it
-            self._withdraw(case)
-            case.reply = "Your request conflicts with others and has been escalated for a decision."
-            self._advance(case, S.ESCALATED, to=outcome.escalation.to, reason=outcome.escalation.reason,
-                          brief=outcome.escalation.text)
-            return case
+            return self._escalate(case, outcome)
 
-        for cid in outcome.relaxed:
-            self.store.set_active(cid, False)
-        known = {c.id for c in self.store.constraints(active_only=False)}
-        self.store.add_constraints([c for c in outcome.constraints if c.id not in known], request_id=case.id)
-        for e in outcome.concessions:
-            self.store.record_concession(e)
-        case.fairness = self._audit(outcome)
+        for o in [outcome, *(got[1] for got in later)]:
+            self._record(case, o)
+        case.fairness = self._audit(outcome, *(got[1] for got in later))
         self._advance(case, S.FAIRNESS_AUDITED, **case.fairness)
 
         assignment = outcome.result.assignment
@@ -790,13 +809,13 @@ class Orchestrator:
             assignment, chosen = self._let_sender_choose(case, assignment, baseline, week, neg, cancelled)
             moved = moved_sessions(baseline or {}, assignment)
         unmet = outcome.notices.get(case.request.sender_id)
-        if live and not moved and not cancelled and not unmet:
+        if live and not moved and not cancelled and not unmet and not more_to_do:
             # the timetable already meets it: nothing to approve or publish, but it stays in force
             case.reply = ("Your request already fits the timetable, so nothing needed to move. "
                           "It is recorded, and later changes will keep to it.")
             self._advance(case, S.PUBLISHED, version=None, moved=[])
             return case
-        if live and not moved and not cancelled:
+        if live and not moved and not cancelled and not more_to_do:
             # a wish the solver left unmet rather than move other classes: nothing changes, so there is
             # nothing for the coordinator to approve; the wish stays in force for later changes
             wanted = " ".join(n.removeprefix("Your preference could not be fully met: ") for n in unmet)
@@ -807,20 +826,66 @@ class Orchestrator:
             return case
         case.proposal = self.store.propose_version(assignment, case.id, week=week, cancelled=sorted(cancelled),
                                                    parent=base)
+        case.more = [self.store.propose_version(a, case.id, week=w, cancelled=sorted(c), parent=b)
+                     for w, _o, b, a, m, c in later if m or c]
         case.reply = self._proposal_reply(case, outcome, assignment, moved, week, cancelled, closed, chosen)
-        self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=moved)
+        self._advance(case, S.AWAITING_APPROVAL, version=case.proposal.version, moved=moved,
+                      **({"more": [v.version for v in case.more]} if case.more else {}))
         return case
+
+    def _negotiate_week(self, week: int, neg: Negotiator, on_event):
+        """Settle the request in one further week: (week, outcome, the version it builds on, the repaired
+        assignment, the classes it moves, the classes not held that week). Nothing is recorded yet."""
+        base = self._tip(week)
+        baseline = _regular(base.assignment) if base else {}
+        cancelled, _ = self._cancelled(week)
+        published = self.store.current_version(week) or self.store.current_version()
+        outcome = neg.resolve(self.store.constraints(), self.responders, baseline=baseline, week=week,
+                              skip=cancelled, ledger=ConcessionLedger(self.store.ledger()), listener=on_event,
+                              reference=_regular(published.assignment) if published else None)
+        if outcome.status == "escalated":
+            return week, outcome, base, None, [], set()
+        assignment = outcome.result.assignment
+        return week, outcome, base, assignment, moved_sessions(baseline, assignment), set(cancelled)
+
+    def _escalate(self, case: Case, outcome, week: int | None = None) -> Case:
+        """Until someone decides, the request is not in force: later requests must not run into it."""
+        case.outcome = outcome
+        if case.status == S.COMPILED:
+            self._advance(case, S.SOLVED, feasible=False)
+        if case.status == S.SOLVED:
+            self._advance(case, S.NEGOTIATING, rounds=outcome.rounds)
+        self._withdraw(case)
+        case.reply = ("Your request conflicts with others and has been escalated for a decision."
+                      + (f" The conflict is in week {week}." if week is not None else ""))
+        self._advance(case, S.ESCALATED, to=outcome.escalation.to, reason=outcome.escalation.reason,
+                      brief=outcome.escalation.text, **({"week": week} if week is not None else {}))
+        return case
+
+    def _record(self, case: Case, outcome) -> None:
+        """What a settled negotiation changed: constraints given up or added, and concessions."""
+        for cid in outcome.relaxed:
+            self.store.set_active(cid, False)
+        known = {c.id for c in self.store.constraints(active_only=False)}
+        self.store.add_constraints([c for c in outcome.constraints if c.id not in known], request_id=case.id)
+        for e in outcome.concessions:
+            self.store.record_concession(e)
 
     def _proposal_reply(self, case: Case, outcome, assignment: Mapping[str, Placement], moved: list[str],
                         week: int | None, cancelled: set[str], closed: list[str], chosen: str | None) -> str:
         """What the sender of a change now waiting for approval is told; the most specific account first."""
         waiting = "The change is waiting for the coordinator's approval."
+        weeks = [week, *(v.week for v in case.more)]
+        if len(weeks) > 1:
+            waiting = (f"It covers {_weeks_text(weeks)}, each with its own change; they are waiting for the "
+                       "coordinator's approval.")
         others = len(set(moved) - cancelled)
         also = f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else ""
         if mine := self._absent(week, only=case.id):
             n = len(mine)
-            return (f"Recorded: you are away in week {week}. Your {n} {'class' if n == 1 else 'classes'} then "
-                    f"{'is' if n == 1 else 'are'} cancelled for that week, with no make-up class, as you asked"
+            return (f"Recorded: you are away in {_weeks_text(weeks)}. Your {n} {'class' if n == 1 else 'classes'} "
+                    f"{'is' if n == 1 else 'are'} cancelled {'that week' if len(weeks) == 1 else 'each of those weeks'}"
+                    ", with no make-up class, as you asked"
                     + also + ". Your sections are told once the timetable office approves the change.")
         if cancelled and closed:
             return (f"Recorded: {' and '.join(closed)} closed in week {week}. "
@@ -910,14 +975,15 @@ class Orchestrator:
                 f"No time was chosen, so option A is used: {when(a)}.")
         return a, said
 
-    def _audit(self, outcome: Outcome) -> dict:
+    def _audit(self, *outcomes: Outcome) -> dict:
         teaching = sorted({s.faculty for s in self.instance.sessions})
         ledger = ConcessionLedger(self.store.ledger())
-        before = ConcessionLedger([e for e in ledger.entries if e not in outcome.concessions])
+        made = [e for o in outcomes for e in o.concessions]
+        before = ConcessionLedger([e for e in ledger.entries if e not in made])
         return {"gini_before": round(before.gini(teaching, self.semester), 4),
                 "gini_after": round(ledger.gini(teaching, self.semester), 4),
-                "conceded": sorted({e.stakeholder for e in outcome.concessions}),
-                "preferences_lost": sorted(outcome.notices)}
+                "conceded": sorted({e.stakeholder for e in made}),
+                "preferences_lost": sorted({p for o in outcomes for p in o.notices})}
 
     def _withdraw(self, case: Case) -> None:
         for c in case.constraints:
@@ -1154,7 +1220,21 @@ class Orchestrator:
             case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
         for person, text in self._cancel_notices(v).items():
             case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
-        self._advance(case, S.PUBLISHED, version=v.version, approver=approver, notified=sorted(case.notices))
+        for i, w in enumerate(case.more):  # the request's further weeks, each on its week's live timetable
+            live = self.store.current_version(w.week) or self.store.current_version()
+            if live is not None and w.parent != live.version:
+                w = case.more[i] = self._rebase(case, live, w)
+            published = self.store.publish_version(w.version, approver)
+            moved_w = [s for s in moved_sessions(live.assignment if live else {}, published.assignment)
+                       if not s.startswith(EXTRA_PREFIX)]
+            gw = build_graph(self.instance)
+            add_change(gw, f"V{published.version}", moved_w)
+            for part in (self._notices(gw, f"V{published.version}", moved_w, published),
+                         self._cancel_notices(published)):
+                for person, text in part.items():
+                    case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
+        self._advance(case, S.PUBLISHED, version=v.version, approver=approver, notified=sorted(case.notices),
+                      **({"more": [w.version for w in case.more]} if case.more else {}))
         if v.week is None:
             self.carry_into_weeks(v, approver)
         return v
@@ -1178,11 +1258,12 @@ class Orchestrator:
             self.store.log(None, "carried", version=v.version, week=week, into=w.version)
         return out
 
-    def _rebase(self, case: Case, base: TimetableVersion) -> TimetableVersion:
-        """Another change was published after this proposal was made. Publishing the proposal as it is
-        would put back the timetable it was built on and undo that change, so solve it again from the
-        live version, with every constraint in force (this request's included)."""
-        week = case.proposal.week
+    def _rebase(self, case: Case, base: TimetableVersion, stale: TimetableVersion | None = None) -> TimetableVersion:
+        """Another change was published after this proposal (``stale``, default the case's) was made.
+        Publishing it as it is would put back the timetable it was built on and undo that change, so solve
+        it again from the live version, with every constraint in force (this request's included)."""
+        stale = stale or case.proposal
+        week = stale.week
         cancelled, _ = self._cancelled(week)
         result = TimetableSolver(self.instance, self.store.constraints(), week=week,
                                  baseline=_regular(base.assignment), time_limit=30, skip=cancelled).solve()
@@ -1190,7 +1271,7 @@ class Orchestrator:
             raise ValueError("the timetable has changed since this proposal and it no longer fits; "
                              "reject it and ask the requester to send it again")
         v = self.store.propose_version(result.assignment, case.id, week=week, cancelled=sorted(cancelled))
-        self.store.log(case.id, "rebased", stale=case.proposal.version, on=base.version, version=v.version)
+        self.store.log(case.id, "rebased", stale=stale.version, on=base.version, version=v.version)
         return v
 
     def _already_met(self, case: Case, base: TimetableVersion, week: int | None) -> bool:
@@ -1261,6 +1342,16 @@ class Orchestrator:
 def _regular(assignment: Mapping[str, Placement]) -> dict[str, Placement]:
     """An assignment without its extra classes (the solver and the validator know only weekly sessions)."""
     return {s: p for s, p in assignment.items() if not s.startswith(EXTRA_PREFIX)}
+
+
+def _weeks_text(weeks: list[int | None]) -> str:
+    """"week 7", "weeks 5-8", "weeks 3, 5 and 9"."""
+    weeks = sorted({w for w in weeks if w is not None})
+    if len(weeks) == 1:
+        return f"week {weeks[0]}"
+    if weeks == list(range(weeks[0], weeks[-1] + 1)):
+        return f"weeks {weeks[0]}-{weeks[-1]}"
+    return "weeks " + ", ".join(map(str, weeks[:-1])) + f" and {weeks[-1]}"
 
 
 def _spread(found: list[Placement], n: int = 4) -> list[str]:

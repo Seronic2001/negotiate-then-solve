@@ -39,7 +39,9 @@ from .parsing import ParseOutput, ParseResult
 DAY_WORDS = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"}
 _DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.IGNORECASE)
 _RANGE = re.compile(r"\b(mon|tue|wed|thu|fri)\w*\s*(?:to|-|–|through|till|until)\s*(mon|tue|wed|thu|fri)\w*", re.IGNORECASE)
-_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|and)\s*(\d{1,2}))?", re.IGNORECASE)
+# "week 7", "weeks 5-8", "from week 5 to week 8", "weeks 5 through 8", "between weeks 5 and 8", "weeks 3 and 9"
+_WEEKS = re.compile(r"\b(between\s+)?weeks?\s+(\d{1,2})(?:\s*(-|–|to|through|thru|till|until|and)\s*"
+                    r"(?:weeks?\s+)?(\d{1,2}))?", re.IGNORECASE)
 _TIME = re.compile(r"\b(\d{1,2})(?::\d\d)?\s*(am|pm)\b", re.IGNORECASE)
 _INJECTION = re.compile(r"(?im)^.*(ignore (all |previous )|ignore (your|the|any|these) (rules|instructions|polic)|"
                         r"system:|admin mode|assistant[,:]|approve all|publish (it |immediately|now)|override|"
@@ -126,8 +128,10 @@ class RuleParser:
 
     def weeks(self, text: str) -> list[int] | None:
         if m := _WEEKS.search(text):
-            a = int(m[1])
-            b = int(m[2]) if m[2] else a
+            a = int(m[2])
+            b = int(m[4]) if m[4] else a
+            if m[3] and m[3].lower() == "and" and not m[1]:
+                return sorted({a, b})  # two weeks; "between weeks 5 and 8" is a range
             return list(range(min(a, b), max(a, b) + 1))
         return None
 

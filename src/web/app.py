@@ -193,7 +193,11 @@ def _case_detail(w: World, case: Case) -> dict:
         under = w.orch.builds_on(case)  # an earlier change still waiting: it is approved first
         d["proposal"] = {"version": case.proposal.version, "week": case.proposal.week,
                          "diff": _diff(w, before.assignment if before else {}, case.proposal.assignment),
-                         "builds_on": under.id if under else None}
+                         "builds_on": under.id if under else None,
+                         # a request over several weeks: the change for each further week, approved with it
+                         "more": [{"version": v.version, "week": v.week, "cancelled": v.cancelled,
+                                   "diff": _diff(w, (w.store.version(v.parent).assignment if v.parent else {}),
+                                                 v.assignment)} for v in case.more]}
     else:
         d["proposal"] = None
     d["fairness"] = case.fairness

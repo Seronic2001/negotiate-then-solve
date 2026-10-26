@@ -233,7 +233,14 @@ export interface CaseDetail extends CaseSummary {
     solver: null | { status: string; wall_time: number; moved: number | null; soft_violations: Record<string, number> };
   };
   /** builds_on: an earlier change still waiting for approval that this one is built on (approved first). */
-  proposal: null | { version: number; week: number | null; diff: DiffRow[]; builds_on?: string | null };
+  /** more: a request over several weeks has a change for each further week, published when this one is approved. */
+  proposal: null | {
+    version: number;
+    week: number | null;
+    diff: DiffRow[];
+    builds_on?: string | null;
+    more?: { version: number; week: number | null; cancelled: string[]; diff: DiffRow[] }[];
+  };
   fairness: { gini_before?: number; gini_after?: number; conceded?: string[]; preferences_lost?: string[] };
   /** How a person with the authority settled its escalation. */
   decision?: null | { by: string; by_name: string; granted: boolean; note: string; set_aside?: string[] };

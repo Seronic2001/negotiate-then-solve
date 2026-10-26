@@ -170,6 +170,21 @@ def test_rule_parser_keeps_the_week_of_a_preference(instance):
     assert out.action == "compile" and out.constraints[0].weeks == [10] and out.constraints[0].days == ["Wed"]
 
 
+@pytest.mark.parametrize("text, weeks", [
+    ("I'm away in week 7", [7]),
+    ("I'm away in weeks 5-8", [5, 6, 7, 8]),
+    ("I'm away from week 5 to week 8", [5, 6, 7, 8]),
+    ("I'm unavailable weeks 5 through 8", [5, 6, 7, 8]),
+    ("I'm on leave week 5 until week 8", [5, 6, 7, 8]),
+    ("I'm on leave between weeks 5 and 8", [5, 6, 7, 8]),
+    ("I'm away in weeks 3 and 9", [3, 9]),  # two weeks, not the range
+])
+def test_rule_parser_reads_week_ranges(instance, text, weeks):
+    from language.rule_parser import RuleParser
+
+    assert RuleParser(instance).weeks(text) == weeks
+
+
 @pytest.mark.parametrize("text, part", [
     ("move my class before lunch as i wont be available after lunch", "morning"),  # the reason comes second
     ("move my class after lunch since I'm busy before lunch", "afternoon"),
