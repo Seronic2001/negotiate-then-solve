@@ -65,18 +65,33 @@ from core.semantics import PLACEMENT_TYPES, room_compatible, sessions_in_scope, 
 from core.solver import TimetableSolver
 from core.validator import validate_constraint, verify_timetable
 from language.corpus import FULL_DAY, ExpectedAction, RequestType, hour
+from language.intents import (
+    Avoid,
+    ClubRef,
+    Compiled,
+    IntentOutput,
+    LoadLimit,
+    Move,
+    NeedsRoom,
+    Only,
+    RoomClosed,
+    Unavailable,
+    compile_intents,
+    say,
+)
 from language.intents import Cancel as CancelIntent
 from language.intents import ClubBooking as ClubIntent
-from language.intents import ClubRef, Compiled, IntentOutput, compile_intents
 from language.intents import ExtraClass as ExtraIntent
 from language.intents import Swap as SwapIntent
 from language.parsing import ParseResult
-from language.rule_parser import RuleParser, injected
+from language.rule_parser import RuleParser, injected, request_part
 
 from .store import EXTRA_PREFIX, Store
 
 S = RequestStatus
 CHOICES = 3  # times offered to a sender whose request fits in more than one way
+# intents that become constraints: one message's are solved together, as one change
+CONSTRAINT_INTENTS = (Unavailable, Avoid, Only, Move, RoomClosed, NeedsRoom, LoadLimit)
 
 
 class NotAuthorised(PermissionError):
@@ -104,6 +119,8 @@ class Case:
     compiled: Compiled | None = None  # the resolved intents, when the parser reads intents
     form: IntentOutput | None = None  # the request as made with clicks (a form): read without a parser
     more: list[TimetableVersion] = field(default_factory=list)  # the proposals for its further weeks, in order
+    read_as: Request | None = None  # the request as its readers see it: lines instructing the system left out
+    parts: list[str] = field(default_factory=list)  # the requests a message of several parts was split into
 
     def intents(self, kind: type) -> list:
         """The parsed intents of type ``kind`` (none for a parser without intents)."""
@@ -226,7 +243,7 @@ class Orchestrator:
         self.store.log(case.id, status.value, **info)
 
     def _parse(self, case: Case) -> ParseResult:
-        r = case.request
+        r = case.read_as or case.request
         if case.form is not None:  # made with clicks: the intents are given, nothing to read or route
             case.route = "form+intents"
             base = self.store.current_version()
@@ -288,11 +305,12 @@ class Orchestrator:
         if compile_ is not None:
             base = self.store.current_version()
             week = self.current_week() if self.current_week else None
-            case.compiled = compile_(case.request, _regular(base.assignment) if base else {}, week, today=self.today())
+            case.compiled = compile_(case.read_as or case.request, _regular(base.assignment) if base else {}, week,
+                                     today=self.today())
             if case.compiled is not None:
                 case.route += "+intents"
                 return case.compiled.result
-        return parser.parse(case.request)
+        return parser.parse(case.read_as or case.request)
 
     def submit(self, request: Request, form: IntentOutput | None = None) -> Case:
         """Take a request through the pipeline. ``form``: the request made with clicks (cancel, move or
@@ -304,14 +322,23 @@ class Orchestrator:
             self.store.add_request(request)
         self.store.log(case.id, "received", channel=request.channel.value, sender=request.sender_id)
 
+        flagged = injected(request.raw_text)
+        if flagged:
+            # instructions to the system are never read; a message that is nothing else is refused unread
+            rest = request_part(request.raw_text)
+            if rest is None:
+                return self._refuse_unread(case)
+            case.read_as = request.model_copy(update={"raw_text": rest})
         t = time.perf_counter()
         case.parse = self._parse(case)
         case.timings["parse"] = time.perf_counter() - t
         case.routing["reader"] = self._reader(case)
-        if injected(request.raw_text):
+        if flagged:
             case.routing["injection"] = True
         self._advance(case, S.CLASSIFIED, route=case.route, action=case.parse.action.value,
                       routing=case.routing, seconds=round(case.timings["parse"], 3))
+        if (parts := self._parts(case)) is not None:
+            return self._split(case, parts)
         action = case.parse.action
 
         if action == ExpectedAction.WITHDRAW:
@@ -393,6 +420,60 @@ class Orchestrator:
         if now is None or not weeks or weeks[0] >= now:
             return None
         return f"Week {weeks[0]} has passed; it is week {now} now. Which weeks do you mean?"
+
+    def _refuse_unread(self, case: Case) -> Case:
+        why = "it gives the system instructions rather than asking for a change"
+        case.parse = ParseResult(request=case.request, output=None, refusal=why)
+        case.route, case.routing = "refused", {"reader": "none", "injection": True}
+        self._advance(case, S.CLASSIFIED, route=case.route, action="refuse", routing=case.routing)
+        case.reply = f"Your request was not processed: {why}. The timetable coordinator has been informed."
+        self._advance(case, S.REFUSED, reason=why)
+        return case
+
+    # -- a message of several parts ---------------------------------------------------------
+
+    def _parts(self, case: Case) -> list[list] | None:
+        """How a message that asks for several things is split, or None to handle it whole. What becomes
+        constraints and resolves stays together (one change, solved and negotiated as one); every other
+        part is a request of its own: a swap (consent), a cancellation (the coordinator), an extra class,
+        a booking, and any part that cannot be resolved (its own question), so one unclear part no longer
+        holds up the rest, and none is dropped."""
+        c = case.compiled
+        if case.form is not None or c is None or c.output is None or c.output.action != "compile":
+            return None
+        intents = c.output.intents
+        if len(intents) < 2:
+            return None
+        base = self.store.current_version()
+        timetable = _regular(base.assignment) if base else {}
+        week = self.current_week() if self.current_week else None
+        together, apart = [], []
+        for i in intents:
+            alone = compile_intents(self.instance, case.read_as or case.request,
+                                    IntentOutput(action="compile", intents=[i]), timetable=timetable, current_week=week)
+            (together if isinstance(i, CONSTRAINT_INTENTS) and alone.question is None else apart).append(i)
+        if not apart:
+            return None
+        parts = ([together] if together else []) + [[i] for i in apart]
+        return parts if len(parts) > 1 else None
+
+    def _split(self, case: Case, parts: list[list]) -> Case:
+        """Each part goes through the pipeline as a request of its own, its intents as read and its words
+        written from them (what is read again when its sender answers a question about it)."""
+        sender = case.request.sender_id
+        children = []
+        for n, group in enumerate(parts, 1):
+            words = " ".join(say(self.instance, i, sender) for i in group)
+            child = case.request.model_copy(update={"id": f"{case.id}-{n}", "raw_text": words,
+                                                    "status": S.RECEIVED})
+            children.append(self.submit(child, form=IntentOutput(action="compile", intents=group)))
+            children[-1].routing["part_of"] = case.id
+        case.parts = [x.id for x in children]
+        case.route += "+split"
+        case.reply = (f"Your message asks for {len(children)} things, so each is handled as a request of its own:\n"
+                      + "\n".join(f"- {x.id} ({x.request.raw_text}) {x.reply}" for x in children))
+        self._advance(case, S.ANSWERED, parts=case.parts)
+        return case
 
     # -- swaps (P-SWAP) ------------------------------------------------------------------
 

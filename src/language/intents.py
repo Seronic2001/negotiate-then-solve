@@ -663,6 +663,101 @@ def meeting(instance: Instance, ref: ClassRef, sender: str, timetable: Mapping[s
     return (on_day or found)[0]
 
 
+# ---------------------------------------------------------------------------
+# Intents back into words
+# ---------------------------------------------------------------------------
+
+
+def _and(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + f" and {items[-1]}"
+
+
+def _say_ref(instance: Instance, ref: ClassRef, sender: str) -> str:
+    owner = ref.owner or sender
+    whose = "my" if owner == sender else (
+        f"{instance.faculty_by_id[owner].name}'s" if owner in instance.faculty_by_id else "the")
+    if ref.session is not None and ref.session in instance.session_by_id:
+        s = instance.session_by_id[ref.session]
+        name = f"{instance.course_title(s.course)} {s.kind.value}"
+    else:
+        title = instance.course_title(ref.course) if ref.course in instance.course_titles else (ref.course or "")
+        name = " ".join(x for x in (title, ref.kind or "class") if x)
+    where = (f" on {FULL_DAY[ref.day]}" if ref.day else "") + (f" at {_clock_text(ref.time)}" if ref.time else "")
+    return f"{whose} {name}{where}"
+
+
+def _say_time(spec: TimeSpec) -> str:
+    out = []
+    if spec.days:
+        out.append("on " + _and([FULL_DAY[d] for d in spec.days]))
+    if spec.part:
+        out.append({"morning": "in the morning", "afternoon": "in the afternoon", "lunch": "at lunch"}[spec.part])
+    if spec.after and spec.before:
+        out.append(f"between {_clock_text(spec.after)} and {_clock_text(spec.before)}")
+    elif spec.before:
+        out.append(f"before {_clock_text(spec.before)}")
+    elif spec.after:
+        out.append(f"after {_clock_text(spec.after)}")
+    if spec.at:
+        out.append("at " + _and([_clock_text(t) for t in spec.at]))
+    return " ".join(out)
+
+
+def _say_period(period: Period) -> str:
+    if period.weeks:
+        w = sorted(period.weeks)
+        return f"in week {w[0]}" if len(w) == 1 else "in weeks " + _and([str(x) for x in w])
+    if period.from_week is not None or period.to_week is not None:
+        if period.to_week is None:
+            return f"from week {period.from_week} on"
+        return f"from week {period.from_week or 1} to week {period.to_week}"
+    if period.relative == "rest_of_semester":
+        return "for the rest of the semester"
+    if period.relative is not None:
+        first = "this week" if period.relative == "this_week" else "next week"
+        return first if (period.count or 1) == 1 else f"for {period.count} weeks from {first}"
+    return ""
+
+
+def say(instance: Instance, intent, sender: str) -> str:
+    """One intent as a sentence the sender could have written ("Cancel my Computer Graphics lecture on
+    Friday in week 15."): what a part of a message split into requests is read as, when its sender answers
+    its question."""
+    t = _say_time(getattr(intent, "time", None) or TimeSpec())
+    p = _say_period(getattr(intent, "period", None) or Period())
+    match intent:
+        case Unavailable():
+            core = f"I am not available {t}" if t else "I am not available"
+        case Avoid():
+            core = f"{'Do not' if intent.hard else 'If possible, do not'} schedule my classes {t}".rstrip()
+        case Only():
+            core = f"{'I can only' if intent.hard else 'I would prefer to only'} teach {t}".rstrip()
+        case Move():
+            to = _say_time(intent.to)
+            core = f"Move {_say_ref(instance, intent.which, sender)}" + (f" to {to.removeprefix('on ')}" if to else "")
+        case Swap():
+            core = (f"Swap {_say_ref(instance, intent.mine, sender)} with "
+                    f"{_say_ref(instance, intent.theirs, sender)}")
+        case ExtraClass():
+            core = f"Add an extra class of {_say_ref(instance, intent.which, sender)} {t}".rstrip()
+        case Cancel():
+            core = f"Cancel {_say_ref(instance, intent.which, sender)}"
+        case RoomClosed():
+            room = instance.room_by_id[intent.room].name if intent.room in instance.room_by_id else intent.room
+            core = f"{room} is closed {t}".rstrip()
+        case NeedsRoom():
+            needs = " and ".join(intent.equipment) or "a suitable room"
+            core = f"{_say_ref(instance, intent.which, sender)} needs a room with {needs}"
+            core = core[0].upper() + core[1:]
+        case LoadLimit():
+            core = f"No more than {intent.max_consecutive} classes in a row for me"
+        case ClubBooking():
+            core = f"Book a room for {intent.club or 'our club'}" + (f" on {FULL_DAY[intent.day]}" if intent.day else "")
+        case _:
+            core = intent.kind.replace("_", " ")
+    return " ".join(x for x in (core, p) if x) + "."
+
+
 def named_weeks(instance: Instance, period: Period, current_week: int | None, what: str) -> list[int]:
     """The weeks of a one-off request (an extra or a cancelled class), which must name them."""
     found = weeks(instance, period, current_week)
