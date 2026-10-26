@@ -703,3 +703,17 @@ def test_a_message_whose_parts_all_become_constraints_stays_one_request(world):
         Avoid(time=TimeSpec(days=["Mon"], part="morning")), Avoid(time=TimeSpec(days=["Fri"], part="morning"))])})
     c = orch.submit(req("R-9", owners["R-A"], "No mornings on Monday or Friday, please."))
     assert not c.parts and c.status in (S.AWAITING_APPROVAL, S.PUBLISHED)
+
+
+def test_the_sender_and_the_approver_see_what_was_read_and_what_was_not_used(world):
+    from language.intents import IntentOutput, Period, TimeSpec, Unavailable
+
+    sc, orch, store, owners = world
+    who = owners["R-B"]
+    day = teaching_day(sc, store, who)
+    orch.parser = IntentReader(orch.instance, {"conference": IntentOutput(action="compile", intents=[
+        Unavailable(time=TimeSpec(days=[day]), period=Period(weeks=[7]))])})
+    other = next(d for d in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday") if d[:3] != day)
+    c = orch.submit(req("R-9", who, f"I'm at a conference that day in week 7; no classes on {other} either."))
+    assert c.understood and c.understood[0].startswith("I am not available")
+    assert len(c.unused) == 1 and other in c.unused[0] and "Not used from your message" in c.reply

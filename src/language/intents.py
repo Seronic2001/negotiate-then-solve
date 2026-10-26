@@ -758,6 +758,75 @@ def say(instance: Instance, intent, sender: str) -> str:
     return " ".join(x for x in (core, p) if x) + "."
 
 
+_SAID_DAY = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri)(?:day)?s?\b", re.IGNORECASE)
+_SAID_TIME = re.compile(r"\b(\d{1,2})(?::(\d\d))?\s*(am|pm)\b", re.IGNORECASE)
+_SAID_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|through|until|and)\s*(?:weeks?\s+)?(\d{1,2}))?",
+                         re.IGNORECASE)
+_SAID_FIRM = re.compile(r"\b(must|only|cannot|can't|can not|have to|has to|no way)\b", re.IGNORECASE)
+
+
+def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
+    """The days, clock hours and weeks the intents use."""
+    days: set[str] = set()
+    hours: set[int] = set()
+    weeks: set[int] = set()
+
+    def clocks(*cs):
+        hours.update(minutes(c) // 60 for c in cs if c)
+
+    for i in out.intents:
+        for name in ("time", "to"):
+            if (spec := getattr(i, name, None)) is not None:
+                days.update(spec.days or [])
+                clocks(spec.before, spec.after, *(spec.at or []))
+                if spec.part:
+                    hours.update(range(9, 13) if spec.part == "morning" else range(13, 18))
+        for name in ("which", "mine", "theirs"):
+            if (ref := getattr(i, name, None)) is not None:
+                days.update([ref.day] if ref.day else [])
+                clocks(ref.time)
+        if isinstance(i, ClubBooking):
+            days.update([i.day] if i.day else [])
+            clocks(i.start, i.end)
+        if (p := getattr(i, "period", None)) is not None:
+            weeks.update(p.weeks or [])
+            if p.from_week is not None or p.to_week is not None:
+                weeks.update(range(p.from_week or 1, (p.to_week or 52) + 1))
+    return days, hours, weeks
+
+
+def unaccounted(text: str, out: IntentOutput) -> list[str]:
+    """What a message says that its reading does not use: a day, a time or a week nothing was read from, and
+    a requirement ("only", "must", "can't") read as a wish. Shown to the sender and the approver, so a
+    reading that dropped a clause ("... but not on Friday") is seen before anything is approved."""
+    if out.action != "compile" or not out.intents:
+        return []
+    days, hours, weeks = _used(out)
+    notes = []
+    said_days = list(dict.fromkeys(_SAID_DAY_FULL[m[1].lower()[:3]] for m in _SAID_DAY.finditer(text)))
+    if missed := [d for d in said_days if d not in days]:
+        notes.append(f"You mentioned {_and([FULL_DAY[d] for d in missed])}, which nothing was read from.")
+    said_hours = []
+    for m in _SAID_TIME.finditer(text):
+        h = int(m[1]) % 12 + (12 if m[3].lower() == "pm" else 0)
+        said_hours.append((h, m[0]))
+    if missed := [s for h, s in said_hours if h not in hours]:
+        notes.append(f"You mentioned {_and(missed)}, which nothing was read from.")
+    said_weeks = set()
+    for m in _SAID_WEEKS.finditer(text):
+        a, b = int(m[1]), int(m[2]) if m[2] else int(m[1])
+        said_weeks.update({a, b})
+    if missed := sorted(said_weeks - weeks):
+        notes.append(f"You mentioned week {_and([str(w) for w in missed])}, which nothing was read from.")
+    soft = [i for i in out.intents if isinstance(i, (Avoid, Only, Move)) and not i.hard]
+    if (m := _SAID_FIRM.search(text)) and soft:
+        notes.append(f"You wrote \"{m[0]}\", but it was read as a wish the timetable may not meet, not a requirement.")
+    return notes
+
+
+_SAID_DAY_FULL = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri"}
+
+
 def named_weeks(instance: Instance, period: Period, current_week: int | None, what: str) -> list[int]:
     """The weeks of a one-off request (an extra or a cancelled class), which must name them."""
     found = weeks(instance, period, current_week)

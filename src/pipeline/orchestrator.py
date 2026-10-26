@@ -78,6 +78,7 @@ from language.intents import (
     Unavailable,
     compile_intents,
     say,
+    unaccounted,
 )
 from language.intents import Cancel as CancelIntent
 from language.intents import ClubBooking as ClubIntent
@@ -121,6 +122,8 @@ class Case:
     more: list[TimetableVersion] = field(default_factory=list)  # the proposals for its further weeks, in order
     read_as: Request | None = None  # the request as its readers see it: lines instructing the system left out
     parts: list[str] = field(default_factory=list)  # the requests a message of several parts was split into
+    understood: list[str] = field(default_factory=list)  # each intent read from the message, in words
+    unused: list[str] = field(default_factory=list)  # what the message says that the reading does not use
 
     def intents(self, kind: type) -> list:
         """The parsed intents of type ``kind`` (none for a parser without intents)."""
@@ -315,7 +318,15 @@ class Orchestrator:
     def submit(self, request: Request, form: IntentOutput | None = None) -> Case:
         """Take a request through the pipeline. ``form``: the request made with clicks (cancel, move or
         swap a class), its intents given instead of read from ``request.raw_text``, which is then only the
-        request in words for the people who see it."""
+        request in words for the people who see it. The sender is told what of their message the reading
+        did not use (``Case.unused``), whatever became of the rest."""
+        case = self._submit(request, form)
+        if case.unused:
+            case.reply = (f"{case.reply}\n\nNot used from your message: {' '.join(case.unused)} If it matters, "
+                          "withdraw this and send it again in other words.")
+        return case
+
+    def _submit(self, request: Request, form: IntentOutput | None) -> Case:
         case = Case(request=request, form=form)
         self.cases[case.id] = case
         if self.store.request(request.id) is None:
@@ -332,6 +343,13 @@ class Orchestrator:
         t = time.perf_counter()
         case.parse = self._parse(case)
         case.timings["parse"] = time.perf_counter() - t
+        out = case.compiled.output if case.compiled is not None else None
+        if out is not None and out.action == "compile":
+            case.understood = [say(self.instance, i, request.sender_id) for i in out.intents]
+            if form is None:
+                case.unused = unaccounted((case.read_as or request).raw_text, out)
+                if case.unused:
+                    self.store.log(case.id, "unused", notes=case.unused)
         case.routing["reader"] = self._reader(case)
         if flagged:
             case.routing["injection"] = True

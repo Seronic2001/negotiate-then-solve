@@ -158,6 +158,26 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
               when the request was read.
             </p>
           )}
+          {!!c.understood?.length && (
+            <div className="mt-2 text-[12.5px] text-ink-2">
+              <p className="font-medium">Read as:</p>
+              <ul className="ml-4 list-disc">
+                {c.understood.map((u) => (
+                  <li key={u}>{u}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!!c.unused?.length && (
+            <div className="mt-1 text-[12.5px] text-warn">
+              <p className="font-medium">Not used from the message (check before approving):</p>
+              <ul className="ml-4 list-disc">
+                {c.unused.map((u) => (
+                  <li key={u}>{u}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button icon={XCircle} onClick={() => setRejecting(!rejecting)} disabled={!!busy}>

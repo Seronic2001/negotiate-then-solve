@@ -181,6 +181,12 @@ export interface DiffRow {
 }
 
 export interface CaseDetail extends CaseSummary {
+  /** What was read from the message, one sentence per intent. */
+  understood?: string[];
+  /** What the message says that the reading does not use (a day, a time, a week, a requirement read as a wish). */
+  unused?: string[];
+  /** The requests a message of several parts was split into. */
+  parts?: string[];
   routing: {
     request_type: string;
     type_p: number;

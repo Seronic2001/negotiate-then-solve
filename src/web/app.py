@@ -159,6 +159,8 @@ def _case_detail(w: World, case: Case) -> dict:
         "output": p.output.model_dump() if p.output else None,
         # as recorded (a class named on the wrong day retargeted to the one on that day), else as read
         "constraints": [_constraint(w, c) for c in (case.constraints or p.constraints)]}
+    # what was read from the message, in words, and what in it the reading does not use
+    d["understood"], d["unused"], d["parts"] = case.understood, case.unused, case.parts
     pol = case.policy
     d["policy"] = None if pol is None else {
         "verdict": pol.verdict.value, "cited": [{"id": i, "cite": next(r.cite() for r in w.rules if r.id == i)}

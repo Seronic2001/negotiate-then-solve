@@ -435,3 +435,33 @@ def test_a_fine_tuned_reader_gets_a_short_prompt_and_gemini_the_whole_vocabulary
     read_answer(zero, "...")
     assert tuned.system == INTENT_PROMPT and zero.system == INTENT_INSTRUCTIONS
     assert len(INTENT_PROMPT) * 5 < len(INTENT_INSTRUCTIONS)
+
+
+@pytest.mark.parametrize("text, intents, notes", [
+    ("Away Tuesday and Wednesday of week 15; make-up classes, but not on Friday.",
+     [Unavailable(time=TimeSpec(days=["Tue", "Wed"]), period=Period(weeks=[15]))], ["Friday"]),
+    ("From week 15 onwards I can only teach in the afternoons.",
+     [Only(time=TimeSpec(part="afternoon"), period=Period(from_week=15))], ['"only"']),
+    ("Please move my Computer Graphics lecture on Wednesday at 2 pm to Friday morning.",
+     [Move(which=ClassRef(course="C-041", kind="lecture", day="Wed", time="14:00"),
+           to=TimeSpec(days=["Fri"], part="morning"))], []),
+    ("I'm away from week 15 to week 16.", [Unavailable(period=Period(from_week=15, to_week=16))], []),
+    ("I'm away in weeks 15 and 16.", [Unavailable(period=Period(weeks=[15]))], ["week 16"]),
+    ("If possible no classes before 10 am on Wednesdays.", [Avoid(time=TimeSpec(days=["Wed"], before="10:00"))], []),
+])
+def test_what_a_message_says_and_its_reading_does_not_use_is_noted(text, intents, notes):
+    from language.intents import unaccounted
+
+    got = unaccounted(text, IntentOutput(action="compile", intents=intents))
+    assert len(got) == len(notes) and all(n in g for n, g in zip(notes, got, strict=True))
+
+
+def test_an_intent_reads_back_as_a_sentence(instance, teacher):
+    from language.intents import say
+
+    s = next(s for s in instance.sessions if s.faculty == teacher)
+    title = instance.course_title(s.course)
+    assert say(instance, Cancel(which=ClassRef(session=s.id), period=Period(from_week=15, to_week=16)), teacher) == \
+        f"Cancel my {title} {s.kind.value} from week 15 to week 16."
+    assert say(instance, Avoid(time=TimeSpec(days=["Wed"], before="10:00"), hard=True), teacher) == \
+        "Do not schedule my classes on Wednesday before 10 am."
