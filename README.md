@@ -539,6 +539,7 @@ uv run python -m evaluation.benchmark --hard                           # data/sc
 uv run python -m evaluation.negotiation --offline --scenarios data/scenarios-hard.jsonl --seeds 0   # hard tier, no API calls
 uv run python -m evaluation.negotiation --offline                 # ours, A1-offline, B2, oracle: no API calls
 uv run python -m evaluation.negotiation --offline --pipeline      # the same through the app's request pipeline
+uv run python -m evaluation.negotiation --configs B3,B4 --seeds 0,1,2 --out runs/x.json --resume   # after the daily quota: continues from runs/x.rows.jsonl
 uv run python -m evaluation.negotiation --plan --local --sim-local   # the reduced plan on the local model
 uv run python -m evaluation.negotiation --configs ours-llm,B4 --subset 20   # Gemini check of the main comparison
 uv run python -m evaluation.replies --parser llm --local           # reply tool calls (Benchmark D); --parser rule is A3

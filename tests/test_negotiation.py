@@ -1,8 +1,10 @@
 """Interpretation layer: ledger, priorities, explanations, the resolution
 ladder and the oracle. No API calls (template explanations, scripted replies)."""
 
+import json
 import random
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -638,3 +640,39 @@ def test_sentences_do_not_end_at_a_title():
     text = "Hi Dr. Kumar, your lab clashes with Dr. Verma's. Option A is Monday at 2 pm. Does it work, e.g. for week 3?"
     assert sentences(text) == ["Hi Dr. Kumar, your lab clashes with Dr. Verma's.", "Option A is Monday at 2 pm.",
                                "Does it work, e.g. for week 3?"]
+
+
+def test_a_run_stopped_by_the_daily_quota_resumes_where_it_stopped(monkeypatch, tmp_path):
+    """Each finished row is logged as it finishes; the daily quota stops the run with a partial report, and
+    --resume runs only the rest, with the semester's concessions so far, ending as a run never stopped."""
+    import sys
+
+    import evaluation.negotiation as E
+    from language.llm import DailyQuotaReached
+
+    path = Path(__file__).resolve().parents[1] / "data" / "scenarios.jsonl"
+    argv = ["negotiation", "--configs", "ours", "--limit", "4", "--scenarios", str(path)]
+    monkeypatch.setattr(sys, "argv", [*argv, "--out", str(tmp_path / "full.json")])
+    E.main()
+    real, calls = E._run_one, []
+
+    def flaky(*a, **k):
+        calls.append(1)
+        if len(calls) == 3:
+            raise DailyQuotaReached("quota")
+        return real(*a, **k)
+
+    monkeypatch.setattr(E, "_run_one", flaky)
+    monkeypatch.setattr(sys, "argv", [*argv, "--out", str(tmp_path / "part.json")])
+    with pytest.raises(SystemExit):
+        E.main()
+    assert len((tmp_path / "part.rows.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+    monkeypatch.setattr(E, "_run_one", real)
+    monkeypatch.setattr(sys, "argv", [*argv, "--out", str(tmp_path / "part.json"), "--resume"])
+    E.main()
+
+    def rows(name):
+        return [{k: v for k, v in r.items() if k != "wall_s"}
+                for r in json.loads((tmp_path / name).read_text(encoding="utf-8"))["configs"]["ours"]["rows"]]
+
+    assert rows("part.json") == rows("full.json")

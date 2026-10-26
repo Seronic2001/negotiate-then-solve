@@ -66,9 +66,9 @@ from agents.explainer import Explainer, describe
 from agents.ledger import ConcessionLedger
 from agents.negotiation import Negotiator, ReplyParser, RuleReplyParser
 from agents.priority import PriorityModel
-from core.schemas import Placement, Tier
+from core.schemas import ConcessionEntry, Placement, Tier
 from core.validator import verify_timetable
-from language.llm import GeminiClient, default_model
+from language.llm import DailyQuotaReached, GeminiClient, default_model
 
 from .benchmark import SEMESTER, Scenario, load, objective, original_ids, simulators
 from .stats import bootstrap_ci, mcnemar, mean, wilcoxon
@@ -436,6 +436,16 @@ def summarise(rows: list[dict], scenarios: dict[str, Scenario], ledgers: list[Co
     }
 
 
+def _run_one(config: str, sc: Scenario, shared: ConcessionLedger, agent, sim, seed: int, pipeline: bool) -> dict:
+    if config == "B1":
+        return run_llm_only(sc, agent)
+    if config == "B2":
+        return run_imposed(sc, shared)
+    if config == "oracle":
+        return run_oracle(sc)
+    return (run_pipeline if pipeline else run_negotiation)(sc, config, shared, agent, sim, run_seed=seed)
+
+
 def compare(a: list[dict], b: list[dict], scenarios) -> dict:
     """Paired tests of configuration a against b on the same scenarios."""
     def key(r):
@@ -508,6 +518,9 @@ def main() -> None:
                     help="run the negotiating configurations through the request pipeline the app runs "
                          "(Orchestrator: submit, solve and negotiate, approve) instead of the negotiator alone")
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--resume", action="store_true",
+                    help="keep the rows already in <out>.rows.jsonl (each finished row is appended there) and run "
+                         "only the rest; a run stopped by the daily API quota continues where it stopped")
     args = ap.parse_args()
 
     scenarios = load(args.scenarios)
@@ -537,6 +550,18 @@ def main() -> None:
                     "subset": args.subset, "ablation_subset": args.ablation_subset, "b1_subset": args.b1_subset,
                     "models": {"agent": getattr(agent, "model", None), "simulator": getattr(sim, "model", None)}}
     all_rows: dict[str, list[dict]] = {}
+    out = args.out or Path("runs") / f"negotiation-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    log = out.with_suffix(".rows.jsonl")  # every finished row, as it finishes
+    done: dict[tuple, dict] = {}
+    if args.resume and log.exists():
+        for line in log.read_text(encoding="utf-8").splitlines():
+            r = json.loads(line)
+            done[(r["config"], r["seed"], r["scenario"])] = r
+        print(f"resuming: {len(done)} rows from {log}", flush=True)
+    elif log.exists():
+        log.unlink()
+    stopped = None
     for config in configs:
         runs = scenarios
         if config in ("A1", "A2", "A3") and args.ablation_subset:
@@ -548,18 +573,26 @@ def main() -> None:
             shared = ConcessionLedger()  # one semester of conflicts per seed
             ledgers.append(shared)
             for sc in runs:
+                if (kept := done.get((config, seed, sc.id))) is not None:
+                    # the semester so far: later scenarios meet the concessions this one recorded
+                    shared.entries.extend(ConcessionEntry(**e) for e in kept["ledger_added"])
+                    rows.append(kept)
+                    continue
+                if stopped is not None:
+                    continue
                 t = time.perf_counter()
-                if config == "B1":
-                    row = run_llm_only(sc, agent)
-                elif config == "B2":
-                    row = run_imposed(sc, shared)
-                elif config == "oracle":
-                    row = run_oracle(sc)
-                else:
-                    run = run_pipeline if args.pipeline else run_negotiation
-                    row = run(sc, config, shared, agent, sim, run_seed=seed)
+                n0 = len(shared.entries)
+                try:
+                    row = _run_one(config, sc, shared, agent, sim, seed, args.pipeline)
+                except DailyQuotaReached as e:
+                    stopped = str(e)
+                    print(f"stopped: {e}. Run again with --resume when the quota is back.", flush=True)
+                    continue
                 row.update(scenario=sc.id, seed=seed, kind=sc.kind, family=sc.family, expected=sc.expected,
-                           wall_s=time.perf_counter() - t)
+                           wall_s=time.perf_counter() - t, config=config,
+                           ledger_added=[e.model_dump(mode="json") for e in shared.entries[n0:]])
+                with log.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, default=str) + "\n")
                 rows.append(row)
                 print(f"[{config} s{seed}] {sc.id} expected={sc.expected} got={row['status']} "
                       f"rounds={row['rounds']} valid={row.get('valid')}", flush=True)
@@ -580,10 +613,12 @@ def main() -> None:
         print(f"\n== {c}\n" + json.dumps(v["summary"], indent=1, default=str))
     if "paired" in report:
         print("\npaired:", json.dumps(report["paired"], indent=1))
-    out = args.out or Path("runs") / f"negotiation-{datetime.now():%Y%m%d-%H%M%S}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
+    if stopped is not None:
+        report["stopped"] = stopped  # a partial report: the rows log has what finished
     out.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
-    print(f"report: {out}")
+    print(f"report: {out}" + (" (partial: run again with --resume)" if stopped else ""))
+    if stopped is not None:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
