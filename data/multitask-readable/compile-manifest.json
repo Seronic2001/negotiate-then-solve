@@ -1,8 +1,8 @@
 {
  "schema": 4,
- "recipe": "intents-v7",
- "recipe_sha": "b2e17c194730488d",
- "code": "c86e9b7+dirty",
+ "recipe": "intents-v8",
+ "recipe_sha": "3d1747943f128c4a",
+ "code": "7e4148e+dirty",
  "sources": {
   "base": {
    "test": 417,
@@ -30,15 +30,19 @@
    "train": 122
   },
   "human": {},
+  "balance": {
+   "train": 110,
+   "val": 18
+  },
   "augment": {
-   "train": 707,
+   "train": 751,
    "changed meaning": 1,
-   "unchanged": 42
+   "unchanged": 47
   }
  },
  "fingerprints": {
-  "train": "738f40addf33f995",
-  "val": "2d07945cbb4975fa",
+  "train": "f54956d601113fcd",
+  "val": "14b5e6c8ffe230a1",
   "test": "0fb72ff322ff89a9",
   "firmness": "4e2251768d1f7a3a",
   "moves": "b314e127d2d7ace4",
@@ -74,16 +78,17 @@
  },
  "report": {
   "train": {
-   "rows": 3054,
+   "rows": 3208,
    "origin": {
-    "augment": 707,
+    "augment": 751,
+    "balance": 110,
     "base": 1087,
     "generators": 1140,
     "mined": 120
    },
    "kind": {
     "avoid_between": 197,
-    "cancel": 65,
+    "cancel": 172,
     "clash_report": 139,
     "club_booking": 103,
     "club_more": 104,
@@ -93,7 +98,7 @@
     "exception": 115,
     "extra_class": 84,
     "firmness": 107,
-    "load_limit": 61,
+    "load_limit": 108,
     "move": 107,
     "multi": 111,
     "only_firmness": 105,
@@ -115,33 +120,34 @@
    "action": {
     "answer": 59,
     "clarify": 173,
-    "compile": 2561,
+    "compile": 2715,
     "investigate": 139,
     "out_of_scope": 58,
     "withdraw": 64
    },
    "firmness": {
     "hard": 501,
-    "none": 1526,
+    "none": 1680,
     "soft": 1027
    },
    "augment": {
-    "casual": 179,
-    "noisy": 189,
-    "none": 2347,
-    "shorthand": 148,
-    "typo": 191
+    "casual": 191,
+    "noisy": 200,
+    "none": 2457,
+    "shorthand": 155,
+    "typo": 205
    }
   },
   "val": {
-   "rows": 267,
+   "rows": 285,
    "origin": {
+    "balance": 18,
     "base": 147,
     "generators": 120
    },
    "kind": {
     "avoid_between": 9,
-    "cancel": 7,
+    "cancel": 21,
     "clash_report": 11,
     "club_booking": 9,
     "club_more": 9,
@@ -151,7 +157,7 @@
     "exception": 6,
     "extra_class": 2,
     "firmness": 8,
-    "load_limit": 6,
+    "load_limit": 10,
     "move": 7,
     "multi": 9,
     "only_firmness": 11,
@@ -173,18 +179,18 @@
    "action": {
     "answer": 3,
     "clarify": 12,
-    "compile": 231,
+    "compile": 249,
     "investigate": 11,
     "out_of_scope": 2,
     "withdraw": 8
    },
    "firmness": {
     "hard": 29,
-    "none": 143,
+    "none": 161,
     "soft": 95
    },
    "augment": {
-    "none": 267
+    "none": 285
    }
   },
   "test": {
@@ -544,6 +550,121 @@
    },
    "augment": {
     "noisy": 417
+   }
+  }
+ },
+ "balance": {
+  "short": {
+   "cancel": 75,
+   "load_limit": 34
+  },
+  "kinds": {
+   "avoid": {
+    "alone": 568,
+    "part": 225,
+    "parts_per_alone": 0.4,
+    "top": {
+     "avoid_between": 0.25,
+     "multi": 0.14,
+     "difficulty": 0.14
+    }
+   },
+   "unavailable": {
+    "alone": 444,
+    "part": 107,
+    "parts_per_alone": 0.24,
+    "top": {
+     "unavailability": 0.19,
+     "dated": 0.19,
+     "relative_span": 0.17
+    }
+   },
+   "only": {
+    "alone": 405,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "only_times": 0.26,
+     "only_firmness": 0.26,
+     "reason_firmness": 0.26
+    }
+   },
+   "move": {
+    "alone": 279,
+    "part": 78,
+    "parts_per_alone": 0.28,
+    "top": {
+     "move": 0.3,
+     "which_to": 0.27,
+     "compound": 0.15
+    }
+   },
+   "cancel": {
+    "alone": 172,
+    "part": 82,
+    "parts_per_alone": 0.48,
+    "top": {
+     "cancel": 0.68,
+     "compound": 0.32
+    }
+   },
+   "club_booking": {
+    "alone": 207,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "club_more": 0.5,
+     "club_booking": 0.5
+    }
+   },
+   "load_limit": {
+    "alone": 108,
+    "part": 60,
+    "parts_per_alone": 0.56,
+    "top": {
+     "load_limit": 0.64,
+     "multi": 0.36
+    }
+   },
+   "clash_report": {
+    "alone": 139,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "clash_report": 1.0
+    }
+   },
+   "extra_class": {
+    "alone": 84,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "extra_class": 1.0
+    }
+   },
+   "swap": {
+    "alone": 72,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "swap": 1.0
+    }
+   },
+   "needs_room": {
+    "alone": 62,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "room_issue": 1.0
+    }
+   },
+   "room_closed": {
+    "alone": 38,
+    "part": 0,
+    "parts_per_alone": 0.0,
+    "top": {
+     "room_issue": 1.0
+    }
    }
   }
  }

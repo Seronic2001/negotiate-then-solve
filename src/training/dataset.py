@@ -12,6 +12,8 @@ A recipe (``data/recipes/*.toml``) names the sources and how much of each:
 * ``stored``: rows that cannot be rebuilt (mined from a model's mistakes, labelled by people), read from
   files, migrated to the current schema (``language.migrations``) and put in the current prompt and format
   (``intent_compiler.format_row``: no directory, names for IDs);
+* ``balance``: rows of a kind on its own, from its own generator, where messages of several requests teach
+  it more than messages of it alone (``training.balance``); the manifest reports every kind's balance;
 * ``augment``: noisy twins of training rows (typos, shorthand, casual wording: ``evaluation.robustness``,
   with seeds of its own), each kept only if its gold resolves as the original's does;
 * ``suites``: the evaluation suites written beside the test split (``data/suites``), held-out wordings and
@@ -44,7 +46,7 @@ from language.intent_compiler import base_rows, export_rows, format_row, label_p
 from language.intents import SCHEMA_VERSION, IntentOutput, compile_intents
 from language.migrations import migrate_row
 
-from . import human, quality
+from . import balance, human, quality
 
 RECIPE = Path("data/recipes/intents.toml")
 SPLITS = ("train", "val", "test")
@@ -152,6 +154,10 @@ def build(recipe: dict, *, refreeze: bool = False) -> tuple[dict[str, list[dict]
                                                           seed=g["seed"], names=g.get("names"))))
     for name, spec in recipe.get("stored", {}).items():
         add(name, stored_rows(instance, spec))
+    short = {}
+    if bal := recipe.get("balance"):  # after every other source: it tops up what they leave short
+        pairs, short = balance.top_up(instance, splits["train"], bal)
+        add("balance", pairs)
     if a := recipe.get("augment"):
         pool = [r for r in splits["train"] if r["origin"] in a.get("origins", ["base", "generators"])]
         twins, why = augmented(instance, pool, a)
@@ -191,6 +197,7 @@ def build(recipe: dict, *, refreeze: bool = False) -> tuple[dict[str, list[dict]
         "sources": sources, "fingerprints": {s: fingerprint(r) for s, r in splits.items()},
         "gates": {gate: len(f) for gate, f in failures.items()}, "dropped": dropped,
         "report": quality.report(splits),
+        "balance": {"short": short, "kinds": balance.report(splits["train"])},
     }
     return splits, {"manifest": manifest, "failures": failures}
 
