@@ -455,7 +455,7 @@ def _resolves(ex: IntentExample, instance: Instance) -> bool:
         return False
     w = ex.want
     if "move" in w:
-        return [c.scope.session for c in got.result.constraints] == [w["move"]]
+        return {c.scope.session for c in got.result.constraints} == {w["move"]}  # a must to leave adds one
     if "swap" in w:
         return [(r.mine, r.theirs) for r in got.swaps] == [w["swap"]]
     if "extra" in w:

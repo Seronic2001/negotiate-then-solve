@@ -175,6 +175,21 @@ def firmness(text: str) -> str:
     return "firm" if necessary(text) else "hedged" if hedged(text) else "neutral"
 
 
+# a must about where a class is now, not about where it should go ("it can't stay where it is")
+_LEAVE = re.compile(r"\b(can't|cannot|can not|won't) (stay|remain|be kept|keep)\b[^.,;!?]*|"
+                    r"\b(has|have|needs?|must) to (move|go|change)\b|\bmust (move|go|change)\b")
+
+
+def placement_firm_only_on_leaving(text: str) -> bool:
+    """Whether a must about a move is only about leaving where the class is ("it can't stay where it is", a
+    clash with the time it is at now), not about where it should go ("I need it on Thursday at 2 pm"). Only
+    when it says so: a message this does not recognise (a typo'd "nede") keeps the must on where it goes."""
+    low = normalise(text)
+    if not (_LEAVE.search(low) or _CONFLICT.search(low)):
+        return False
+    return not necessary(_LEAVE.sub(" ", low))
+
+
 def placement_is_hard(text: str) -> bool:
     """The labelling rule for a request to put a class at a time (``language.intents.Move``), from the
     project brief's tiers: a preferred time is a preference (Tier 5), so a move is a requirement only when the

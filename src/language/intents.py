@@ -914,8 +914,12 @@ def _who(w: Who | None, sender: str) -> tuple[str, str]:
     return (w.kind, w.id) if w is not None else ("faculty", sender)
 
 
-def _drafts(instance: Instance, intent, sender: str, timetable, current_week) -> list[DraftConstraint]:
-    """Constraint drafts for the intents that are constraints (raises ``Unresolved``)."""
+def _drafts(instance: Instance, intent, sender: str, timetable, current_week,
+            text: str = "") -> list[DraftConstraint]:
+    """Constraint drafts for the intents that are constraints (raises ``Unresolved``); ``text`` is the
+    message, which says whether a must about a move is about where it goes or only about leaving."""
+    from .lexicon import placement_firm_only_on_leaving
+
     j = intent.justification
     match intent:
         case Unavailable() | Avoid() | Only():
@@ -929,9 +933,18 @@ def _drafts(instance: Instance, intent, sender: str, timetable, current_week) ->
             if not intent.to.has_times and intent.to.days is None:
                 raise Unresolved("When would you like the class to be?", "slots")
             sid = meeting(instance, intent.which, sender, timetable, days(instance, intent.to))
-            return [DraftConstraint(type="prefer", hard=intent.hard, scope_kind="session", scope_id=sid,
-                                    days=days(instance, intent.to), slots=slots(instance, intent.to),
-                                    weeks=weeks(instance, intent.period, current_week), justification=j)]
+            ws = weeks(instance, intent.period, current_week)
+            to = DraftConstraint(type="prefer", hard=intent.hard, scope_kind="session", scope_id=sid,
+                                 days=days(instance, intent.to), slots=slots(instance, intent.to), weeks=ws,
+                                 justification=j)
+            if (not intent.hard or not placement_firm_only_on_leaving(text)
+                    or (now := (timetable or {}).get(sid)) is None):
+                return [to]
+            # a must about leaving only ("it can't stay where it is", a clash with where it is): that rules out
+            # where the class is now, while where it should go is still a wish the solver keeps where it can
+            return [DraftConstraint(type="avoid", hard=True, scope_kind="session", scope_id=sid, days=[now.day],
+                                    slots=[now.slot], weeks=ws, justification=j),
+                    to.model_copy(update={"hard": False})]
         case RoomClosed():
             return [DraftConstraint(type="unavailable", hard=True, scope_kind="room", scope_id=intent.room,
                                     days=days(instance, intent.time), slots=slots(instance, intent.time),
@@ -1016,7 +1029,7 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
                 case LoadLimit():
                     limits.append(intent)
                 case _:
-                    drafts.extend(_drafts(instance, intent, sender, timetable, current_week))
+                    drafts.extend(_drafts(instance, intent, sender, timetable, current_week, request.raw_text))
     except Unresolved as e:
         compiled.question, compiled.missing = e.question, [e.missing]
         drafts, limits = [], []

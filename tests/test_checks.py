@@ -106,6 +106,17 @@ def test_a_time_the_class_is_not_at_is_read_as_where_it_should_go(instance, lect
     assert (k.when.days, k.when.slots, k.hard) == (["Thu"], [5], True)
 
 
+def test_a_must_about_leaving_rules_out_where_the_class_is_and_keeps_the_target_a_wish(instance, lecture, placed):
+    now = placed[lecture.id]
+    out = IntentOutput(action="compile", intents=[
+        Move(which=ClassRef(session=lecture.id), to=TimeSpec(days=["Thu"], part="afternoon"), hard=True)])
+    c = checked_compile(instance, request(lecture.faculty, "I want it moved to Thursday after lunch; it can't stay "
+                                          "where it is."), out, timetable=placed)
+    leave, to = sorted(c.result.constraints, key=lambda k: k.type.value)
+    assert (leave.type.value, leave.hard, leave.when.days, leave.when.slots) == ("avoid", True, [now.day], [now.slot])
+    assert (to.type.value, to.hard, to.when.days) == ("prefer", False, ["Thu"])
+
+
 def test_a_wish_to_move_a_class_where_it_already_is_is_asked_about(instance, lecture, placed):
     out = IntentOutput(action="compile", intents=[
         Move(which=ClassRef(course=lecture.course, kind="lecture"), to=TimeSpec(days=["Wed"], at=["15:00"]))])
