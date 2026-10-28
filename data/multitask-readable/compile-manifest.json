@@ -1,8 +1,8 @@
 {
- "schema": 4,
- "recipe": "intents-v8",
- "recipe_sha": "3d1747943f128c4a",
- "code": "7e4148e+dirty",
+ "schema": 6,
+ "recipe": "intents-v11",
+ "recipe_sha": "af68afec7a46ee60",
+ "code": "d84fe36+dirty",
  "sources": {
   "base": {
    "test": 417,
@@ -10,39 +10,46 @@
    "val": 149
   },
   "generators": {
+   "choices": 40,
    "clubs": 40,
    "compound": 40,
    "dated": 40,
    "difficulty": 40,
    "exceptions": 40,
    "firmness": 80,
+   "limits": 40,
    "moves": 40,
    "multi": 40,
    "only_times": 40,
    "periods": 40,
    "reasons": 40,
+   "relations": 40,
    "terms": 40,
-   "train": 1140,
+   "train": 1476,
    "vague": 40,
-   "val": 120
+   "val": 144,
+   "week_patterns": 40
   },
   "mined": {
    "train": 122
   },
+  "authored": {
+   "train": 100
+  },
   "human": {},
   "balance": {
-   "train": 110,
-   "val": 18
+   "train": 352,
+   "val": 46
   },
   "augment": {
-   "train": 751,
-   "changed meaning": 1,
-   "unchanged": 47
+   "train": 927,
+   "changed meaning": 5,
+   "unchanged": 46
   }
  },
  "fingerprints": {
-  "train": "f54956d601113fcd",
-  "val": "14b5e6c8ffe230a1",
+  "train": "d790ff95998fe3de",
+  "val": "f6765cef6f43f541",
   "test": "0fb72ff322ff89a9",
   "firmness": "4e2251768d1f7a3a",
   "moves": "b314e127d2d7ace4",
@@ -57,6 +64,10 @@
   "exceptions": "0ccfe9a2db4db29c",
   "only_times": "caf3c0df4b815cb3",
   "compound": "67c77a475c2e043f",
+  "week_patterns": "3a162f732c3f786b",
+  "limits": "8e6dd8462280be12",
+  "relations": "1cb117ca96ea08ea",
+  "choices": "cfe9e9d1989d26fb",
   "test-typo": "710c97ca9762bc39",
   "test-noisy": "c7fdcc1547db8aa9"
  },
@@ -78,76 +89,128 @@
  },
  "report": {
   "train": {
-   "rows": 3208,
+   "rows": 4062,
    "origin": {
-    "augment": 751,
-    "balance": 110,
+    "augment": 927,
+    "authored": 100,
+    "balance": 352,
     "base": 1087,
-    "generators": 1140,
+    "generators": 1476,
     "mined": 120
    },
    "kind": {
+    "alternate_weeks": 1,
+    "any_of": 4,
+    "avoid_at": 1,
+    "avoid_at_days": 1,
     "avoid_between": 197,
-    "cancel": 172,
+    "cancel": 211,
+    "cancel_all": 1,
+    "cancel_extra": 2,
+    "cancel_relative": 1,
+    "choices": 117,
     "clash_report": 139,
     "club_booking": 103,
     "club_more": 104,
     "compound": 113,
+    "conditional": 2,
     "dated": 102,
     "difficulty": 112,
+    "except_weeks": 3,
     "exception": 115,
-    "extra_class": 84,
+    "extra_class": 85,
+    "fallback": 4,
     "firmness": 107,
-    "load_limit": 108,
-    "move": 107,
-    "multi": 111,
+    "from_week": 2,
+    "gap": 3,
+    "limit_days_per_week": 2,
+    "limit_hours_per_day": 1,
+    "limit_hours_per_week": 2,
+    "limit_per_day": 4,
+    "limits": 114,
+    "load_limit": 83,
+    "mixed_unsupported": 2,
+    "move": 401,
+    "move_at": 2,
+    "move_other_day": 1,
+    "multi": 114,
+    "multi_firmness": 1,
+    "multi_weeks": 2,
+    "needs_room": 1,
+    "needs_room_room": 1,
+    "needs_room_two": 1,
+    "only": 2,
+    "only_between": 1,
     "only_firmness": 105,
+    "only_from_week": 1,
     "only_times": 107,
+    "only_weeks": 2,
+    "or_over_windows": 3,
     "out_of_scope": 58,
-    "policy_question": 59,
+    "paired_weeks": 4,
+    "policy_question": 61,
     "preference": 226,
+    "ranked": 5,
     "reason_firmness": 105,
-    "relative_span": 119,
+    "relation_after": 2,
+    "relation_after_practical": 1,
+    "relation_conditional_day": 1,
+    "relation_cross_course": 1,
+    "relation_different_day": 2,
+    "relation_same_day": 1,
+    "relation_same_time": 1,
+    "relation_spread": 2,
+    "relations": 112,
+    "relative": 2,
+    "relative_span": 118,
+    "room_closed": 1,
     "room_issue": 100,
-    "swap": 72,
-    "term_span": 102,
-    "unavailability": 150,
+    "same_room": 1,
+    "swap": 75,
+    "term_span": 101,
+    "unavailability": 149,
     "unavailable_relative": 66,
+    "union_same_part": 1,
     "vague": 104,
+    "week_patterns": 115,
+    "weeks_pattern": 1,
     "which_to": 97,
-    "withdraw": 64
+    "whole_week": 1,
+    "withdraw": 65
    },
    "action": {
-    "answer": 59,
-    "clarify": 173,
-    "compile": 2715,
+    "answer": 61,
+    "clarify": 181,
+    "compile": 3536,
     "investigate": 139,
-    "out_of_scope": 58,
-    "withdraw": 64
+    "out_of_scope": 80,
+    "withdraw": 65
    },
    "firmness": {
-    "hard": 501,
-    "none": 1680,
-    "soft": 1027
+    "hard": 599,
+    "mixed": 4,
+    "none": 1845,
+    "soft": 1614
    },
    "augment": {
-    "casual": 191,
-    "noisy": 200,
-    "none": 2457,
-    "shorthand": 155,
-    "typo": 205
+    "casual": 233,
+    "noisy": 248,
+    "none": 3135,
+    "shorthand": 197,
+    "typo": 249
    }
   },
   "val": {
-   "rows": 285,
+   "rows": 337,
    "origin": {
-    "balance": 18,
+    "balance": 46,
     "base": 147,
-    "generators": 120
+    "generators": 144
    },
    "kind": {
     "avoid_between": 9,
-    "cancel": 21,
+    "cancel": 24,
+    "choices": 6,
     "clash_report": 11,
     "club_booking": 9,
     "club_more": 9,
@@ -157,8 +220,9 @@
     "exception": 6,
     "extra_class": 2,
     "firmness": 8,
-    "load_limit": 10,
-    "move": 7,
+    "limits": 3,
+    "load_limit": 6,
+    "move": 36,
     "multi": 9,
     "only_firmness": 11,
     "only_times": 6,
@@ -166,6 +230,7 @@
     "policy_question": 3,
     "preference": 28,
     "reason_firmness": 9,
+    "relations": 5,
     "relative_span": 5,
     "room_issue": 14,
     "swap": 5,
@@ -173,24 +238,25 @@
     "unavailability": 27,
     "unavailable_relative": 9,
     "vague": 7,
+    "week_patterns": 10,
     "which_to": 14,
     "withdraw": 8
    },
    "action": {
     "answer": 3,
     "clarify": 12,
-    "compile": 249,
+    "compile": 301,
     "investigate": 11,
     "out_of_scope": 2,
     "withdraw": 8
    },
    "firmness": {
-    "hard": 29,
-    "none": 161,
-    "soft": 95
+    "hard": 39,
+    "none": 166,
+    "soft": 132
    },
    "augment": {
-    "none": 285
+    "none": 337
    }
   },
   "test": {
@@ -474,6 +540,79 @@
     "none": 40
    }
   },
+  "week_patterns": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "week_patterns": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "limits": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "limits": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "relations": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "relations": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "soft": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "choices": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "choices": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "soft": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
   "test-typo": {
    "rows": 417,
    "origin": {
@@ -555,57 +694,59 @@
  },
  "balance": {
   "short": {
-   "cancel": 75,
-   "load_limit": 34
+   "cancel": 111,
+   "load_limit": 15,
+   "move": 223
   },
   "kinds": {
+   "move": {
+    "alone": 577,
+    "part": 296,
+    "parts_per_alone": 0.51,
+    "top": {
+     "move": 0.46,
+     "choices": 0.22,
+     "which_to": 0.11
+    }
+   },
    "avoid": {
-    "alone": 568,
-    "part": 225,
+    "alone": 613,
+    "part": 245,
     "parts_per_alone": 0.4,
     "top": {
-     "avoid_between": 0.25,
-     "multi": 0.14,
-     "difficulty": 0.14
+     "avoid_between": 0.23,
+     "multi": 0.13,
+     "difficulty": 0.13
     }
    },
    "unavailable": {
-    "alone": 444,
-    "part": 107,
+    "alone": 523,
+    "part": 124,
     "parts_per_alone": 0.24,
     "top": {
-     "unavailability": 0.19,
-     "dated": 0.19,
-     "relative_span": 0.17
+     "unavailability": 0.16,
+     "dated": 0.16,
+     "relative_span": 0.14
     }
    },
    "only": {
-    "alone": 405,
+    "alone": 411,
     "part": 0,
     "parts_per_alone": 0.0,
     "top": {
      "only_times": 0.26,
-     "only_firmness": 0.26,
-     "reason_firmness": 0.26
-    }
-   },
-   "move": {
-    "alone": 279,
-    "part": 78,
-    "parts_per_alone": 0.28,
-    "top": {
-     "move": 0.3,
-     "which_to": 0.27,
-     "compound": 0.15
+     "reason_firmness": 0.26,
+     "only_firmness": 0.26
     }
    },
    "cancel": {
-    "alone": 172,
-    "part": 82,
-    "parts_per_alone": 0.48,
+    "alone": 213,
+    "part": 106,
+    "parts_per_alone": 0.5,
     "top": {
-     "cancel": 0.68,
-     "compound": 0.32
+     "cancel": 0.66,
+     "compound": 0.26,
+     "choices": 0.06
     }
    },
    "club_booking": {
@@ -618,12 +759,23 @@
     }
    },
    "load_limit": {
-    "alone": 108,
+    "alone": 102,
     "part": 60,
-    "parts_per_alone": 0.56,
+    "parts_per_alone": 0.59,
     "top": {
-     "load_limit": 0.64,
-     "multi": 0.36
+     "load_limit": 0.51,
+     "multi": 0.37,
+     "limits": 0.12
+    }
+   },
+   "relate": {
+    "alone": 119,
+    "part": 24,
+    "parts_per_alone": 0.2,
+    "top": {
+     "relations": 0.78,
+     "choices": 0.13,
+     "relation_different_day": 0.02
     }
    },
    "clash_report": {
@@ -635,15 +787,27 @@
     }
    },
    "extra_class": {
-    "alone": 84,
+    "alone": 85,
+    "part": 3,
+    "parts_per_alone": 0.04,
+    "top": {
+     "extra_class": 0.97,
+     "cancel_extra": 0.02,
+     "multi": 0.01
+    }
+   },
+   "limit": {
+    "alone": 83,
     "part": 0,
     "parts_per_alone": 0.0,
     "top": {
-     "extra_class": 1.0
+     "limits": 0.9,
+     "limit_per_day": 0.04,
+     "limit_days_per_week": 0.02
     }
    },
    "swap": {
-    "alone": 72,
+    "alone": 75,
     "part": 0,
     "parts_per_alone": 0.0,
     "top": {
@@ -651,19 +815,50 @@
     }
    },
    "needs_room": {
-    "alone": 62,
-    "part": 0,
-    "parts_per_alone": 0.0,
+    "alone": 64,
+    "part": 4,
+    "parts_per_alone": 0.06,
     "top": {
-     "room_issue": 1.0
+     "room_issue": 0.91,
+     "multi": 0.03,
+     "needs_room_two": 0.03
+    }
+   },
+   "any_of": {
+    "alone": 0,
+    "part": 49,
+    "parts_per_alone": 49.0,
+    "top": {
+     "choices": 0.86,
+     "any_of": 0.08,
+     "or_over_windows": 0.06
+    }
+   },
+   "ranked": {
+    "alone": 0,
+    "part": 42,
+    "parts_per_alone": 42.0,
+    "top": {
+     "choices": 0.88,
+     "ranked": 0.12
     }
    },
    "room_closed": {
     "alone": 38,
-    "part": 0,
-    "parts_per_alone": 0.0,
+    "part": 2,
+    "parts_per_alone": 0.05,
     "top": {
-     "room_issue": 1.0
+     "room_issue": 0.95,
+     "room_closed": 0.05
+    }
+   },
+   "fallback": {
+    "alone": 0,
+    "part": 23,
+    "parts_per_alone": 23.0,
+    "top": {
+     "choices": 0.83,
+     "fallback": 0.17
     }
    }
   }
