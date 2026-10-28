@@ -1,6 +1,7 @@
 """The front end's API over the real pipeline (offline parser and policy)."""
 
 import time
+from datetime import date
 
 import pytest as _pytest
 
@@ -12,10 +13,22 @@ from fastapi.testclient import TestClient
 from web.app import COORDINATOR, World, create_web_app, views_for
 
 
+class _InWeek3(date):
+    """Today in week 3 of the test semester (it starts on 2026-07-27), so the weeks these tests name are still
+    ahead: a request for a week that has passed is asked about, whatever day the tests run on."""
+
+    @classmethod
+    def today(cls):
+        return cls(2026, 8, 12)
+
+
 @pytest.fixture(scope="module")
 def client():
-    world = World(parser_mode="offline", seed_history=False, deadline=60)
-    return TestClient(create_web_app(world)), world
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("web.world.date", _InWeek3)
+        mp.setattr("web.app.date", _InWeek3)
+        world = World(parser_mode="offline", seed_history=False, deadline=60)
+        yield TestClient(create_web_app(world)), world
 
 
 def as_(person):
