@@ -14,3 +14,7 @@ nts-lookup-v1 = ["lookup"]       # timetable questions: which lookup to do (note
 [schemas]                       # the intent vocabulary an adapter was trained on, when not the current one
 nts-intents-v4 = 3              # IDs and the directory in the prompt (language.intent_compiler.INTENT_PROMPT_V3)
 nts-intents-v5 = 3
+nts-intents-v6-read100 = 4         # schema 4: the same short prompt; 5 only added period fields
+nts-intents-v8-read-100 = 4
+nts-intents-v8-read-067 = 4
+nts-intents-v9-read-100 = 4

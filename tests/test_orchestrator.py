@@ -202,7 +202,7 @@ def teaching_day(sc, store, who):
     return next(p.day for s, p in sorted(store.current_version().assignment.items()) if sessions[s].faculty == who)
 
 
-def test_a_request_the_timetable_already_meets_needs_no_approval(world):
+def test_a_wish_the_timetable_already_meets_needs_no_approval(world):
     sc, orch, store, owners = world
     who = owners["R-A"]
     day, slot = free_hour(sc, store, who)
@@ -213,6 +213,44 @@ def test_a_request_the_timetable_already_meets_needs_no_approval(world):
     assert c.status == S.PUBLISHED and c.proposal is None and "nothing needed to move" in c.reply
     assert len(store.versions()) == versions and not orch.pending()
     assert any(x.source.request == "R-8" for x in store.constraints())  # still in force
+
+
+def _already_met_requirement(world):
+    sc, orch, store, owners = world
+    who = owners["R-A"]
+    day, slot = free_hour(sc, store, who)
+    orch.parser.outputs["FREE-HOUR"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+        DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=who, days=[day], slots=[slot])])
+    return orch.submit(req("R-8", who, "FREE-HOUR")), who
+
+
+def test_a_requirement_the_timetable_already_meets_is_confirmed_by_the_office(world):
+    # it moves nothing, but binds every later change: a misreading recorded unseen would too
+    _, orch, store, _ = world
+    versions = len(store.versions())
+    c, who = _already_met_requirement(world)
+    assert c.status == S.AWAITING_APPROVAL and c.proposal is None and "confirms it first" in c.reply
+    assert orch.pending() == [c] and any(x.source.request == "R-8" for x in store.constraints())
+    with pytest.raises(NotAuthorised):
+        orch.approve("R-8", who)
+    assert orch.approve("R-8", "C-TT") is None
+    assert c.status == S.PUBLISHED and "confirmed" in c.reply and len(store.versions()) == versions
+    assert any(x.source.request == "R-8" for x in store.constraints())
+
+
+def test_a_requirement_the_office_does_not_confirm_is_taken_out_of_force(world):
+    _, orch, store, _ = world
+    c, _ = _already_met_requirement(world)
+    orch.reject("R-8", "C-TT", "read as a whole day, you meant one hour")
+    assert c.status == S.DENIED and "you meant one hour." in c.reply and not orch.pending()
+    assert not any(x.source.request == "R-8" for x in store.constraints())
+
+
+def test_a_requirement_waiting_for_confirmation_can_be_withdrawn(world):
+    _, orch, store, _ = world
+    c, who = _already_met_requirement(world)
+    orch.withdraw("R-8", who)
+    assert c.status == S.WITHDRAWN and not any(x.source.request == "R-8" for x in store.constraints())
 
 
 def test_a_change_builds_on_the_ones_still_waiting_and_is_approved_after_them(world):

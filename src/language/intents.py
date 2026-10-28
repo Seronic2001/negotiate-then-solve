@@ -71,7 +71,12 @@ from .parsing import (
 #   3  periods of several weeks from now (``count``, ``rest_of_semester``); a kind of room for a club
 #   4  courses, colleagues, sections and rooms by name as the message gives them (``language.names``), and
 #      no directory in the prompt; an ID still reads as itself
-SCHEMA_VERSION = 4
+#   5  weeks left out of a period (``except_weeks``) and odd or even weeks (``parity``): the reader says them
+#      and this module does the arithmetic it got wrong ("from now on, except week 16" read as every week left)
+#   6  a message as a small program: items labelled by ``id``, a class named as another item's (``same``),
+#      limits on a week (``limit``), classes placed against others (``relate``), and choices between items
+#      (``any_of``, ``ranked``, ``fallback``)
+SCHEMA_VERSION = 6
 
 Day = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 Clock = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="24-hour HH:MM")]
@@ -114,13 +119,18 @@ class TimeSpec(BaseModel):
 class Period(BaseModel):
     """Semester weeks. Empty means every week (a recurring request). Weeks counted from now are
     ``relative`` with ``count``: "the next three weeks" is next_week with count 3, "this week and next"
-    this_week with count 2, "for the rest of the semester" rest_of_semester."""
+    this_week with count 2, "for the rest of the semester" rest_of_semester. ``except_weeks`` and ``parity``
+    narrow whatever the rest names (every week when nothing else is given): "from now on, except week 16" is
+    rest_of_semester with except_weeks [16], "on even weeks" parity even, "every other week from week 5" from
+    week 5 with parity odd."""
 
     weeks: list[int] | None = None
     from_week: int | None = None
     to_week: int | None = None
     relative: Literal["this_week", "next_week", "rest_of_semester"] | None = None
     count: int | None = Field(None, ge=1, description="with this_week/next_week: how many weeks from it")
+    except_weeks: list[int] | None = Field(None, description="weeks left out: 'except week 16'")
+    parity: Literal["odd", "even"] | None = Field(None, description="only odd or only even weeks")
 
     @model_validator(mode="after")
     def _one_way(self) -> Period:
@@ -134,7 +144,8 @@ class Period(BaseModel):
 
     @property
     def is_recurring(self) -> bool:
-        return self.weeks is None and self.from_week is None and self.to_week is None and self.relative is None
+        return (self.weeks is None and self.from_week is None and self.to_week is None and self.relative is None
+                and not self.except_weeks and self.parity is None)
 
 
 class Who(BaseModel):
@@ -153,6 +164,7 @@ class ClassRef(BaseModel):
     group: str | None = None
     day: Day | None = None
     time: Clock | None = None
+    same: str | None = Field(None, description="the id of another item: the class that item is about")
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +184,14 @@ class _Base(BaseModel):
 
 
 JUSTIFICATION = Field("none", description="'stated' when a reason is given; never copy the reason")
+ID = Field(None, description="a label, when another item refers to this one")
 
 
 class Unavailable(_Base):
     """Cannot teach (or a room cannot be used by them) at these times. Always hard."""
 
     kind: Literal["unavailable"] = "unavailable"
+    id: str | None = ID
     who: Who | None = Field(None, description="null means the sender")
     time: TimeSpec = Field(default_factory=TimeSpec)
     period: Period = Field(default_factory=Period)
@@ -188,6 +202,7 @@ class Avoid(_Base):
     """Times they do not want ("no classes before 10", "keep Friday free")."""
 
     kind: Literal["avoid"] = "avoid"
+    id: str | None = ID
     who: Who | None = None
     time: TimeSpec = Field(default_factory=TimeSpec)
     period: Period = Field(default_factory=Period)
@@ -199,6 +214,7 @@ class Only(_Base):
     """The only times they want to teach ("only Mon-Thu"): every class in scope fits inside."""
 
     kind: Literal["only"] = "only"
+    id: str | None = ID
     who: Who | None = None
     time: TimeSpec = Field(default_factory=TimeSpec)
     period: Period = Field(default_factory=Period)
@@ -211,6 +227,7 @@ class Move(_Base):
     class will do; with the timetable, the one already on the day asked for."""
 
     kind: Literal["move"] = "move"
+    id: str | None = ID
     which: ClassRef
     to: TimeSpec = Field(default_factory=TimeSpec)
     period: Period = Field(default_factory=Period)
@@ -232,6 +249,7 @@ class ExtraClass(_Base):
     """A class on top of the weekly ones, copying one of the sender's classes."""
 
     kind: Literal["extra_class"] = "extra_class"
+    id: str | None = ID
     which: ClassRef
     period: Period = Field(default_factory=Period)
     time: TimeSpec = Field(default_factory=TimeSpec)
@@ -242,6 +260,7 @@ class Cancel(_Base):
     """A class not held in the weeks named."""
 
     kind: Literal["cancel"] = "cancel"
+    id: str | None = ID
     which: ClassRef
     period: Period = Field(default_factory=Period)
     justification: JustificationLit = JUSTIFICATION
@@ -266,10 +285,10 @@ class NeedsRoom(_Base):
 
 
 class LoadLimit(_Base):
-    """At most this many teaching hours in a row."""
+    """At most this many teaching hours in a row, for the sender: a limit on a course or a room means nothing
+    to the solver, which counts hours per teacher, so the reader is not asked whose it is."""
 
     kind: Literal["load_limit"] = "load_limit"
-    who: Who | None = None
     max_consecutive: int = Field(ge=1)
     justification: JustificationLit = JUSTIFICATION
 
@@ -304,16 +323,77 @@ class ClashReport(_Base):
     justification: JustificationLit = JUSTIFICATION
 
 
+Measure = Literal["classes_per_day", "hours_per_day", "days_per_week", "gap"]
+Relation = Literal["same_day", "different_day", "right_after", "after", "day_gap", "same_hour", "same_room"]
+
+
+class Limit(_Base):
+    """A limit on the sender's week: at most ``n`` classes a day, hours of teaching a day or teaching days a
+    week, or at least ``n`` free hours between two classes on a day (``gap``). Hours in a row are load_limit;
+    hours a week are not the timetable's to change (out_of_scope)."""
+
+    kind: Literal["limit"] = "limit"
+    id: str | None = ID
+    measure: Measure
+    n: int = Field(ge=1)
+    hard: bool = False
+    justification: JustificationLit = JUSTIFICATION
+
+
+class Relate(_Base):
+    """Classes placed against others: ``which`` against ``other`` (null: the classes ``which`` fits against
+    each other, "no two Algorithms lectures on the same day"), against one of them (``any``: "right after one of
+    its lectures") or each, the relation kept or ruled out (``negate``: "not right after a practical")."""
+
+    kind: Literal["relate"] = "relate"
+    id: str | None = ID
+    which: ClassRef
+    relation: Relation
+    other: ClassRef | None = Field(None, description="null: which's classes against each other")
+    any: bool = Field(False, description="against one of the other classes, not each of them")
+    negate: bool = Field(False, description="the relation must not hold")
+    days: int | None = Field(None, ge=1, description="day_gap: free days between")
+    hard: bool = False
+    justification: JustificationLit = JUSTIFICATION
+
+
+class AnyOf(_Base):
+    """At least one of the items ``of`` names (by id) holds: "Tuesday morning or Thursday afternoon"."""
+
+    kind: Literal["any_of"] = "any_of"
+    of: list[str] = Field(min_length=2)
+    hard: bool = False
+
+
+class Ranked(_Base):
+    """The items ``of`` names in order of preference: the first if it can be, else the next ("ideally Friday,
+    otherwise Thursday")."""
+
+    kind: Literal["ranked"] = "ranked"
+    of: list[str] = Field(min_length=2)
+
+
+class Fallback(_Base):
+    """The first item ``of`` names; if it cannot be met without overriding others, the second instead ("move
+    it to Thursday; if that is not possible, cancel it")."""
+
+    kind: Literal["fallback"] = "fallback"
+    of: list[str] = Field(min_length=2, max_length=2)
+
+
 Intent = Annotated[Unavailable | Avoid | Only | Move | Swap | ExtraClass | Cancel | RoomClosed | NeedsRoom | LoadLimit
-                   | ClubBooking | ClashReport, Field(discriminator="kind")]
+                   | ClubBooking | ClashReport | Limit | Relate | AnyOf | Ranked | Fallback, Field(discriminator="kind")]
 IntentKind = Literal["unavailable", "avoid", "only", "move", "swap", "extra_class", "cancel", "room_closed",
-                     "needs_room", "load_limit", "club_booking", "clash_report"]
+                     "needs_room", "load_limit", "club_booking", "clash_report", "limit", "relate", "any_of",
+                     "ranked", "fallback"]
+CHOICES = (AnyOf, Ranked, Fallback)
 
 REQUEST_TYPE: dict[str, str] = {
     "unavailable": "unavailability", "avoid": "preference", "only": "preference", "move": "preference",
     "swap": "swap", "extra_class": "preference", "cancel": "preference", "room_closed": "room_issue",
     "needs_room": "room_issue", "load_limit": "preference", "club_booking": "club_booking",
-    "clash_report": "clash_report",
+    "clash_report": "clash_report", "limit": "preference", "relate": "preference", "any_of": "preference",
+    "ranked": "preference", "fallback": "preference",
 }
 
 
@@ -412,7 +492,23 @@ def days(instance: Instance, spec: TimeSpec) -> list[str] | None:
 
 
 def weeks(instance: Instance, period: Period, current_week: int | None = None) -> list[int] | None:
-    """The weeks ``period`` names; ``None`` for every week."""
+    """The weeks ``period`` names; ``None`` for every week. Weeks left out (``except_weeks``) and a parity
+    narrow what the rest names; when it names no weeks, the weeks from now on ("on even weeks" is a standing
+    request, like every week, and starts now), or every week when the current week is not known."""
+    n = instance.calendar.weeks
+    named = _named_weeks(instance, period, current_week)
+    if not period.except_weeks and period.parity is None:
+        return named
+    left_out = set(period.except_weeks or [])
+    out = [w for w in (named or range(current_week or 1, n + 1)) if w not in left_out
+           and (period.parity is None or w % 2 == (period.parity == "odd"))]
+    if not out:
+        raise Unresolved("No teaching week is left once those weeks are taken out. Which weeks do you mean?",
+                         "weeks")
+    return out
+
+
+def _named_weeks(instance: Instance, period: Period, current_week: int | None) -> list[int] | None:
     n = instance.calendar.weeks
     if period.relative is not None:
         if current_week is None:
@@ -468,12 +564,16 @@ def _sections(instance: Instance) -> dict[str, set[str]]:
     return out
 
 
-def _named(instance: Instance, course: str, text: str, sections: dict[str, set[str]]) -> str:
+def _named(instance: Instance, course: str, text: str, sections: dict[str, set[str]],
+           taken: frozenset[str] = frozenset()) -> str:
     """``course``, or the one course in the same section whose title the message names when it does not name
-    ``course``'s ("Data Structures" read as Database Systems). An abbreviation ("ML") names no title: kept."""
+    ``course``'s ("Data Structures" read as Database Systems). An abbreviation ("ML") names no title: kept.
+    A title in ``taken`` is another reference's in the same reading ("the Discrete Maths practical" beside "the
+    Software Engineering lecture"): it is accounted for, so it does not stand in for this one."""
     if course not in sections or _titled(instance, text, course):
         return course
-    hits = {c for c in sections if sections[c] & sections[course] and _titled(instance, text, c)}
+    hits = {c for c in sections if sections[c] & sections[course] and _titled(instance, text, c)
+            and instance.course_title(c) not in taken}
     return hits.pop() if len(hits) == 1 else course
 
 
@@ -506,11 +606,12 @@ def _named_titles(instance: Instance, text: str, sections: dict[str, set[str]]) 
     return found
 
 
-def _course(instance: Instance, course: str, text: str, sections: dict[str, set[str]]) -> str | None:
+def _course(instance: Instance, course: str, text: str, sections: dict[str, set[str]],
+            taken: frozenset[str] = frozenset()) -> str | None:
     """``course`` checked against the message (``_named``); an ID that does not exist is the one course whose
     title the message names, or nothing."""
     if course in sections:
-        return _named(instance, course, text, sections)
+        return _named(instance, course, text, sections, taken)
     titles = _named_titles(instance, text, sections)
     hits = [c for c in sections if instance.course_title(c) in titles]
     return hits[0] if len(titles) == 1 and hits else None
@@ -545,15 +646,20 @@ def ground_references(instance: Instance, request: Request, out: IntentOutput) -
     ``who``) the message does not name becomes the one colleague it does."""
     text, sender = request.raw_text.lower(), request.sender_id
     sections = _sections(instance)
+    refs = [(i, name, ref.course) for i, intent in enumerate(out.intents) for name in ("which", "mine", "theirs", "other")
+            if isinstance(ref := getattr(intent, name, None), ClassRef) and ref.course in sections]
     intents = []
-    for intent in out.intents:
+    for i, intent in enumerate(out.intents):
         update = {}
-        for name in ("which", "mine", "theirs"):
+        for name in ("which", "mine", "theirs", "other"):
             ref = getattr(intent, name, None)
             if isinstance(ref, ClassRef):
                 fix = {}
                 if ref.course is not None:
-                    fix["course"] = _course(instance, ref.course, text, sections)
+                    # the titles the reading's other class references name, which this one cannot take
+                    taken = frozenset(instance.course_title(c) for j, n, c in refs if (j, n) != (i, name)
+                                      and c != ref.course)
+                    fix["course"] = _course(instance, ref.course, text, sections, taken)
                 if ref.owner is not None:
                     fix["owner"] = _colleague(instance, ref.owner, text, sender)
                 if any(fix[k] != getattr(ref, k) for k in fix):
@@ -578,16 +684,16 @@ def ground_references(instance: Instance, request: Request, out: IntentOutput) -
 def classes(instance: Instance, ref: ClassRef, sender: str,
             timetable: Mapping[str, Placement] | None = None) -> list[str]:
     """Every session ``ref`` fits (owner defaults to the sender). Each section has its own course of a title,
-    and a message names the title: a course stands for every course of its title the owner teaches, unless
-    the reference names a group. Which section is meant is then up to the rest of the reference (day and
-    time), or a question."""
+    and a message names the title: a course stands for every course of its title the owner teaches, and a
+    group the reference names picks the section (the course's ID may be the title's in another section).
+    Which section is meant is otherwise up to the rest of the reference (day and time), or a question."""
     if ref.session is not None:
         if ref.session not in instance.session_by_id:
             raise Unresolved("I could not find that class. Which one do you mean?", "session")
         return [ref.session]
     owner = ref.owner or sender
     courses = {ref.course} if ref.course is not None else None
-    if ref.course is not None and ref.group is None and ref.course in instance.course_titles:
+    if ref.course is not None and ref.course in instance.course_titles:
         title = instance.course_title(ref.course)
         courses = {s.course for s in instance.sessions if s.faculty == owner
                    and instance.course_title(s.course) == title} or courses
@@ -704,6 +810,16 @@ def _say_time(spec: TimeSpec) -> str:
 
 
 def _say_period(period: Period) -> str:
+    said = _say_named_weeks(period)
+    if period.parity:
+        said = f"{said} in {period.parity} weeks" if said else f"in {period.parity} weeks"
+    if period.except_weeks:
+        w = sorted(period.except_weeks)
+        said += (" " if said else "") + "except " + ("week " if len(w) == 1 else "weeks ") + _and([str(x) for x in w])
+    return said
+
+
+def _say_named_weeks(period: Period) -> str:
     if period.weeks:
         w = sorted(period.weeks)
         return f"in week {w[0]}" if len(w) == 1 else "in weeks " + _and([str(x) for x in w])
@@ -751,6 +867,31 @@ def say(instance: Instance, intent, sender: str) -> str:
             core = core[0].upper() + core[1:]
         case LoadLimit():
             core = f"No more than {intent.max_consecutive} classes in a row for me"
+        case Limit():
+            n = intent.n
+            core = (f"At least {n} free hour{'s' * (n != 1)} between two of my classes" if intent.measure == "gap" else
+                    f"No more than {n} " + {"classes_per_day": "classes a day", "hours_per_day": "hours of teaching a day",
+                                            "days_per_week": "teaching days a week"}[intent.measure] + " for me")
+        case Relate():
+            rel = {"same_day": "on the same day as", "different_day": "on a different day from",
+                   "right_after": "right after", "after": "after, on the same day,", "same_hour": "at the same hour as",
+                   "same_room": "in the same room as",
+                   "day_gap": f"at least {intent.days or 1} free day{'s' * ((intent.days or 1) != 1)} apart from"}
+            each = {"same_day": "on the same day", "different_day": "on different days", "same_hour": "at the same hour",
+                    "same_room": "in the same room",
+                    "day_gap": f"at least {intent.days or 1} free day{'s' * ((intent.days or 1) != 1)} apart"}
+            mine = _say_ref(instance, intent.which, sender)
+            if intent.other is None:
+                core = f"Keep {mine}s {'not ' * intent.negate}{each.get(intent.relation, intent.relation)}"
+            else:
+                core = (f"Keep {mine} {'not ' * intent.negate}{rel[intent.relation]} "
+                        f"{'one of ' * intent.any}{_say_ref(instance, intent.other, sender)}")
+        case AnyOf():
+            core = "Any one of the choices above will do"
+        case Ranked():
+            core = "The choices above in that order of preference"
+        case Fallback():
+            core = "If the first of those cannot be done, the second instead"
         case ClubBooking():
             core = f"Book a room for {intent.club or 'our club'}" + (f" on {FULL_DAY[intent.day]}" if intent.day else "")
         case _:
@@ -781,7 +922,7 @@ def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
                 clocks(spec.before, spec.after, *(spec.at or []))
                 if spec.part:
                     hours.update(range(9, 13) if spec.part == "morning" else range(13, 18))
-        for name in ("which", "mine", "theirs"):
+        for name in ("which", "mine", "theirs", "other"):
             if (ref := getattr(i, name, None)) is not None:
                 days.update([ref.day] if ref.day else [])
                 clocks(ref.time)
@@ -790,6 +931,7 @@ def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
             clocks(i.start, i.end)
         if (p := getattr(i, "period", None)) is not None:
             weeks.update(p.weeks or [])
+            weeks.update(p.except_weeks or [])  # a week said to be left out is used too
             if p.from_week is not None or p.to_week is not None:
                 weeks.update(range(p.from_week or 1, (p.to_week or 52) + 1))
     return days, hours, weeks
@@ -904,6 +1046,7 @@ class Compiled:
     question: str | None = None
     missing: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # what ``checks`` repaired or changed in the reading
+    fallback: list = field(default_factory=list)  # the intents to fall back on when the request cannot be met
 
     @property
     def needs_clarification(self) -> bool:
@@ -918,7 +1061,7 @@ def _drafts(instance: Instance, intent, sender: str, timetable, current_week,
             text: str = "") -> list[DraftConstraint]:
     """Constraint drafts for the intents that are constraints (raises ``Unresolved``); ``text`` is the
     message, which says whether a must about a move is about where it goes or only about leaving."""
-    from .lexicon import placement_firm_only_on_leaving
+    from .lexicon import placement_firm_only_on_leaving, unable
 
     j = intent.justification
     match intent:
@@ -926,6 +1069,9 @@ def _drafts(instance: Instance, intent, sender: str, timetable, current_week,
             kind, sid = _who(intent.who, sender)
             ctype = {"unavailable": "unavailable", "avoid": "avoid", "only": "prefer"}[intent.kind]
             hard = True if isinstance(intent, Unavailable) else intent.hard
+            if ctype != "prefer" and (kind, sid) == ("faculty", sender) and text:
+                # how firm is the reader's; whether a requirement is an unavailability is the message's wording
+                ctype = "unavailable" if hard and unable(text) else "avoid"
             return [DraftConstraint(type=ctype, hard=hard, scope_kind=kind, scope_id=sid,
                                     days=days(instance, intent.time), slots=slots(instance, intent.time),
                                     weeks=weeks(instance, intent.period, current_week), justification=j)]
@@ -958,12 +1104,108 @@ def _drafts(instance: Instance, intent, sender: str, timetable, current_week,
     return []
 
 
+def _tier(request: Request, hard: bool) -> Tier:
+    if not hard:
+        return Tier.PREFERENCE
+    return Tier.COMMITMENT if request.role in (Role.COORDINATOR, Role.EXAM_CELL) else Tier.OPERATIONAL
+
+
+def _owner(request: Request) -> str | None:
+    return request.sender_id if request.role in (Role.FACULTY, Role.HOD, Role.GUEST_FACULTY) else None
+
+
+def _limit_constraint(instance: Instance, intent: Limit, request: Request, index: int) -> Constraint:
+    return Constraint(id=f"C-{request.id[2:]}-{index}", type=ConstraintType.LOAD, hard=intent.hard,
+                      tier=_tier(request, intent.hard), owner=_owner(request), scope=Scope(faculty=request.sender_id),
+                      measure=intent.measure, limit=intent.n, justification=Justification(intent.justification),
+                      source=Source(request=request.id), valid=Validity())
+
+
+def _relate_constraint(instance: Instance, intent: Relate, request: Request,
+                       timetable: Mapping[str, Placement] | None):
+    """The classes a relation places and the ones it places them against, resolved now (a reference that
+    fits nothing is a question); the constraint is made once its index is known."""
+    sender = request.sender_id
+    mine = classes(instance, intent.which, sender, timetable)
+    others = None
+    if intent.other is not None:
+        others = [s for s in classes(instance, intent.other, sender, timetable) if s not in mine]
+        if not others:
+            raise Unresolved("Which classes should it be placed against?", "session")
+    elif len(mine) < 2:
+        raise Unresolved("Which classes should be placed against each other?", "session")
+    owner = instance.session_by_id[mine[0]].faculty
+
+    def make(index: int) -> Constraint:
+        return Constraint(id=f"C-{request.id[2:]}-{index}", type=ConstraintType.RELATE, hard=intent.hard,
+                          tier=_tier(request, intent.hard), owner=_owner(request), scope=Scope(faculty=owner),
+                          sessions=mine, others=others, relation=intent.relation,
+                          amount=intent.days if intent.relation == "day_gap" else None, any_other=intent.any,
+                          negate=intent.negate, justification=Justification(intent.justification),
+                          source=Source(request=request.id), valid=Validity())
+    return make
+
+
+def _member(instance: Instance, item, request: Request, timetable, current_week) -> Constraint:
+    """One choice of an any_of or a ranked: a time, a limit or a relation, as a constraint of its own."""
+    if isinstance(item, Limit):
+        return _limit_constraint(instance, item, request, 0)
+    if isinstance(item, Relate):
+        return _relate_constraint(instance, item, request, timetable)(0)
+    if not isinstance(item, (Unavailable, Avoid, Only, Move, RoomClosed, NeedsRoom)):
+        raise Unresolved("A choice can be between times, limits and how classes sit together. Which do you mean?",
+                         "session")
+    drafts = _drafts(instance, item, request.sender_id, timetable, current_week, request.raw_text)
+    if len(drafts) != 1:
+        raise Unresolved("Each choice has to be one time or one class. Which do you mean?", "session")
+    got = postprocess(instance, request, ParseOutput(request_type=REQUEST_TYPE[item.kind], action="compile",
+                                                     constraints=drafts))
+    if got.refusal or not got.constraints:
+        raise Unresolved(f"One of the choices cannot be used ({got.refusal or '; '.join(got.errors)}). "
+                         "Which do you mean?", "session")
+    return got.constraints[0]
+
+
+def _choice(instance: Instance, intent, items: Mapping[str, object], request: Request, timetable, current_week):
+    """An any_of or a ranked choice: its members compiled now, the constraint made once its index is known."""
+    members = []
+    for ref in intent.of:
+        if ref not in items:
+            raise Unresolved("I could not tell which choices you mean. Could you say them again?", "session")
+        members.append(_member(instance, items[ref], request, timetable, current_week))
+    hard = getattr(intent, "hard", False)
+    ctype = ConstraintType.ANY_OF if isinstance(intent, AnyOf) else ConstraintType.RANKED
+
+    def make(index: int) -> Constraint:
+        cid = f"C-{request.id[2:]}-{index}"
+        return Constraint(id=cid, type=ctype, hard=hard, tier=_tier(request, hard), owner=_owner(request),
+                          scope=Scope(faculty=request.sender_id), source=Source(request=request.id),
+                          members=[m.model_copy(update={"id": f"{cid}.{k}"}) for k, m in enumerate(members, 1)])
+    return make
+
+
+def _bind(intents: list) -> list:
+    """Each class named as another item's (``same``) replaced by that item's class reference."""
+    refs = {i.id: getattr(i, "which", None) for i in intents if getattr(i, "id", None)}
+    out = []
+    for intent in intents:
+        update = {}
+        for name in ("which", "other"):
+            ref = getattr(intent, name, None)
+            if isinstance(ref, ClassRef) and ref.same is not None:
+                bound = refs.get(ref.same)
+                if not isinstance(bound, ClassRef):
+                    raise Unresolved("I could not tell which class you mean. Which one is it?", "session")
+                update[name] = bound
+        out.append(intent.model_copy(update=update) if update else intent)
+    return out
+
+
 def _load_limit(instance: Instance, intent: LoadLimit, request: Request, index: int) -> Constraint:
-    kind, sid = _who(intent.who, request.sender_id)
     owner = request.sender_id if request.role in (Role.FACULTY, Role.HOD, Role.GUEST_FACULTY) else None
     return Constraint(id=f"C-{request.id[2:]}-{index}", type=ConstraintType.MAX_CONSECUTIVE, hard=True,
                       tier=Tier.COMMITMENT if request.role in (Role.COORDINATOR, Role.EXAM_CELL) else Tier.OPERATIONAL,
-                      owner=owner, scope=Scope(**{kind: sid}), limit=intent.max_consecutive,
+                      owner=owner, scope=Scope(faculty=request.sender_id), limit=intent.max_consecutive,
                       justification=Justification(intent.justification), source=Source(request=request.id),
                       valid=Validity())
 
@@ -1001,11 +1243,23 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
     out = ground_references(instance, request, to_ids(instance, out))
     drafts: list[DraftConstraint] = []
     compiled = Compiled(output=out, result=ParseResult(request=request, output=None))
-    limits: list[LoadLimit] = []
+    # constraints made after the drafts, once their index is known: hours in a row, limits, relations, choices
+    direct: list = []
     if out.action == "investigate":
         compiled.clashes = [clash_ref(i, instance) for i in out.intents if isinstance(i, ClashReport)]
     try:
-        for intent in out.intents if out.action == "compile" else []:
+        intents = _bind(out.intents) if out.action == "compile" else []
+        # a fallback's first item is a requirement: a wish is never impossible, so nothing would fall back
+        first = {i.of[0] for i in intents if isinstance(i, Fallback)}
+        intents = [i.model_copy(update={"hard": True}) if getattr(i, "id", None) in first and hasattr(i, "hard")
+                   else i for i in intents]
+        items = {i.id: i for i in intents if getattr(i, "id", None)}
+        # the members of a choice are compiled with it, and a fallback's second item only if the first fails
+        chosen = {x for i in intents if isinstance(i, (AnyOf, Ranked)) for x in i.of}
+        chosen |= {i.of[1] for i in intents if isinstance(i, Fallback)}
+        for intent in intents:
+            if getattr(intent, "id", None) in chosen:
+                continue
             match intent:
                 case ClubBooking():
                     compiled.clubs.append(club_ref(intent, current_week, instance))
@@ -1027,12 +1281,23 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
                     for sid in _cancelled_classes(instance, intent.which, sender, timetable, request.raw_text):
                         compiled.cancels.append(CancelRef(sid, wks))
                 case LoadLimit():
-                    limits.append(intent)
+                    direct.append(lambda index, i=intent: _load_limit(instance, i, request, index))
+                case Limit():
+                    direct.append(lambda index, i=intent: _limit_constraint(instance, i, request, index))
+                case Relate():
+                    direct.append(_relate_constraint(instance, intent, request, timetable))
+                case AnyOf() | Ranked():
+                    direct.append(_choice(instance, intent, items, request, timetable, current_week))
+                case Fallback():
+                    if intent.of[0] not in items or intent.of[1] not in items:
+                        raise Unresolved("I could not tell what to do if the first change cannot be made. "
+                                         "Could you say it again?", "session")
+                    compiled.fallback = [items[intent.of[1]]]
                 case _:
                     drafts.extend(_drafts(instance, intent, sender, timetable, current_week, request.raw_text))
     except Unresolved as e:
         compiled.question, compiled.missing = e.question, [e.missing]
-        drafts, limits = [], []
+        drafts, direct, compiled.fallback = [], [], []
         compiled.swaps, compiled.extras, compiled.cancels, compiled.clubs = [], [], [], []
 
     if out.action == "compile" and out.intents and all(isinstance(i, ClubBooking) for i in out.intents):
@@ -1050,9 +1315,16 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
         request_type=out.request_type, action="clarify", missing=compiled.missing,
         clarifying_question=compiled.question)
     compiled.result = postprocess(instance, request, legacy)
+    if legacy.action == "investigate" and legacy.constraints and compiled.result.refusal is None:
+        # constraints beside an extra class ("away on Wednesday; add a make-up class on Friday"): the old format
+        # keeps only the investigation, so they are checked as a compile of their own and kept with it. The
+        # orchestrator splits such a message into its parts; whoever reads the whole reading sees all of it.
+        alone = postprocess(instance, request, legacy.model_copy(update={"action": "compile"}))
+        compiled.result.constraints, compiled.result.refusal = alone.constraints, alone.refusal
+        compiled.result.errors.extend(alone.errors)
     if compiled.result.refusal is None:
-        for i, intent in enumerate(limits, len(drafts) + 1):
-            c = _load_limit(instance, intent, request, i)
+        for i, make in enumerate(direct, len(drafts) + 1):
+            c = make(i)
             if errors := validate_constraint(c, instance):
                 compiled.result.errors.extend(f"{c.id}: {e}" for e in errors)
             elif reason := check_authority(instance, request, c):
@@ -1072,6 +1344,8 @@ def lower(out: IntentOutput, drafts: list[DraftConstraint]) -> ParseOutput:
     if action == "compile" and any(i.kind == "extra_class" for i in out.intents):
         action = "investigate"
     rtype = out.request_type
+    if out.intents and out.intents[0].kind in ("unavailable", "avoid") and drafts:  # as ``_drafts`` decided
+        rtype = "unavailability" if drafts[0].type == "unavailable" else "preference"
     if rtype == "club_booking":  # a club booking has no place in the old format: the first other intent's type
         rtype = next((REQUEST_TYPE[i.kind] for i in out.intents if i.kind != "club_booking"), "out_of_scope")
     return ParseOutput(request_type=rtype, action=action, constraints=drafts, missing=out.missing,

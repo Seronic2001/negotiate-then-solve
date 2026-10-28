@@ -201,7 +201,8 @@ def run_pipeline(sc: Scenario, config: str, shared: ConcessionLedger, agent, sim
                 Role.LAB_INCHARGE if owner else Role.EXAM_CELL)
         cases.append(orch.submit(Request(id=rid, channel=Channel.PORTAL, sender_id=owner or "S-EXAM", role=role,
                                          raw_text=sc.raw_requests.get(rid, ""), received_at=datetime(2026, 8, 3))))
-    for case in sorted(orch.pending(), key=lambda c: c.proposal.version):
+    # a requirement already met has no proposal: confirmed first, it publishes nothing
+    for case in sorted(orch.pending(), key=lambda c: c.proposal.version if c.proposal else 0):
         orch.approve(case.id, "C-TT")
     shared.entries.extend(store.ledger()[before:])
     outcomes = [c.outcome for c in cases if c.outcome is not None]

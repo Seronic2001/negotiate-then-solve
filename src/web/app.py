@@ -327,7 +327,9 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
             if status == S.PUBLISHED:
                 version = done.get("version") if done else None
                 if version is None:
-                    title = "Nothing was changed" if done and done.get("unmet") else "Your request already fits the timetable"
+                    title = ("Nothing was changed" if done and done.get("unmet") else
+                             "Your request was confirmed" if done and done.get("record_only") else
+                             "Your request already fits the timetable")
                     text = case.reply
                 else:
                     who = w.name_of(done.get("approver") or COORDINATOR)
@@ -1105,7 +1107,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(403, str(e)) from None
         except (KeyError, ValueError) as e:
             raise HTTPException(409, str(e)) from None
-        return {"version": v.version, "notified": w.orch.cases[case_id].notices}
+        # None: a requirement the timetable already met, confirmed with nothing to publish
+        return {"version": v.version if v else None, "notified": w.orch.cases[case_id].notices}
 
     @app.post("/api/approvals/{case_id}/reject")
     def reject(case_id: str, body: RejectBody, u: dict = Depends(user)) -> dict:

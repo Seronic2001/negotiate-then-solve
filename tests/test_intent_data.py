@@ -120,3 +120,39 @@ def test_the_scorer_gives_gold_full_marks_and_catches_a_wrong_class(instance):
     timed = [r for r in got["rows"] if "00\"" in json.dumps(r["gold"])]
     assert timed and not any(r["match"] for r in timed)  # a different hour is a different answer
     assert got["by_kind"]["withdraw"]["outcome_match"] == 1.0  # nothing timed to get wrong
+
+
+def test_the_compositional_suite_is_current_and_counts_a_squeezed_reading_as_silently_wrong(instance):
+    from evaluation.compositional import CASES, OUT, rows
+    from evaluation.intents import Reader, score
+
+    built = rows()
+    assert [json.loads(x) for x in OUT.read_text(encoding="utf-8").splitlines()] == built  # rewrite it if not
+    got = score(built, instance, Reader("gold", instance))
+    assert got["summary"]["outcome_match"] == 1.0
+    asks = {kind for kind, _text, gold in CASES if gold["action"] == "clarify"}
+    assert {r["kind"] for r in got["rows"] if r["gold_action"] == "clarify"} == asks  # each gold does what it says
+
+    class Squeezes(Reader):  # what the 4B reader writes for "no more than two classes a day"
+        def read(self, row):
+            return IntentOutput.model_validate({"action": "compile",
+                                                "intents": [{"kind": "load_limit", "max_consecutive": 2}]})
+
+    per_day = [r for r in built if r["kind"] == "limit_per_day"]
+    assert score(per_day, instance, Squeezes("gold", instance))["summary"]["silent_wrong"] == 1.0
+
+
+def test_authored_requests_pass_every_gate_and_ask_only_where_they_should(instance):
+    from evaluation.intents import _context, outcome
+    from language.intent_compiler import format_row
+    from language.intents import compile_intents
+    from training import human, quality
+
+    rows = [format_row(instance, r) for _split, r in human.load(instance, sorted((DATA / "authored").glob("*.jsonl")))]
+    assert len(rows) >= 100 and all(r["annotator"] == "llm-authored" for r in rows)  # never counted as human data
+    assert not any(quality.check(instance, {"train": rows}, held=[]).values())
+    for r in rows:
+        out = IntentOutput.model_validate_json(r["messages"][-1]["content"])
+        request, timetable, week = _context(r)
+        got = outcome(instance, compile_intents(instance, request, out, timetable=timetable, current_week=week))
+        assert (got["action"] == "clarify") == (out.action == "clarify"), r["id"]

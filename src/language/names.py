@@ -113,7 +113,7 @@ def _convert(instance: Instance, out: IntentOutput, to_id: bool) -> IntentOutput
     intents = []
     for intent in out.intents:
         update = {}
-        for name in ("which", "mine", "theirs"):
+        for name in ("which", "mine", "theirs", "other"):
             ref = getattr(intent, name, None)
             if isinstance(ref, ClassRef):
                 update[name] = _ref(instance, ref, to_id)

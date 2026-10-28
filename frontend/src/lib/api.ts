@@ -143,7 +143,8 @@ export const api = {
   autopilot: () => call<Record<string, boolean>>("/autopilot"),
   setAutopilot: (person: string, on: boolean) => post<Record<string, boolean>>("/autopilot", { person, on }),
   approvals: () => call<CaseDetail[]>("/approvals"),
-  approve: (id: string) => post<{ version: number; notified: Record<string, string> }>(`/approvals/${id}/approve`),
+  /** ``version`` is null for a requirement the timetable already met: confirmed, nothing published. */
+  approve: (id: string) => post<{ version: number | null; notified: Record<string, string> }>(`/approvals/${id}/approve`),
   reject: (id: string, reason: string) => post<{ status: string }>(`/approvals/${id}/reject`, { reason }),
   /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
   decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),

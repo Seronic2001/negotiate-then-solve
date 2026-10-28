@@ -66,14 +66,18 @@ from core.solver import TimetableSolver
 from core.validator import validate_constraint, verify_timetable
 from language.corpus import FULL_DAY, ExpectedAction, RequestType, hour
 from language.intents import (
+    AnyOf,
     Avoid,
     ClubRef,
     Compiled,
     IntentOutput,
+    Limit,
     LoadLimit,
     Move,
     NeedsRoom,
     Only,
+    Ranked,
+    Relate,
     RoomClosed,
     Unavailable,
     compile_intents,
@@ -83,6 +87,7 @@ from language.intents import (
 from language.intents import Cancel as CancelIntent
 from language.intents import ClubBooking as ClubIntent
 from language.intents import ExtraClass as ExtraIntent
+from language.intents import Fallback as FallbackIntent
 from language.intents import Swap as SwapIntent
 from language.parsing import ParseResult
 from language.rule_parser import RuleParser, injected, request_part
@@ -92,7 +97,7 @@ from .store import EXTRA_PREFIX, Store
 S = RequestStatus
 CHOICES = 3  # times offered to a sender whose request fits in more than one way
 # intents that become constraints: one message's are solved together, as one change
-CONSTRAINT_INTENTS = (Unavailable, Avoid, Only, Move, RoomClosed, NeedsRoom, LoadLimit)
+CONSTRAINT_INTENTS = (Unavailable, Avoid, Only, Move, RoomClosed, NeedsRoom, LoadLimit, Limit, Relate)
 
 
 class NotAuthorised(PermissionError):
@@ -126,9 +131,14 @@ class Case:
     unused: list[str] = field(default_factory=list)  # what the message says that the reading does not use
 
     def intents(self, kind: type) -> list:
-        """The parsed intents of type ``kind`` (none for a parser without intents)."""
+        """The parsed intents of type ``kind`` (none for a parser without intents) that the request does now: not
+        the members of a choice, which go with it, nor a fallback's second item, which waits on the first."""
         out = self.compiled.output if self.compiled is not None else None
-        return [i for i in out.intents if isinstance(i, kind)] if out is not None and out.action == "compile" else []
+        if out is None or out.action != "compile":
+            return []
+        held = {x for i in out.intents if isinstance(i, (AnyOf, Ranked)) for x in i.of}
+        held |= {i.of[1] for i in out.intents if isinstance(i, FallbackIntent)}
+        return [i for i in out.intents if isinstance(i, kind) and (getattr(i, "id", None) not in held)]
 
     @property
     def id(self) -> str:
@@ -462,6 +472,9 @@ class Orchestrator:
         intents = c.output.intents
         if len(intents) < 2:
             return None
+        if any(isinstance(i, (AnyOf, Ranked, FallbackIntent)) or getattr(getattr(i, "which", None), "same", None)
+               or getattr(getattr(i, "other", None), "same", None) for i in intents):
+            return None  # a program: its items refer to each other, so it is read and solved whole
         base = self.store.current_version()
         timetable = _regular(base.assignment) if base else {}
         week = self.current_week() if self.current_week else None
@@ -874,12 +887,9 @@ class Orchestrator:
                 and self._already_met(case, base, week)):
             # checked directly, not by the solver: a solve cut short by its time limit could move
             # classes nobody asked to move
-            case.reply = ("Your request already fits the timetable, so nothing needed to move. "
-                          "It is recorded, and later changes will keep to it.")
             self._advance(case, S.SOLVED, feasible=True, already_met=True)
             self._advance(case, S.FAIRNESS_AUDITED)
-            self._advance(case, S.PUBLISHED, version=None, moved=[])
-            return case
+            return self._already_fits(case)
 
         t = time.perf_counter()
         published = self.store.current_version(week) or self.store.current_version()
@@ -909,11 +919,8 @@ class Orchestrator:
             moved = moved_sessions(baseline or {}, assignment)
         unmet = outcome.notices.get(case.request.sender_id)
         if live and not moved and not cancelled and not unmet and not more_to_do:
-            # the timetable already meets it: nothing to approve or publish, but it stays in force
-            case.reply = ("Your request already fits the timetable, so nothing needed to move. "
-                          "It is recorded, and later changes will keep to it.")
-            self._advance(case, S.PUBLISHED, version=None, moved=[])
-            return case
+            # the timetable already meets it: nothing to publish, but it stays in force
+            return self._already_fits(case)
         if live and not moved and not cancelled and not more_to_do:
             # a wish the solver left unmet rather than move other classes: nothing changes, so there is
             # nothing for the coordinator to approve; the wish stays in force for later changes
@@ -932,6 +939,20 @@ class Orchestrator:
                       **({"more": [v.version for v in case.more]} if case.more else {}))
         return case
 
+    def _already_fits(self, case: Case) -> Case:
+        """Nothing moves, but the request stays in force for every later change. A wish is recorded as it is;
+        a requirement (a hard constraint) waits for the coordinator, who sees how it was read: a misreading
+        recorded unseen ("two classes a day" read as two hours in a row) would bind the timetable from then on."""
+        if any(c.hard for c in case.constraints):
+            case.reply = ("Your request already fits the timetable, so nothing needs to move. It adds a requirement "
+                          "that later changes must keep to, so the timetable office confirms it first.")
+            self._advance(case, S.AWAITING_APPROVAL, version=None, moved=[], record_only=True)
+            return case
+        case.reply = ("Your request already fits the timetable, so nothing needed to move. "
+                      "It is recorded, and later changes will keep to it.")
+        self._advance(case, S.PUBLISHED, version=None, moved=[])
+        return case
+
     def _negotiate_week(self, week: int, neg: Negotiator, on_event):
         """Settle the request in one further week: (week, outcome, the version it builds on, the repaired
         assignment, the classes it moves, the classes not held that week). Nothing is recorded yet."""
@@ -948,7 +969,10 @@ class Orchestrator:
         return week, outcome, base, assignment, moved_sessions(baseline, assignment), set(cancelled)
 
     def _escalate(self, case: Case, outcome, week: int | None = None) -> Case:
-        """Until someone decides, the request is not in force: later requests must not run into it."""
+        """Until someone decides, the request is not in force: later requests must not run into it. A request
+        with a fallback ("if that is not possible, cancel it") falls back instead of waiting for a decision."""
+        if case.compiled is not None and case.compiled.fallback and not case.routing.get("fell_back"):
+            return self._fall_back(case, outcome, week)
         case.outcome = outcome
         if case.status == S.COMPILED:
             self._advance(case, S.SOLVED, feasible=False)
@@ -959,6 +983,25 @@ class Orchestrator:
                       + (f" The conflict is in week {week}." if week is not None else ""))
         self._advance(case, S.ESCALATED, to=outcome.escalation.to, reason=outcome.escalation.reason,
                       brief=outcome.escalation.text, **({"week": week} if week is not None else {}))
+        return case
+
+    def _fall_back(self, case: Case, outcome, week: int | None) -> Case:
+        """What was asked first could only be met by overriding others: it is taken out of force and the
+        fallback goes through the pipeline as a request of its own, as a part of a split message does."""
+        case.outcome = outcome
+        self._withdraw(case)
+        sender = case.request.sender_id
+        intents = [i.model_copy(update={"id": None}) for i in case.compiled.fallback]
+        words = " ".join(say(self.instance, i, sender) for i in intents)
+        case.routing["fell_back"] = True
+        child = case.request.model_copy(update={"id": f"{case.id}-1", "raw_text": words, "status": S.RECEIVED})
+        done = self.submit(child, form=IntentOutput(action="compile", intents=intents))
+        done.routing["part_of"] = case.id
+        case.parts = [done.id]
+        case.reply = ("What you asked first could not be done without overriding others"
+                      + (f" in week {week}" if week is not None else "")
+                      + f", so your fallback goes ahead instead as {done.id} ({words}) {done.reply}")
+        self._advance(case, S.ANSWERED, parts=case.parts, fell_back=True)
         return case
 
     def _record(self, case: Case, outcome) -> None:
@@ -1218,6 +1261,18 @@ class Orchestrator:
         case = self.cases[case_id]
         if why := self.withdrawable(case):
             raise ValueError(f"case {case_id} cannot be withdrawn: {why}")
+        own, restored, refunded = self._undo(case)
+        # people who gave something up for it hear that it no longer stands
+        case.notices = {p: f"{case.id} was withdrawn by its sender; what you agreed to for it no longer applies."
+                        for p in sorted(set(refunded))}
+        case.reply = "You withdrew this request. The timetable is as it was before it."
+        self._advance(case, S.WITHDRAWN, by=by, constraints=sorted(own), restored=restored,
+                      refunded=sorted(set(refunded)), version=case.proposal.version if case.proposal else None)
+        return case
+
+    def _undo(self, case: Case) -> tuple[set[str], list[str], list[str]]:
+        """Switch off what ``case`` set in motion (see ``withdraw``): its constraints, ids of the ones
+        restored and the people whose concessions were refunded."""
         solved = case.status in (S.AWAITING_APPROVAL, S.PUBLISHED)
         own = set(self.store.request_constraints(case.id)) | {c.id for c in case.constraints}
         for cid in own:
@@ -1234,15 +1289,9 @@ class Orchestrator:
             for e in case.outcome.concessions:
                 if self.store.remove_concession(e):
                     refunded.append(e.stakeholder)
-        # people who gave something up for it hear that it no longer stands
-        case.notices = {p: f"{case.id} was withdrawn by its sender; what you agreed to for it no longer applies."
-                        for p in sorted(set(refunded))}
-        case.reply = "You withdrew this request. The timetable is as it was before it."
-        self._advance(case, S.WITHDRAWN, by=by, constraints=sorted(own), restored=restored,
-                      refunded=sorted(set(refunded)), version=case.proposal.version if case.proposal else None)
-        return case
+        return own, restored, refunded
 
-    # -- human approval (L6) -------------------------------------------------------------
+    # -- human approval (L6)-------------------------------------------------------------
 
     def pending(self) -> list[Case]:
         return [c for c in self.cases.values() if c.status == S.AWAITING_APPROVAL]
@@ -1295,13 +1344,20 @@ class Orchestrator:
         parent = case.proposal.parent if case.proposal else None
         return next((c for c in self.pending() if c.proposal is not None and c.proposal.version == parent), None)
 
-    def approve(self, case_id: str, approver: str) -> TimetableVersion:
+    def approve(self, case_id: str, approver: str) -> TimetableVersion | None:
+        """Publish the case's proposal. A requirement the timetable already met (``_already_fits``) has no
+        proposal: it is confirmed and stays in force, and None is returned."""
         if approver not in self.approvers:
             self.store.log(case_id, "approval_refused", approver=approver)
             raise NotAuthorised(f"{approver} may not approve timetable changes")
         case = self.cases[case_id]
-        if case.status != S.AWAITING_APPROVAL or case.proposal is None:
+        if case.status != S.AWAITING_APPROVAL:
             raise ValueError(f"case {case_id} is not awaiting approval ({case.status.value})")
+        if case.proposal is None:
+            case.reply = ("The timetable office confirmed it. Nothing needed to move; later changes will "
+                          "keep to it.")
+            self._advance(case, S.PUBLISHED, version=None, moved=[], approver=approver, record_only=True)
+            return None
         if under := self.builds_on(case):
             raise ValueError(f"this change builds on {under.id}, which is still waiting for approval: "
                              f"approve or reject {under.id} first")
@@ -1421,6 +1477,15 @@ class Orchestrator:
         if approver not in self.approvers:
             raise NotAuthorised(f"{approver} may not review timetable changes")
         case = self.cases[case_id]
+        if case.status == S.AWAITING_APPROVAL and case.proposal is None:
+            # a requirement that moved nothing: there is nothing to negotiate again, so it is declined
+            own, restored, _ = self._undo(case)
+            why = f": {reason.strip().rstrip('.')}." if reason.strip() else "."
+            case.reply = (f"The timetable office did not confirm this{why} It is not in force; send it again in "
+                          "other words if it was misread.")
+            self._advance(case, S.DENIED, rejected_by=approver, reason=reason, constraints=sorted(own),
+                          restored=restored)
+            return
         self._advance(case, S.NEGOTIATING, rejected_by=approver, reason=reason)
 
     def _notices(self, g, change: str, moved: list[str], v: TimetableVersion) -> dict[str, str]:

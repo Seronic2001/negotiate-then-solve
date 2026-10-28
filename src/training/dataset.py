@@ -77,8 +77,8 @@ def stored_rows(instance: Instance, spec: dict) -> list[tuple[str, dict]]:
     """``(split, row)`` from files: migrated, in the current prompt, labelled by the project's rule for moves
     when ``relabel`` (rows made by code under an older rule), never for rows people labelled."""
     paths = sorted(Path(p) for pattern in spec["paths"] for p in glob.glob(pattern))
-    if spec.get("kind") == "human":
-        return [(split, format_row(instance, r)) for split, r in human.load(instance, paths)]
+    if spec.get("kind") in ("human", "authored"):  # labelled messages, written by people or by a model (authored)
+        return [(split, {**format_row(instance, r), "source": spec["kind"]}) for split, r in human.load(instance, paths)]
     out = []
     for p in paths:
         for line in p.read_text(encoding="utf-8").splitlines():

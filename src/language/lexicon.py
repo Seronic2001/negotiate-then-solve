@@ -37,7 +37,7 @@ VOCABULARY = (
     "before", "after", "between", "until", "classes", "lecture", "lectures", "tutorial", "tutorials",
     "practical", "practicals", "session", "sessions", "available", "unavailable", "schedule", "scheduled",
     "possible", "prefer", "please", "cancel", "cancelled", "extra", "swap", "week", "weeks", "next",
-    "teach", "teaching", "instead", "rather", "anymore", "anytime", "except", "every",
+    "teach", "teaching", "instead", "rather", "anymore", "anytime", "except", "every", "conference",
 )
 _TOKEN = re.compile(r"[a-z]+(?:'[a-z]+)?|\d+(?::\d\d)?|[^\sa-z\d]", re.IGNORECASE)
 _WORD = re.compile(r"[a-z]+(?:'[a-z]+)?|\d+", re.IGNORECASE)
@@ -146,7 +146,8 @@ def _says(ws: list[str], vocabulary: tuple[str, ...]) -> bool:
 # words that name weeks or a stretch of the term; a typo still counts, so a period is never dropped for one
 _SPAN = ("week", "weeks", "fortnight", "semester", "term", "today", "tomorrow", "tonight", "until", "till",
          "onwards", "onward", "rest", "remainder", "remaining", "left", "january", "february", "march", "april",
-         "june", "july", "august", "september", "october", "november", "december")
+         "june", "july", "august", "september", "october", "november", "december", "fortnightly",
+         "alternate", "alternating", "biweekly")
 _FROM_NOW = ("this", "next", "coming", "following")
 _DAY = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _WHOLE = ("whole", "entire", "throughout", "all", "full", "duration")
@@ -188,6 +189,23 @@ def placement_firm_only_on_leaving(text: str) -> bool:
     if not (_LEAVE.search(low) or _CONFLICT.search(low)):
         return False
     return not necessary(_LEAVE.sub(" ", low))
+
+
+# the sender cannot be there: a reason that takes them away, or saying so ("can't", "unavailable", "on leave")
+_UNABLE = re.compile(
+    r"\b(can't|cannot|can not|unable|not able|won't be (able|available|around|in)|will not be (able|available)|"
+    r"not available|unavailable|not free|away|on leave|leave|out of (station|town)|travel(l?ing)?|conference|"
+    r"duty|not (be )?(around|on campus|in)|sick|medical|hospital|surgery|appointment|workshop|seminar|talk|"
+    r"committee|meeting|exam|invigilat\w*|clinic|field ?work|visit\w*|busy|tied up|commitment|engaged|"
+    r"miss|missing)\b", re.IGNORECASE)
+
+
+def unable(text: str) -> bool:
+    """Whether a message that rules times out says the sender cannot be there (or why not), rather than only
+    that they want those times kept free ("no Monday mornings for me, a hard rule"). This, and not the
+    reader's choice between ``unavailable`` and ``avoid``, decides whether a requirement is an unavailability:
+    the tiers rank an unavailability above an operational requirement, which is policy, not reading."""
+    return _UNABLE.search(normalise(text)) is not None
 
 
 def placement_is_hard(text: str) -> bool:

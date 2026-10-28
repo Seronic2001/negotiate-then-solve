@@ -105,12 +105,15 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
   const teachers = [...new Set(diff.map((d) => d.faculty_name ?? "").filter(Boolean))];
   const sections = [...new Set(diff.flatMap((d) => d.groups.map((g) => g.replace("G-", "").replace(/^0/, ""))))].sort((a, b) => Number(a) - Number(b));
   const o = c.outcome;
+  const confirmOnly = !c.proposal; // already fits: approving keeps the requirement in force, nothing moves
 
   const approve = async () => {
     setBusy("approve");
     try {
       const r = await api.approve(c.id);
-      await onDone(`Published version ${r.version}. Notified ${Object.keys(r.notified).length} affected people.`);
+      await onDone(r.version === null
+        ? "Confirmed. The requirement is in force; nothing moved."
+        : `Published version ${r.version}. Notified ${Object.keys(r.notified).length} affected people.`);
     } finally {
       setBusy(null);
     }
@@ -126,8 +129,10 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
             <Link to={`/requests/${c.id}`} className="font-mono text-brand hover:underline">
               {c.id}
             </Link>{" "}
-            · {c.sender_name} · {ago(c.received_at)} · proposes version {c.proposal?.version}
-            {c.proposal?.week ? ` for week ${c.proposal.week}` : " (semester timetable)"}
+            · {c.sender_name} · {ago(c.received_at)} ·{" "}
+            {confirmOnly
+              ? "already fits the timetable; confirm the requirement it adds"
+              : <>proposes version {c.proposal?.version}{c.proposal?.week ? ` for week ${c.proposal.week}` : " (semester timetable)"}</>}
           </p>
           {!!c.proposal?.more?.length && (
             <p className="mt-1 text-[12.5px] text-ink-2">
@@ -185,7 +190,7 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
           </Button>
           <Button variant="primary" icon={BadgeCheck} loading={busy === "approve"} onClick={approve}
                   disabled={!!c.proposal?.builds_on}>
-            Approve and publish
+            {confirmOnly ? "Confirm" : "Approve and publish"}
           </Button>
         </div>
       </div>
@@ -196,7 +201,7 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
               <input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Why? The case goes back to negotiation with your note."
+                placeholder={confirmOnly ? "Why? The sender sees your note; the requirement is dropped." : "Why? The case goes back to negotiation with your note."}
                 className="h-10 flex-1 rounded-md border border-line bg-panel px-3 text-sm outline-none focus:border-bad/50"
               />
               <Button
@@ -206,7 +211,7 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
                   setBusy("reject");
                   try {
                     await api.reject(c.id, reason);
-                    await onDone("Sent back to negotiation.");
+                    await onDone(confirmOnly ? "Declined; the requirement is not in force." : "Sent back to negotiation.");
                   } finally {
                     setBusy(null);
                   }

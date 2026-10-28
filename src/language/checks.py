@@ -37,6 +37,8 @@ from .corpus import FULL_DAY, hour
 from .intents import (
     ClassRef,
     IntentOutput,
+    Limit,
+    LoadLimit,
     Move,
     NeedsRoom,
     Period,
@@ -122,7 +124,7 @@ def repair_raw(data: dict) -> tuple[dict, list[str]]:
             if intent.get(key) is not None and (c := clock(intent[key])) != intent[key]:
                 notes.append(f"intent {i}: {key} {intent[key]!r} read as {c}")
                 intent[key] = c
-        for ref in ("which", "mine", "theirs"):
+        for ref in ("which", "mine", "theirs", "other"):
             r = intent.get(ref)
             if isinstance(r, dict):
                 if r.get("day") is not None:
@@ -179,7 +181,9 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
             if q and question is None:
                 question, missing = q, ["slots"]
         intents.append(intent)
-    if question is None and intents and not any(map(_about_classes, intents)):
+    # a limit on the week is about all of it by its nature: naming a course says why, not which classes
+    if (question is None and intents and not any(map(_about_classes, intents))
+            and not all(isinstance(i, (Limit, LoadLimit)) for i in intents)):
         named = _own_courses_named(instance, text, sender)
         if len(named) == 1:
             notes.append(f"the reading is about all your times, in a message about {named[0]}")
@@ -198,7 +202,7 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
 def _about_classes(intent) -> bool:
     """Whether ``intent`` is about particular classes (or courses), not about the sender's times."""
     who = getattr(intent, "who", None)
-    return (any(isinstance(getattr(intent, n, None), ClassRef) for n in ("which", "mine", "theirs"))
+    return (any(isinstance(getattr(intent, n, None), ClassRef) for n in ("which", "mine", "theirs", "other"))
             or (who is not None and who.kind in ("course", "session"))
             or intent.kind in ("clash_report", "club_booking", "room_closed"))
 

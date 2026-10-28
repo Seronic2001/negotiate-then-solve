@@ -78,11 +78,18 @@ room for a named room, room_kind for a kind of room)
 who: leave out for the sender. time: days, and clock times HH:MM: before and/or after (between: both),
 at, or part (morning, afternoon, lunch). period: weeks, from_week/to_week, this_week/next_week (count: how
 many weeks from it, "the next three weeks" is next_week count 3), or rest_of_semester; leave out when it is
-every week. A class (which, mine, theirs): what the message says about it: course (its title), kind, group,
-and day and time where it is now; owner (the colleague's name) when it is someone else's. A move's "to" is
-where it should go.
+every week. except_weeks: weeks left out ("from now on, except week 16"); parity: odd or even ("on even
+weeks", "every other week" from an odd or even week). A class (which, mine, theirs): what the message says
+about it: course (its title), kind, group, and day and time where it is now; owner (the colleague's name)
+when it is someone else's. A move's "to" is where it should go.
 hard: true only when the message says it must be so (cannot, must, needs, no other time works) or a
-conflict rules out where a class is now; false for wishes and plain requests ("hard for me" is a wish)."""
+conflict rules out where a class is now; false for wishes and plain requests ("hard for me" is a wish).
+limit: at most n classes_per_day, hours_per_day or days_per_week, or at least n free hours between classes
+(gap); hours a week are out_of_scope. relate: which against other (null: which's classes against each other),
+relation same_day | different_day | right_after | after | day_gap (days) | same_hour | same_room, any (one of
+the others), negate ("not right after"). Give an item an id when another refers to it: a class as another
+item's is {"same": id}; any_of (one of, "Tuesday morning or Thursday afternoon"), ranked (first choice,
+then the next) and fallback (the first; if it cannot be done, the second) list ids in "of"."""
 
 # The prompt each version of the vocabulary was trained with: an adapter is read with its own (it says which
 # in adapters.toml, ``schemas``), and its answer migrated to the current version (``language.migrations``).
@@ -118,8 +125,9 @@ at, or part (morning, afternoon, lunch). period: weeks, from_week/to_week, or th
 leave out when it is every week. A class (which, mine, theirs): what the message says about it: course,
 kind, group, and day and time where it is now; owner when it is someone else's.
 hard: true for cannot/must/needs, false for wishes."""
-INTENT_PROMPTS: dict[int, str] = {1: INTENT_PROMPT_V2, 2: INTENT_PROMPT_V2, 3: INTENT_PROMPT_V3,
-                                  SCHEMA_VERSION: INTENT_PROMPT}
+# 4 on share the short prompt: the vocabulary is in the adapter's weights, and 5 and 6 only added to it
+INTENT_PROMPTS: dict[int, str] = {1: INTENT_PROMPT_V2, 2: INTENT_PROMPT_V2, 3: INTENT_PROMPT_V3, 4: INTENT_PROMPT,
+                                  5: INTENT_PROMPT, SCHEMA_VERSION: INTENT_PROMPT}
 
 TOPIC = {RequestType.PREFERENCE: "avoid", RequestType.UNAVAILABILITY: "unavailable",
          RequestType.ROOM_ISSUE: "room_closed", RequestType.SWAP: "swap"}
@@ -333,8 +341,8 @@ def intents_from(instance: Instance, request: Request, targets: list[Constraint]
         elif c.type == ConstraintType.REQUIRE_ROOM and c.scope.session:
             out.append(NeedsRoom(which=class_ref(instance, c.scope.session, sender),
                                  equipment=c.room.equipment if c.room else [], justification=j))
-        elif c.type == ConstraintType.MAX_CONSECUTIVE:
-            out.append(LoadLimit(who=_who(c, sender), max_consecutive=c.limit, justification=j))
+        elif c.type == ConstraintType.MAX_CONSECUTIVE and _who(c, sender) is None:
+            out.append(LoadLimit(max_consecutive=c.limit, justification=j))
         else:
             raise ValueError(f"no intent for {c.type.value} on {c.scope}")
     return out
@@ -357,8 +365,14 @@ def label_placements(out: IntentOutput, text: str) -> IntentOutput:
 
 
 def _same(a: list[Constraint], b: list[Constraint]) -> bool:
+    """The same constraints, as far as a reading decides them: whether a requirement to keep times free is an
+    unavailability (and so its tier) is policy's call from the wording (``lexicon.unable``), so a label is
+    not dropped when that rule changes."""
     def key(c: Constraint):
-        return c.model_dump(mode="json", exclude={"id"})
+        d = c.model_dump(mode="json", exclude={"id", "tier"})
+        if d["type"] == ConstraintType.UNAVAILABLE.value and d["hard"] and not c.scope.room:
+            d["type"] = ConstraintType.AVOID.value
+        return d
     return sorted(map(str, map(key, a))) == sorted(map(str, map(key, b)))
 
 
