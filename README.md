@@ -339,11 +339,55 @@ message describes them) instead of slot numbers and IDs, and explanations are
 written from the readable facts.
 
 ```sh
-uv run python -m language.intent_compiler                 # data/compiler-intents/: corpus gold as intents + new intents
+uv run python -m training.dataset build                    # data/compiler-intents/ + data/suites/ from data/recipes/intents.toml
 uv run python -m training.distill messages --messages messages-readable   # facts with their plain text; no API
 uv run python -m training.distill explain --readable --messages messages-readable --sample 600
-uv run python -m training.distill export --readable --compiler-dir data/compiler-intents --out data/multitask-readable --max-per-task 1100   # keeps all 1062 intent examples
+uv run python -m training.distill export --readable --compiler-dir data/compiler-intents --out data/multitask-readable --max-per-task 1100 --cap compile=4000
+uv run python -m evaluation.suites --parser local --local URL --local-model <model>   # every suite, onto runs/leaderboard.jsonl
 ```
+
+**Intent data that later runs build on** (`training.dataset`). A recipe
+(`data/recipes/*.toml`) names the sources: the first data
+(`intent_compiler.base_rows`, which `python -m language.intent_compiler` still
+writes alone), the registered generators (`language.intent_generators`, each
+with wordings held out for an evaluation suite), stored rows (mined failures,
+messages people labelled in `data/human/` by `docs/labelling.md`), and noisy
+twins of training rows. Every row records its origin and the vocabulary
+version it was written in (`intents.SCHEMA_VERSION`); stored rows are brought
+up to date by `language.migrations`, so old labels keep their meaning when a
+default changes. Every row passes `training.quality`'s gates (canonical
+target, resolves, follows the labelling rule, no copy of a held-out request),
+and the test split is frozen by fingerprint in the recipe. `manifest.json`
+beside the data records the recipe, code version and fingerprints; the
+export and the 4B notebook carry it into the adapter's manifest. To extend:
+copy the recipe, add a generator to `REGISTRY` or rows to `data/human/`, build,
+and update the adapter with `INIT_FROM` (it reads only rows it hasn't seen).
+`evaluation.robustness` and the `test-typo`/`test-noisy` suites measure noisy
+English; `--no-checks` scores the raw reading without `language.checks`.
+
+**What the model does and what the code does.** Since schema 4 (`intents-v6`)
+the model only reads: it writes courses, colleagues, sections and rooms as the
+message names them, and `language.names` finds their IDs, so the prompt carries
+no directory (the calendar, the week and the sender: a median prompt of 300
+characters instead of 1,800). Every reading is then checked against the message
+(`language.checks`, `intents.ground_references`): an ID must exist and name
+what the message names, a period the message does not give is every week
+("this week" on a booking that names no week, "the rest of the semester" for
+"the whole semester"), and a reading that leaves out the class the message is
+about is asked about rather than acted on. A rule belongs there, not in more
+training rows, when it holds for every gold reading (check it on all of
+`data/compiler-intents` and `data/suites` first). Models trained on schema 3
+keep their prompt: name them in the registry's `[schemas]`
+(`adapters-lora.toml`), or pass `--schema 3` with `--local-model`.
+
+The fine-tuned reader's system prompt only names the task (43 tokens); the
+whole vocabulary (`INTENT_INSTRUCTIONS`) goes to readers not trained on it:
+Gemini, or a base model with `--zero-shot`. A training row is now ~210 tokens
+(1,445 in schema 3) for a ~35-token answer, so an epoch of the intents data is
+0.57M tokens instead of 3.9M. With that and `PRECISION = "fp16"` (fp32 on a T4
+runs at a fraction of its fp16 speed, and was most of the 22-hour runs), the 4B
+notebook trains `nts-intents-v6` from the base with `CURVE = [1/3, 2/3, 1.0]`:
+an adapter after each epoch, so one run says how many epochs are needed.
 
 A model trained on it is used with `NTS_INTENTS=1` beside `--parser local`; the
 orchestrator then routes swaps, extra classes, cancellations and withdrawals by
@@ -393,6 +437,49 @@ across both GPUs (`device_map="auto"`). Only one GPU computes at a time, so expe
 2-3x the 2B run: the TRIAL run projects the full length against Kaggle's 12-hour
 limit, and training checkpoints and resumes across sessions. It exports GGUF with
 llama.cpp's converter (Q5_K_M and Q4_K_M).
+
+### One base, an adapter per task
+
+Retraining one model on every task for each change takes 14+ hours, and the
+learning curve showed it is not needed: the policy and reply scores at half the
+reading equal those at all of it, and only reading requests (`compile`, half
+the training tokens) gains from the rest. So the local model can be the base
+Qwen3.5-4B with a LoRA adapter per group of tasks, named in `adapters.toml`:
+
+```toml
+base = "Qwen3.5-4B-Base-Q8_0"
+[adapters]
+nts-intents = ["compile"]
+nts-policy = ["policy"]
+nts-negotiation = ["reply", "explain"]
+[domains.iitx]          # another institute: its own policy adapter, the rest shared
+policy = "iitx-policy"
+```
+
+- **Train one adapter.** `train_multigpu_kaggle.ipynb` takes `ADAPTER` and
+  `TASKS`, keeps only those rows of the uploaded multitask data and exports
+  the adapter as a LoRA GGUF (tens of MB, minutes), not a merged model.
+- **Update instead of retrain.** `INIT_FROM` (the earlier version's output)
+  starts from its weights and reads only the rows it has not seen
+  (`trained.json` holds a hash of each row read, so a changed row is new) and
+  `REPLAY` times as many it has. Mined rows (`training.mine`) or a new intent
+  cost minutes of training, not a full run.
+- **Serve them together**, none applied until a request asks:
+
+  ```sh
+  llama-server -m Qwen3.5-4B-Base-Q8_0.gguf --lora nts-intents.gguf,nts-policy.gguf,nts-negotiation.gguf \
+    --lora-init-without-apply --jinja -ngl 99 -c 8192 --port 8080
+  ```
+
+  The client finds each adapter in the server's `/lora-adapters` and switches
+  it on per request (`"lora"`). A server that serves an adapter as a model of
+  its own name (a router preset of the base with the adapter, or the
+  notebook's `MERGE` GGUF) works too.
+- **Use them:** `NTS_ADAPTERS=adapters.toml` (and `NTS_DOMAIN=<name>`) for the
+  web app; `--adapters adapters.toml` or `--adapter <name>` for the `--local`
+  evaluations and `training.mine`. Answers are cached per adapter, so an
+  unchanged adapter's evaluations rerun from the cache; put a version in each
+  adapter's name (`nts-policy-v2`).
 
 ## Data
 

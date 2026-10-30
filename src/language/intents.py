@@ -11,7 +11,12 @@ those, deterministically:
 * ``Period`` -> weeks: explicit weeks, ranges, "from week 9", "next week"
   (against the current week);
 * ``ClassRef`` -> a session ID: by ID, or by owner, course, kind, group and
-  where the class is now in the timetable ("my Thursday 10 am lecture").
+  where the class is now in the timetable ("my Thursday 10 am lecture");
+* IDs are checked against the message (``ground_references``): an ID must
+  exist and name what the message names. Each section has its own course of
+  a title, and a parser that picks the right title in the wrong section, a
+  look-alike title, an ID that does not exist or the wrong colleague is
+  corrected by what the message names and who sent it.
 
 Anything that resolves to nothing, or to more than one thing where one is
 needed, becomes a clarifying question rather than a guess. Intents that
@@ -26,6 +31,7 @@ format, so parsers that emit intents feed everything built on that format.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
@@ -55,6 +61,17 @@ from .parsing import (
     check_authority,
     postprocess,
 )
+
+# The version of the intent vocabulary. A stored reading (training rows, mined failures, labelled messages)
+# carries the version it was written in; ``language.migrations`` brings it to this one. Bump it when a
+# reading's meaning changes (a default, a field's sense) and add the migration; an added optional field
+# needs a bump too, so that older code is not handed rows it cannot read.
+#   1  the first intents
+#   2  a move without ``hard`` is a wish (it was a requirement)
+#   3  periods of several weeks from now (``count``, ``rest_of_semester``); a kind of room for a club
+#   4  courses, colleagues, sections and rooms by name as the message gives them (``language.names``), and
+#      no directory in the prompt; an ID still reads as itself
+SCHEMA_VERSION = 4
 
 Day = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 Clock = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="24-hour HH:MM")]
@@ -95,12 +112,15 @@ class TimeSpec(BaseModel):
 
 
 class Period(BaseModel):
-    """Semester weeks. Empty means every week (a recurring request)."""
+    """Semester weeks. Empty means every week (a recurring request). Weeks counted from now are
+    ``relative`` with ``count``: "the next three weeks" is next_week with count 3, "this week and next"
+    this_week with count 2, "for the rest of the semester" rest_of_semester."""
 
     weeks: list[int] | None = None
     from_week: int | None = None
     to_week: int | None = None
-    relative: Literal["this_week", "next_week"] | None = None
+    relative: Literal["this_week", "next_week", "rest_of_semester"] | None = None
+    count: int | None = Field(None, ge=1, description="with this_week/next_week: how many weeks from it")
 
     @model_validator(mode="after")
     def _one_way(self) -> Period:
@@ -108,6 +128,8 @@ class Period(BaseModel):
                 self.relative is not None]
         if sum(ways) > 1:
             raise ValueError("give weeks, a from/to range or a relative week, not several")
+        if self.count is not None and self.relative not in ("this_week", "next_week"):
+            raise ValueError("count goes with this_week or next_week")
         return self
 
     @property
@@ -192,7 +214,7 @@ class Move(_Base):
     which: ClassRef
     to: TimeSpec = Field(default_factory=TimeSpec)
     period: Period = Field(default_factory=Period)
-    hard: bool = True
+    hard: bool = False  # a wish unless they say it must be
     justification: JustificationLit = JUSTIFICATION
 
 
@@ -269,6 +291,7 @@ class ClubBooking(_Base):
     attendees: int | None = Field(None, ge=1)
     cohorts: list[str] = Field(default_factory=list, description="programmes the members come from, as named")
     room: str | None = Field(None, description="the room as the message names it")
+    room_kind: str | None = Field(None, description="a kind of room asked for ('a seminar room'), not a named one")
     justification: JustificationLit = JUSTIFICATION
 
 
@@ -394,7 +417,10 @@ def weeks(instance: Instance, period: Period, current_week: int | None = None) -
     if period.relative is not None:
         if current_week is None:
             raise Unresolved("Which week do you mean?", "weeks")
-        out = [current_week + (period.relative == "next_week")]
+        start = current_week + (period.relative == "next_week")
+        # "the next three weeks" near the end of term: the weeks of it the semester has
+        end = n if period.relative == "rest_of_semester" else min(n, start + (period.count or 1) - 1)
+        out = list(range(start, end + 1))
     elif period.weeks is not None:
         out = sorted(set(period.weeks))
     elif period.from_week is not None or period.to_week is not None:
@@ -408,23 +434,165 @@ def weeks(instance: Instance, period: Period, current_week: int | None = None) -
     return out
 
 
-def _describe(instance: Instance, sid: str, timetable: Mapping[str, Placement] | None) -> str:
+def _describe(instance: Instance, sid: str, timetable: Mapping[str, Placement] | None,
+              section: bool = False) -> str:
     s = instance.session_by_id[sid]
     name = instance.course_title(s.course) + ("" if s.kind.value == "lecture" else f" {s.kind.value}")
+    if section:
+        name += " for " + ", ".join(instance.group_by_id[g].name if g in instance.group_by_id else g for g in s.groups)
     p = (timetable or {}).get(sid)
     return f"{name} on {FULL_DAY[p.day]} at {hour(p.slot)}" if p else name
 
 
+def _names(instance: Instance, sids: list[str], timetable: Mapping[str, Placement] | None) -> list[str]:
+    """How a question names ``sids``: by course, kind and time, and by section where that alone tells them
+    apart (the same course taught to two sections)."""
+    names = list(dict.fromkeys(_describe(instance, sid, timetable) for sid in sids))
+    sections = list(dict.fromkeys(_describe(instance, sid, timetable, True) for sid in sids))
+    return sections if len(sections) > len(names) else names
+
+
+def _titled(instance: Instance, text: str, course: str) -> bool:
+    """Whether ``text`` (lower case) names ``course``'s title, allowing a typo in a long one."""
+    from .lexicon import mentions
+
+    title = instance.course_title(course).lower()
+    return re.search(rf"\b{re.escape(title)}\b", text) is not None or mentions(text, title)
+
+
+def _sections(instance: Instance) -> dict[str, set[str]]:
+    """The groups that take each course."""
+    out: dict[str, set[str]] = {}
+    for s in instance.sessions:
+        out.setdefault(s.course, set()).update(s.groups)
+    return out
+
+
+def _named(instance: Instance, course: str, text: str, sections: dict[str, set[str]]) -> str:
+    """``course``, or the one course in the same section whose title the message names when it does not name
+    ``course``'s ("Data Structures" read as Database Systems). An abbreviation ("ML") names no title: kept."""
+    if course not in sections or _titled(instance, text, course):
+        return course
+    hits = {c for c in sections if sections[c] & sections[course] and _titled(instance, text, c)}
+    return hits.pop() if len(hits) == 1 else course
+
+
+# what ties a course to a section after its title: "(Section 9", "(with Section 7", "with Section 4" (a typo
+# allowed: "wiht", "witth"), "of Section 2", "for the Section 3"
+_TIE = r"\s*\(?\s*(?:(?:with|wiht|witth|wtih|wth|whit|wit|of|for|in)\s+)?(?:the\s+)?"
+
+
+def _section_of(instance: Instance, course: str, text: str, sender: str, sections: dict[str, set[str]]) -> str:
+    """In a clash report, the course of ``course``'s title in the section the message ties it to ("Information
+    Security (Section 9)", "... with Section 4", "... of Section 2"), else in a student sender's own section,
+    else in the one section the message names ("19 students in Section 3 are enrolled in both ...")."""
+    title = instance.course_title(course).lower()
+    named = [g.id for g in instance.groups if re.search(rf"\b{re.escape(g.name.lower())}\b", text)]
+    group = next((g.id for g in instance.groups if re.search(
+        rf"\b{re.escape(title)}\b{_TIE}{re.escape(g.name.lower())}\b", text)),
+        sender[3:] if sender.startswith("ST-") else named[0] if len(named) == 1 else None)
+    same = [c for c in sections if group in sections[c] and instance.course_title(c).lower() == title]
+    return same[0] if len(same) == 1 else course
+
+
+def _named_titles(instance: Instance, text: str, sections: dict[str, set[str]]) -> list[str]:
+    """The course titles ``text`` (lower case) names, longest first, so "Advanced Algorithms" is not also
+    read as "Algorithms"."""
+    titles = sorted({instance.course_title(c) for c in sections}, key=len, reverse=True)
+    found: list[str] = []
+    for t in titles:
+        if _titled(instance, text, next(c for c in sections if instance.course_title(c) == t))                 and not any(t.lower() in f.lower() for f in found):
+            found.append(t)
+    return found
+
+
+def _course(instance: Instance, course: str, text: str, sections: dict[str, set[str]]) -> str | None:
+    """``course`` checked against the message (``_named``); an ID that does not exist is the one course whose
+    title the message names, or nothing."""
+    if course in sections:
+        return _named(instance, course, text, sections)
+    titles = _named_titles(instance, text, sections)
+    hits = [c for c in sections if instance.course_title(c) in titles]
+    return hits[0] if len(titles) == 1 and hits else None
+
+
+def _surname(name: str) -> str:
+    return name.split()[-1].lower()
+
+
+def _colleague(instance: Instance, fid: str, text: str, sender: str) -> str:
+    """``fid``, unless the message does not name them and names exactly one other colleague: that one."""
+    from .lexicon import _close, words
+
+    ws = words(text)
+
+    def named(f) -> bool:
+        s = _surname(f.name)
+        return any(w == s or (len(s) >= 5 and _close(w, s)) for w in ws)
+
+    if fid in instance.faculty_by_id and named(instance.faculty_by_id[fid]):
+        return fid
+    others = [f.id for f in instance.faculty if f.id != sender and named(f)]
+    return others[0] if len(others) == 1 else fid
+
+
+def ground_references(instance: Instance, request: Request, out: IntentOutput) -> IntentOutput:
+    """``out`` with its IDs checked against the message, so that every ID exists and names what the message
+    names. A course whose title the message does not name becomes the one it does in the same section, and an
+    unknown course ID the one course the message names (or none: the rest of the reference decides). In a
+    clash report each course is taken in the section the message ties it to, or the student's own (or the one
+    section the message names), and a course a student's report names but left out is added. A colleague (a class's owner, a
+    ``who``) the message does not name becomes the one colleague it does."""
+    text, sender = request.raw_text.lower(), request.sender_id
+    sections = _sections(instance)
+    intents = []
+    for intent in out.intents:
+        update = {}
+        for name in ("which", "mine", "theirs"):
+            ref = getattr(intent, name, None)
+            if isinstance(ref, ClassRef):
+                fix = {}
+                if ref.course is not None:
+                    fix["course"] = _course(instance, ref.course, text, sections)
+                if ref.owner is not None:
+                    fix["owner"] = _colleague(instance, ref.owner, text, sender)
+                if any(fix[k] != getattr(ref, k) for k in fix):
+                    update[name] = ref.model_copy(update=fix)
+        who = getattr(intent, "who", None)
+        if isinstance(who, Who) and who.kind == "faculty" and who.id != sender:
+            fid = _colleague(instance, who.id, text, sender)
+            if fid != who.id:
+                update["who"] = who.model_copy(update={"id": fid})
+        if isinstance(intent, ClashReport):
+            courses = [c for c in (_course(instance, c, text, sections) for c in intent.courses) if c]
+            if sender.startswith("ST-"):
+                have = {instance.course_title(c) for c in courses}
+                courses += [next(c for c in sorted(sections) if instance.course_title(c) == t)
+                            for t in _named_titles(instance, text, sections) if t not in have]
+            courses = [_section_of(instance, c, text, sender, sections) for c in courses]
+            update["courses"] = list(dict.fromkeys(courses))
+        intents.append(intent.model_copy(update=update) if update else intent)
+    return out.model_copy(update={"intents": intents})
+
+
 def classes(instance: Instance, ref: ClassRef, sender: str,
             timetable: Mapping[str, Placement] | None = None) -> list[str]:
-    """Every session ``ref`` fits (owner defaults to the sender)."""
+    """Every session ``ref`` fits (owner defaults to the sender). Each section has its own course of a title,
+    and a message names the title: a course stands for every course of its title the owner teaches, unless
+    the reference names a group. Which section is meant is then up to the rest of the reference (day and
+    time), or a question."""
     if ref.session is not None:
         if ref.session not in instance.session_by_id:
             raise Unresolved("I could not find that class. Which one do you mean?", "session")
         return [ref.session]
     owner = ref.owner or sender
+    courses = {ref.course} if ref.course is not None else None
+    if ref.course is not None and ref.group is None and ref.course in instance.course_titles:
+        title = instance.course_title(ref.course)
+        courses = {s.course for s in instance.sessions if s.faculty == owner
+                   and instance.course_title(s.course) == title} or courses
     found = [s for s in instance.sessions if s.faculty == owner
-             and (ref.course is None or s.course == ref.course)
+             and (courses is None or s.course in courses)
              and (ref.kind is None or s.kind.value == ref.kind)
              and (ref.group is None or ref.group in s.groups)]
     if ref.day is not None or ref.time is not None:
@@ -445,8 +613,8 @@ def one_class(instance: Instance, ref: ClassRef, sender: str,
     found = classes(instance, ref, sender, timetable)
     if len(found) == 1:
         return found[0]
-    names = [_describe(instance, sid, timetable) for sid in found]
-    if len(set(names)) == 1:  # the weekly meetings of one class, and no timetable to tell them apart
+    names = _names(instance, found, timetable)
+    if len(names) == 1:  # the weekly meetings of one class, and no timetable to tell them apart
         raise Unresolved(f"You have {len(found)} {names[0]} classes a week. Which day's class do you mean?", "session")
     raise Unresolved(f"Which class do you mean: {'; '.join(names[:4])}?", "session")
 
@@ -458,7 +626,7 @@ def _one_kind(instance: Instance, found: list[str], question: str) -> list[str]:
         s = instance.session_by_id[sid]
         first.setdefault((s.course, s.kind, tuple(s.groups)), sid)
     if len(first) > 1:
-        names = list(dict.fromkeys(_describe(instance, sid, None) for sid in first.values()))
+        names = _names(instance, list(first.values()), None)
         raise Unresolved(f"{question}: {'; '.join(names[:4])}?", "session")
     return found
 
@@ -532,6 +700,7 @@ class ClubRef:
     attendees: int
     cohorts: list[str]
     room: str | None
+    room_kind: str | None = None  # a kind of room asked for: the desk picks one that fits
 
 
 @dataclass
@@ -558,6 +727,7 @@ class Compiled:
     clashes: list[ClashRef] = field(default_factory=list)
     question: str | None = None
     missing: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # what ``checks`` repaired or changed in the reading
 
     @property
     def needs_clarification(self) -> bool:
@@ -620,7 +790,7 @@ def club_ref(intent: ClubBooking, current_week: int | None, instance: Instance) 
         raise Unresolved("How many people will come?", "attendees")
     wk = None if intent.date else weeks(instance, intent.period, current_week)
     return ClubRef(intent.club, intent.activity, intent.date, intent.day, wk, intent.start, intent.end,
-                   intent.attendees, list(intent.cohorts), intent.room)
+                   intent.attendees, list(intent.cohorts), intent.room, intent.room_kind)
 
 
 def clash_ref(intent: ClashReport, instance: Instance) -> ClashRef:
@@ -637,6 +807,9 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
                     timetable: Mapping[str, Placement] | None = None, current_week: int | None = None) -> Compiled:
     """Resolve every intent; the first reference that cannot be resolved turns the whole request into a question."""
     sender = request.sender_id
+    from .names import to_ids
+
+    out = ground_references(instance, request, to_ids(instance, out))
     drafts: list[DraftConstraint] = []
     compiled = Compiled(output=out, result=ParseResult(request=request, output=None))
     limits: list[LoadLimit] = []

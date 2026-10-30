@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from dotenv import find_dotenv, load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -396,7 +396,12 @@ class LLMError(RuntimeError):
 
 class InvalidOutput(LLMError):
     """The model answered, but not with an instance of the schema (cut off at
-    the token limit, say). Callers may treat it as a failed call and retry."""
+    the token limit, say). Callers may treat it as a failed call and retry, or
+    repair ``text`` (the answer as given) when it is a near miss."""
+
+    def __init__(self, message: str, text: str | None = None) -> None:
+        super().__init__(message)
+        self.text = text
 
 
 class DailyQuotaReached(LLMError):
@@ -405,6 +410,8 @@ class DailyQuotaReached(LLMError):
 
 
 class GeminiClient:
+    zero_shot = True  # never fine-tuned on reading requests: asked with the whole vocabulary
+
     def __init__(
         self,
         model: str | None = None,
@@ -486,7 +493,10 @@ class GeminiClient:
             return schema.model_validate_json(json.loads(path.read_text(encoding="utf-8"))["text"])
 
         text, usage = self._call(system, prompt, schema, temperature)
-        result = schema.model_validate_json(text)
+        try:
+            result = schema.model_validate_json(text)
+        except ValidationError as e:
+            raise InvalidOutput(f"invalid {schema.__name__} ({len(text)} chars)", text) from e
         path.write_text(
             json.dumps({"model": self.model, "text": text, "usage": usage}, ensure_ascii=False),
             encoding="utf-8",

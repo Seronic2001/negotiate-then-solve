@@ -1,0 +1,483 @@
+{
+ "schema": 4,
+ "recipe": "intents-v6",
+ "recipe_sha": "d4555e323402638c",
+ "code": "b6147c4+dirty",
+ "sources": {
+  "base": {
+   "test": 417,
+   "train": 1087,
+   "val": 149
+  },
+  "generators": {
+   "clubs": 40,
+   "dated": 40,
+   "difficulty": 40,
+   "firmness": 80,
+   "moves": 40,
+   "multi": 40,
+   "periods": 40,
+   "reasons": 40,
+   "terms": 40,
+   "train": 890,
+   "vague": 40,
+   "val": 100
+  },
+  "mined": {
+   "train": 122
+  },
+  "human": {},
+  "augment": {
+   "train": 622,
+   "changed meaning": 1,
+   "unchanged": 37
+  }
+ },
+ "fingerprints": {
+  "train": "bf70d21722e91660",
+  "val": "72b43e4b2b0461d2",
+  "test": "0fb72ff322ff89a9",
+  "firmness": "4e2251768d1f7a3a",
+  "moves": "b314e127d2d7ace4",
+  "periods": "66226086b8350925",
+  "multi": "b07aea3306e8558e",
+  "clubs": "47c103b0c75a579c",
+  "vague": "1981eced8b92b1a2",
+  "reasons": "827c4dbbb4dbfcfd",
+  "terms": "8bc3f84c7df8802b",
+  "difficulty": "dac2935d3411b39f",
+  "dated": "cd33a518e57a70a9",
+  "test-typo": "710c97ca9762bc39",
+  "test-noisy": "c7fdcc1547db8aa9"
+ },
+ "gates": {
+  "schema": 0,
+  "resolves": 0,
+  "rubric": 0,
+  "leak": 0
+ },
+ "dropped": {
+  "resolves": [
+   "train:M7-I-extra_class-017",
+   "train:M7-I-extra_class-029"
+  ],
+  "leak": [
+   "val:R-0259",
+   "val:R-0300"
+  ]
+ },
+ "report": {
+  "train": {
+   "rows": 2719,
+   "origin": {
+    "augment": 622,
+    "base": 1087,
+    "generators": 890,
+    "mined": 120
+   },
+   "kind": {
+    "avoid_between": 197,
+    "cancel": 65,
+    "clash_report": 139,
+    "club_booking": 103,
+    "club_more": 104,
+    "dated": 102,
+    "difficulty": 112,
+    "extra_class": 84,
+    "firmness": 107,
+    "load_limit": 61,
+    "move": 107,
+    "multi": 111,
+    "only_firmness": 105,
+    "out_of_scope": 58,
+    "policy_question": 59,
+    "preference": 226,
+    "reason_firmness": 105,
+    "relative_span": 119,
+    "room_issue": 100,
+    "swap": 72,
+    "term_span": 102,
+    "unavailability": 150,
+    "unavailable_relative": 66,
+    "vague": 104,
+    "which_to": 97,
+    "withdraw": 64
+   },
+   "action": {
+    "answer": 59,
+    "clarify": 173,
+    "compile": 2226,
+    "investigate": 139,
+    "out_of_scope": 58,
+    "withdraw": 64
+   },
+   "firmness": {
+    "hard": 450,
+    "none": 1526,
+    "soft": 743
+   },
+   "augment": {
+    "casual": 158,
+    "noisy": 166,
+    "none": 2097,
+    "shorthand": 130,
+    "typo": 168
+   }
+  },
+  "val": {
+   "rows": 247,
+   "origin": {
+    "base": 147,
+    "generators": 100
+   },
+   "kind": {
+    "avoid_between": 9,
+    "cancel": 7,
+    "clash_report": 11,
+    "club_booking": 9,
+    "club_more": 9,
+    "dated": 15,
+    "difficulty": 6,
+    "extra_class": 2,
+    "firmness": 8,
+    "load_limit": 6,
+    "move": 7,
+    "multi": 9,
+    "only_firmness": 11,
+    "out_of_scope": 2,
+    "policy_question": 3,
+    "preference": 28,
+    "reason_firmness": 9,
+    "relative_span": 5,
+    "room_issue": 14,
+    "swap": 5,
+    "term_span": 7,
+    "unavailability": 27,
+    "unavailable_relative": 9,
+    "vague": 7,
+    "which_to": 14,
+    "withdraw": 8
+   },
+   "action": {
+    "answer": 3,
+    "clarify": 12,
+    "compile": 211,
+    "investigate": 11,
+    "out_of_scope": 2,
+    "withdraw": 8
+   },
+   "firmness": {
+    "hard": 25,
+    "none": 143,
+    "soft": 79
+   },
+   "augment": {
+    "none": 247
+   }
+  },
+  "test": {
+   "rows": 417,
+   "origin": {
+    "base": 417
+   },
+   "kind": {
+    "avoid_between": 14,
+    "cancel": 14,
+    "clash_report": 34,
+    "club_booking": 18,
+    "extra_class": 14,
+    "load_limit": 14,
+    "move": 14,
+    "out_of_scope": 12,
+    "policy_question": 14,
+    "preference": 89,
+    "room_issue": 46,
+    "swap": 14,
+    "unavailability": 92,
+    "unavailable_relative": 14,
+    "withdraw": 14
+   },
+   "action": {
+    "answer": 14,
+    "clarify": 24,
+    "compile": 319,
+    "investigate": 34,
+    "out_of_scope": 12,
+    "withdraw": 14
+   },
+   "firmness": {
+    "hard": 30,
+    "none": 310,
+    "soft": 77
+   },
+   "augment": {
+    "none": 417
+   }
+  },
+  "firmness": {
+   "rows": 80,
+   "origin": {
+    "generators": 80
+   },
+   "kind": {
+    "firmness": 40,
+    "only_firmness": 40
+   },
+   "action": {
+    "compile": 80
+   },
+   "firmness": {
+    "hard": 40,
+    "soft": 40
+   },
+   "augment": {
+    "none": 80
+   }
+  },
+  "moves": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "which_to": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "periods": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "relative_span": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "multi": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "multi": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 11,
+    "soft": 29
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "clubs": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "club_more": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "vague": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "vague": 40
+   },
+   "action": {
+    "clarify": 40
+   },
+   "firmness": {
+    "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "reasons": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "reason_firmness": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "terms": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "term_span": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "difficulty": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "difficulty": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "dated": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "dated": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 40
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "test-typo": {
+   "rows": 417,
+   "origin": {
+    "suite": 417
+   },
+   "kind": {
+    "avoid_between": 14,
+    "cancel": 14,
+    "clash_report": 34,
+    "club_booking": 18,
+    "extra_class": 14,
+    "load_limit": 14,
+    "move": 14,
+    "out_of_scope": 12,
+    "policy_question": 14,
+    "preference": 89,
+    "room_issue": 46,
+    "swap": 14,
+    "unavailability": 92,
+    "unavailable_relative": 14,
+    "withdraw": 14
+   },
+   "action": {
+    "answer": 14,
+    "clarify": 24,
+    "compile": 319,
+    "investigate": 34,
+    "out_of_scope": 12,
+    "withdraw": 14
+   },
+   "firmness": {
+    "hard": 30,
+    "none": 310,
+    "soft": 77
+   },
+   "augment": {
+    "typo": 417
+   }
+  },
+  "test-noisy": {
+   "rows": 417,
+   "origin": {
+    "suite": 417
+   },
+   "kind": {
+    "avoid_between": 14,
+    "cancel": 14,
+    "clash_report": 34,
+    "club_booking": 18,
+    "extra_class": 14,
+    "load_limit": 14,
+    "move": 14,
+    "out_of_scope": 12,
+    "policy_question": 14,
+    "preference": 89,
+    "room_issue": 46,
+    "swap": 14,
+    "unavailability": 92,
+    "unavailable_relative": 14,
+    "withdraw": 14
+   },
+   "action": {
+    "answer": 14,
+    "clarify": 24,
+    "compile": 319,
+    "investigate": 34,
+    "out_of_scope": 12,
+    "withdraw": 14
+   },
+   "firmness": {
+    "hard": 30,
+    "none": 310,
+    "soft": 77
+   },
+   "augment": {
+    "noisy": 417
+   }
+  }
+ }
+}

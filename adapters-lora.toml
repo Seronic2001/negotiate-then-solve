@@ -1,0 +1,21 @@
+# The tasks on LoRA adapters of one base model (llama-server -m <base> --lora a.gguf --lora b.gguf,
+# all at scale 0 until a request switches one on; language.local finds them at /lora-adapters).
+# Used by scripts/host.ps1 (-Adapters adapters-lora.toml) and the evaluations (--adapters adapters-lora.toml).
+# The intents adapter (v6, its final epoch: 99.8% outcome match on the test split, v4 98.8%) is trained on
+# reading requests only; the multi-task adapter (Read100) keeps the policy agent, reading replies and explanations.
+
+base = "Qwen3.5-4B-Base-Q8_0"
+
+[adapters]
+nts-intents-v6-read100 = ["compile"]
+nts-read100 = ["policy", "reply", "explain"]
+nts-lookup-v2 = ["lookup"]       # timetable questions: which lookup to do (notebooks/train_lookup_kaggle.ipynb);
+                                 # v2 beats v1 on every test run (343-347 vs 326-329 of 362; new kinds 80-83 vs
+                                 # 66-68 of 86, PROGRESS.md). Back to v1: put nts-lookup-v1 here instead (one per task)
+nts-memory-v1 = ["memory"]       # a follow-up made to stand on its own from the chat's last 4 messages, before it
+                                 # is read (agents.memory; notebooks/train_memory_kaggle.ipynb). Not on the server
+                                 # yet: messages are read as typed (the chat works as before). Off: NTS_MEMORY=off
+
+[schemas]                       # the intent vocabulary an adapter was trained on, when not the current one
+nts-intents-v4 = 3              # IDs and the directory in the prompt (language.intent_compiler.INTENT_PROMPT_V3)
+nts-intents-v5 = 3

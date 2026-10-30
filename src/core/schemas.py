@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum, IntEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -224,6 +224,27 @@ class Request(BaseModel):
     thread_id: str | None = None
     received_at: datetime
     status: RequestStatus = RequestStatus.RECEIVED
+    # classes missed in an absence in given weeks: True, held at other times that week (a make-up); False,
+    # cancelled for the week. The portal asks (a checkbox, off by default); None, from a channel that does
+    # not ask (email), moves them as a make-up
+    makeup: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def _without_unset_makeup(self, handler):
+        # not asked is left out, so requests written before the field (datasets, their frozen
+        # fingerprints) serialise as they did
+        data = handler(self)
+        if isinstance(data, dict) and data.get("makeup") is None:
+            data.pop("makeup", None)
+        return data
+
+    def __setstate__(self, state: dict) -> None:
+        # pickled before a field was added (a web app's saved state): the field takes its default
+        values = state.get("__dict__", {})
+        for name, field in type(self).model_fields.items():
+            if name not in values and not field.is_required():
+                values[name] = field.get_default(call_default_factory=True)
+        super().__setstate__(state)
 
     def advance(self, new: RequestStatus) -> None:
         if new not in TRANSITIONS[self.status]:

@@ -52,6 +52,10 @@ export const ROLE_LABEL: Record<Role, string> = {
   student: "Class representative",
 };
 
+/** Roles whose home is the chat (pages/Chat: questions, rules, requests; the timetable in a popup), and whose
+ * sidebar keeps only the essentials. Everyone else opens on the dashboard. */
+export const TIMETABLE_HOME: Role[] = ["faculty", "guest_faculty", "student"];
+
 /** Tiers in the words of the person using the service; the number and who may change it stay in the tooltip. */
 export const TIER: Record<number, { name: string; who: string; tone: Tone }> = {
   0: { name: "Can't be changed", who: "Nobody, it is physically impossible otherwise", tone: "bad" },

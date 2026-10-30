@@ -29,22 +29,29 @@ import threading
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agents.documents import SUFFIXES, ingest
 from agents.explainer import TIER_NAME, describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
+from agents.lookup import WeekTimetable
+from agents.memory import turns_of
 from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
+from agents.questions import Answerer
+from agents.views import free_hours_of, view_of
 from core.graph import add_conflict, build_graph
 from core.instance import Session
-from core.schemas import Placement, Request, RequestStatus, Tier
+from core.schemas import DAYS, Placement, Request, RequestStatus, Tier
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour
+from language.intents import IntentOutput, Unresolved
+from language.intents import weeks as period_weeks
 from language.llm import FREE_TIER, LLMError
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
@@ -90,13 +97,34 @@ def _constraint(w: World, c) -> dict:
             "source": c.source.model_dump(), "valid": c.valid.model_dump()}
 
 
-def _message(w: World, m: Message | dict) -> dict:
+def _case_weeks(case: Case | None) -> list[int] | None:
+    """The teaching weeks a request is about; None when it holds every week (or nothing says)."""
+    if case is None or not case.constraints or any(c.when.weeks is None for c in case.constraints):
+        return None
+    return sorted({n for c in case.constraints for n in c.when.weeks})
+
+
+def _date_of(w: World, week: int, day: str) -> date:
+    start = date.fromisoformat(w.semester.state.semester_start)
+    return start - timedelta(days=start.weekday()) + timedelta(weeks=week - 1, days=DAYS.index(day))
+
+
+def _dated(w: World, p: dict, weeks: list[int] | None) -> dict:
+    """When a placement first happens: its date in the request's (first) week, and how many weeks it covers."""
+    if not weeks or p["day"] not in DAYS:
+        return p
+    return p | {"date": _date_of(w, weeks[0], p["day"]).isoformat(), "weeks": len(weeks), "week": weeks[0]}
+
+
+def _message(w: World, m: Message | dict, case: Case | None = None) -> dict:
     m = m if isinstance(m, dict) else m.model_dump()
+    weeks = _case_weeks(case)
     return {**m, "to_name": w.name_of(m["to"]), "text": plain(m["text"]),
             "facts": [{**f, "text": plain(f["text"])} for f in m.get("facts", [])],
             "claims": [{**c, "text": plain(c["text"])} for c in m.get("claims", [])],
             "offers": [{**o, "placements": [{"session": s, "session_name": session_name(w.instance, s),
-                                              **_placement(w, Placement(**p))} for s, p in o["placements"].items()]}
+                                              **_dated(w, _placement(w, Placement(**p)), weeks)}
+                                             for s, p in o["placements"].items()]}
                        for o in m["offers"]]}
 
 
@@ -104,6 +132,7 @@ def _summary(w: World, r: Request, case: Case | None) -> dict:
     status = case.status.value if case else r.status.value
     return {"id": r.id, "sender": r.sender_id, "sender_name": w.name_of(r.sender_id), "role": r.role.value,
             "channel": r.channel.value, "text": r.raw_text, "received_at": r.received_at.isoformat(),
+            "makeup": r.makeup,
             "status": status, "route": case.route if case else "",
             "type": case.parse.output.request_type if case and case.parse and case.parse.output else None,
             "rounds": case.outcome.rounds if case and case.outcome else 0,
@@ -124,7 +153,8 @@ def _case_detail(w: World, case: Case) -> dict:
     d["parse"] = None if p is None else {
         "action": p.action.value, "refusal": p.refusal, "errors": p.errors,
         "output": p.output.model_dump() if p.output else None,
-        "constraints": [_constraint(w, c) for c in p.constraints]}
+        # as recorded (a class named on the wrong day retargeted to the one on that day), else as read
+        "constraints": [_constraint(w, c) for c in (case.constraints or p.constraints)]}
     pol = case.policy
     d["policy"] = None if pol is None else {
         "verdict": pol.verdict.value, "cited": [{"id": i, "cite": next(r.cite() for r in w.rules if r.id == i)}
@@ -141,7 +171,7 @@ def _case_detail(w: World, case: Case) -> dict:
             "status": o.status, "step": o.step, "rounds": o.rounds, "relaxed": o.relaxed,
             "mus_log": [[_constraint(w, all_cons[i]) if i in all_cons else {"id": i, "text": i} for i in mus]
                         for mus in o.mus_log],
-            "messages": [_message(w, m) for m in o.messages],
+            "messages": [_message(w, m, case) for m in o.messages],
             "replies": [r.model_dump(exclude_none=True) for r in o.replies],
             "concessions": [e.model_dump() | {"name": w.name_of(e.stakeholder)} for e in o.concessions],
             "notices": {k: [plain(t) for t in v] for k, v in o.notices.items()},
@@ -156,8 +186,10 @@ def _case_detail(w: World, case: Case) -> dict:
                                                      "soft_violations": o.result.soft_violations}}
     if case.proposal:
         before = w.store.version(case.proposal.parent) if case.proposal.parent else None
+        under = w.orch.builds_on(case)  # an earlier change still waiting: it is approved first
         d["proposal"] = {"version": case.proposal.version, "week": case.proposal.week,
-                         "diff": _diff(w, before.assignment if before else {}, case.proposal.assignment)}
+                         "diff": _diff(w, before.assignment if before else {}, case.proposal.assignment),
+                         "builds_on": under.id if under else None}
     else:
         d["proposal"] = None
     d["fairness"] = case.fairness
@@ -202,7 +234,7 @@ def _inbox_item(w: World, i: InboxItem) -> dict:
     return {"id": i.id, "case": i.case_id, "to": i.to, "to_name": w.name_of(i.to),
             "created": datetime.fromtimestamp(i.created, UTC).isoformat(),
             "deadline": datetime.fromtimestamp(i.created + w.deadline, UTC).isoformat(),
-            "message": _message(w, i.message),
+            "message": _message(w, i.message, w.orch.cases.get(i.case_id) if i.case_id else None),
             "reply": i.reply.model_dump(exclude_none=True) if i.reply else None,
             "answered_by": i.answered_by}
 
@@ -285,7 +317,8 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
             if status == S.PUBLISHED:
                 version = done.get("version") if done else None
                 if version is None:
-                    title, text = "Your request already fits the timetable", case.reply
+                    title = "Nothing was changed" if done and done.get("unmet") else "Your request already fits the timetable"
+                    text = case.reply
                 else:
                     who = w.name_of(done.get("approver") or COORDINATOR)
                     title = "Your request was approved"
@@ -301,6 +334,12 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
             elif status in _REQUEST_TITLE and case.reply:
                 add(f"req:{case.id}", n, "request", case, _REQUEST_TITLE[status], case.reply, at,
                     sender=(case.decision or {}).get("by") or COORDINATOR, needs_you=status == S.CLARIFICATION)
+        # a refused request's reply says the coordinator has been informed: this is that notice
+        if me == COORDINATOR and not own and case.status == S.REFUSED:
+            add(f"refused:{case.id}", n, "alert", case, "A request was refused",
+                f"Stopped before it reached the timetable: {case.parse.refusal}." if case.parse and case.parse.refusal
+                else "Stopped before it reached the timetable.", at, sender=case.request.sender_id,
+                **({"action": "reply"} if case.handled is None else {}))  # the office may still answer it
         # waiting on me
         if me == COORDINATOR and case.status == S.AWAITING_APPROVAL:
             add(f"approve:{case.id}", n, "action", case, "A change is waiting for your approval", case.request.raw_text,
@@ -485,8 +524,50 @@ class LoginBody(BaseModel):
     person: str
 
 
+class AskBody(BaseModel):
+    text: str
+
+
+class ConfirmBody(BaseModel):
+    """The answer to the chat's "send this as a request?": ``{"n": 12, "as": "request" | "question" | "cancel"}``."""
+
+    model_config = ConfigDict(populate_by_name=True)
+    n: int
+    as_: Literal["request", "question", "cancel"] = Field(alias="as")
+
+
+# a request that has run its course: it can be taken off its sender's list ("Delete from list")
+FINISHED = frozenset({RequestStatus.PUBLISHED, RequestStatus.REFUSED, RequestStatus.DENIED, RequestStatus.ANSWERED,
+                      RequestStatus.FORWARDED, RequestStatus.WITHDRAWN})
+
+# a message that is only a greeting or thanks: the chat says what it can do instead of filing it as a request
+SMALL_TALK = re.compile(r"^\s*(hi+|hello+|hey+|hii+|good (morning|afternoon|evening)|thanks?( you)?|thank u|thx|"
+                        r"ok(ay)?|cool|bye|great)\b[\s!.?,]*$", re.IGNORECASE)
+
+
 class RequestBody(BaseModel):
     text: str
+    makeup: bool = False  # "hold make-up classes": off, classes missed in an absence are cancelled
+
+
+class FormRequestBody(BaseModel):
+    """A request made with clicks: the request in words (what people read) and what the pipeline acts on:
+    ``intent``, a cancellation, a move or a swap of one of the sender's classes; or ``intents``, several classes
+    of a range of dates (the range builder): cancellations, or the sender away at their classes' times
+    (``unavailable``, all in one week: one week is repaired per request) so the solver finds new times.
+    ``makeup``: hold make-up classes (a range moved is always made up)."""
+
+    text: str
+    intent: dict | None = None
+    intents: list[dict] | None = None
+    makeup: bool = False
+
+
+MAX_RANGE_WEEKS = 4  # the longest range of dates a request may cover, until the coordinator sets another
+
+
+class SettingsBody(BaseModel):
+    max_range_weeks: int = Field(ge=1, le=52)
 
 
 class ReplyBody(BaseModel):
@@ -651,6 +732,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             # messages forwarded to the office and not answered yet (listed on the Approvals page)
             "my_forwarded": sum(1 for c in cases.values() if handles(u, c)),
             "my_inbox": sum(1 for i in _feed(w, u, decides, handles) if i["unread"]),
+            # requests that wait on this person's answer (the Requests tab's count): their own asking a question
+            # back, and others' sending them options
+            "my_waiting": len({i.case_id for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None
+                               and i.case_id} | {r.id for r in reqs if r.sender_id == u["id"] and r.id in cases
+                                                  and cases[r.id].status == RequestStatus.CLARIFICATION}),
             "published_version": cur.version if cur else None,
             "gini": ledger.gini(teaching, SEMESTER),
             "negotiations": {"agreed": sum(o.status == "agreed" for o in outcomes),
@@ -750,29 +836,241 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         return {"days": inst.calendar.days, "day_names": {d: FULL_DAY[d] for d in inst.calendar.days},
                 "current_week": min(max(today, 1), n_weeks), "weeks": rows}
 
-    @app.post("/api/requests")
-    def submit(body: RequestBody, u: dict = Depends(user)) -> dict:
+    @app.post("/api/ask")
+    def ask(body: AskBody, u: dict = Depends(user)) -> dict:
+        """A question about the timetable ("my free slots this week", "when does Dr. Iyer teach ML?"), answered
+        from the published timetable (agents.lookup, agents.questions) for anyone signed in. Nothing is stored:
+        a question is not a request. Anything that is not a timetable question (a request, a question about the
+        rules) comes back as ``not_a_question``, so the message can go the usual way. ``reader`` says who read the
+        question: the model (the local ``lookup`` adapter), the regex, or the request words that ruled it out."""
         w = W()
+        call, reader = w.read_question(body.text, u["id"])
+        if call is None:
+            return {"kind": "not_a_question", "reader": reader}
+        return {"kind": "timetable", **_lookup_answer(w, call, u["id"], reader)}
+
+    # -- the chat: one conversation per person, for questions and requests alike (CHAT-PLAN.md) --------------
+
+    @app.get("/api/chat")
+    def chat(after: int = 0, u: dict = Depends(user)) -> list[dict]:
+        """The signed-in person's chat, oldest first (``after``: only messages after that number). A request shows
+        only as a card with its number; what happens to it after (questions back, options, the outcome) is on
+        its page in the Requests tab. Notice cards of earlier versions are left out."""
+        return [m for m in W().store.chat(u["id"], after) if m["kind"] != "notice"]
+
+    @app.post("/api/chat")
+    def chat_send(body: RequestBody, u: dict = Depends(user)) -> list[dict]:
+        """A message to the chat (CHAT-PLAN.md). In order:
+        - a timetable question → answered (``kind: lookup``);
+        - a question about the rules → answered from them, with every rule cited (``kind: rule``; no request);
+        - a greeting or thanks → what the chat can do (``kind: other``);
+        - anything else → "send this as a request?" (``kind: confirm``): nothing is sent until the person
+          confirms (``POST /api/chat/confirm``).
+        First, a follow-up ("and Friday?", "move my DS lecture there") is made to stand on its own from the last
+        messages of today (agents.memory): what it was read as is kept with the person's message (``read_as``);
+        when it leans on something the chat doesn't have, the reply asks what they mean.
+        Returns the new messages: the person's, then the reply."""
+        w = W()
+        text, me = body.text.strip(), u["id"]
+        if not text:
+            raise HTTPException(422, "write a message first")
+        chat = w.store.chat(me)
+        follow = w.followup(text, me, turns_of(chat, today=date.today()))
+        read = follow.text if follow and follow.changed else text
+        mine = {"text": text} | ({"read_as": read} if read != text else {})
+        last = next((m for m in reversed(chat) if m["role"] == "assistant"), None)
+        if (follow and follow.changed and last and last["kind"] == "confirm" and not last.get("answered")
+                and read.strip() == last["text"].strip()):  # "yes" to "send this as a request?": it is sent
+            w.store.update_chat(me, last["n"], {"answered": "request"})
+            return [w.store.add_chat(me, "you", "text", mine), _send_request(w, me, last)]
+        if follow and follow.ask:
+            reply = ("other", {"text": follow.ask})
+        elif (q := w.read_question(read, me)) and q[0] is not None:
+            reply = ("lookup", _lookup_answer(w, q[0], me, q[1]))
+        elif (rule := w.answer_rule(read, me)) is not None:
+            reply = ("rule", rule)
+        elif SMALL_TALK.match(text):
+            reply = ("other", {"text": "I can answer questions about the timetable (“am I free on Friday?”) and "
+                                       "about the rules (“how many online classes are allowed?”), and make "
+                                       "requests (“move my Monday lecture to Tuesday”)."})
+        else:  # a request: sent as it was read ("move my DS lecture there" with "there" filled in)
+            reply = ("confirm", {"text": read, "makeup": body.makeup, "reader": q[1]})
+        return [w.store.add_chat(me, "you", "text", mine), w.store.add_chat(me, "assistant", reply[0], reply[1])]
+
+    @app.post("/api/chat/confirm")
+    def chat_confirm(body: ConfirmBody, u: dict = Depends(user)) -> list[dict]:
+        """The answer to "send this as a request?" (message ``n``): ``request`` sends it (as ``POST /api/requests``)
+        and the chat gets a request card; ``question`` reads it again as a timetable question, without the
+        request-words check; ``cancel`` drops it. A confirm is answered once. Returns the new messages."""
+        w = W()
+        me = u["id"]
+        m = w.store.chat_message(me, body.n)
+        if m is None or m["kind"] != "confirm":
+            raise HTTPException(404, "no such message to confirm")
+        if m.get("answered"):
+            raise HTTPException(409, f"already answered: {m['answered']}")
+        w.store.update_chat(me, body.n, {"answered": body.as_})
+        if body.as_ == "cancel":
+            return []
+        if body.as_ == "question":
+            call, reader = w.read_question(m["text"], me, gate=False)
+            if call is None:
+                return [w.store.add_chat(me, "assistant", "other", {
+                    "text": "I couldn't read that as a question about the timetable. Try asking it another way, "
+                            "or send it as a request."})]
+            return [w.store.add_chat(me, "assistant", "lookup", _lookup_answer(w, call, me, reader))]
+        return [_send_request(w, me, m)]
+
+    def _send_request(w: World, me: str, m: dict) -> dict:
+        """The request a "send this as a request?" message (``m``) asked about, sent; its card."""
         try:
-            r = w.intake.from_portal(u["id"], body.text)
+            r = w.intake.from_portal(me, m["text"], makeup=m.get("makeup"))
         except UnknownSender:
             raise HTTPException(403, "unknown user") from None
         if r is None:
             raise HTTPException(409, "duplicate request")
+        # what was asked kept with the card: a follow-up ("has it been approved?") sees which request it was
+        card = w.store.add_chat(me, "assistant", "request", {"case": r.id, "request_text": m["text"]})
         w.submit(r)
+        return card
+
+    @app.delete("/api/chat")
+    def chat_clear(u: dict = Depends(user)) -> dict:
+        """Empties the person's chat; their requests stay in the Requests list."""
+        return {"cleared": W().store.clear_chat(u["id"])}
+
+    def _lookup_answer(w: World, call, sender: str, reader: str) -> dict:
+        """A timetable question's answer: the reply, the lookup, who read it, the part of the timetable to draw
+        beside it (``view``, agents.views; None when there is nothing to draw), and for free hours the hours
+        themselves (``free``, for the timetable to shade)."""
+        from agents.more_lookups import Records
+
+        week = WeekTimetable(w.instance, w.store, call.week)
+        records = Records.from_world(w)  # requests, rules, bookings, other weeks: v3's lookups read them
+        answerer = Answerer(w.instance, sender, records, sees_all=sender == COORDINATOR)
+
+        def shown(c) -> dict:
+            args = ({"parts": [shown(p) for p in c.args["parts"]]} if c.tool == "multi" else c.args)
+            return {"tool": c.tool, "args": args, "week": c.week, "confident": c.confident}
+
+        # several lookups (v3): the timetable beside the answer is the first part's
+        first = call.args["parts"][0] if call.tool == "multi" else call
+        first_week = week if first.week == call.week else WeekTimetable(w.instance, w.store, first.week)
+        out = {"answer": answerer.answer(call, week), "reader": reader, "call": shown(call),
+               "view": view_of(w.instance, first, first_week, sender)}
+        if first.tool == "free_hours" and first.confident:
+            out["free"] = [{"day": d, "slot": s} for d, s in free_hours_of(w.instance, first, first_week)]
+        return out
+
+    @app.post("/api/requests")
+    def submit(body: RequestBody, u: dict = Depends(user)) -> dict:
+        w = W()
+        try:
+            r = w.intake.from_portal(u["id"], body.text, makeup=body.makeup)
+        except UnknownSender:
+            raise HTTPException(403, "unknown user") from None
+        if r is None:
+            raise HTTPException(409, "duplicate request")
+        # sent on purpose (the request builder): in the chat too, as what was asked and its request card
+        w.store.add_chat(u["id"], "you", "text", {"text": body.text})
+        w.store.add_chat(u["id"], "assistant", "request", {"case": r.id})
+        w.submit(r)
+        return {"id": r.id}
+
+    @app.post("/api/requests/form")
+    def submit_form(body: FormRequestBody, u: dict = Depends(user)) -> dict:
+        """A request made with clicks. Its intent is taken as given, so nothing is left to a parser:
+        it is checked here (one of the sender's own classes) and resolved like a parsed one."""
+        w = W()
+        given = body.intents if body.intents is not None else [body.intent] if body.intent is not None else []
+        if not given:
+            raise HTTPException(422, "nothing to request")
+        try:
+            out = IntentOutput(action="compile", intents=given)
+        except ValidationError as e:
+            raise HTTPException(422, f"not a request this form can make: {e.errors()[0]['msg']}") from None
+        kinds = {i.kind for i in out.intents}
+        if len(out.intents) == 1 and kinds <= {"cancel", "move", "swap"}:
+            pass
+        elif len(kinds) != 1 or not kinds <= {"cancel", "unavailable"}:
+            raise HTTPException(422, "several classes are cancelled together, or moved together (unavailable)")
+        now = w.orch.current_week() if w.orch.current_week else None
+        weeks: set[int] = set()
+        for intent in out.intents:
+            try:
+                asked = period_weeks(w.instance, intent.period, now) or []
+            except Unresolved as e:
+                raise HTTPException(422, e.question) from None
+            if not asked and intent.kind == "unavailable":
+                raise HTTPException(422, "say which week you are away")
+            if now is not None and asked and asked[0] < now:
+                raise HTTPException(422, f"Week {asked[0]} has passed; it is week {now} now.")
+            weeks |= set(asked)
+            if intent.kind == "unavailable":
+                if intent.who is not None:
+                    raise HTTPException(403, "only you can be away in your request")
+                continue
+            mine = intent.mine if intent.kind == "swap" else intent.which
+            session = w.instance.session_by_id.get(mine.session or "")
+            if session is None or session.faculty != u["id"]:
+                raise HTTPException(403, "only your own classes can be cancelled, moved or swapped")
+        if len(out.intents) > 1:
+            longest = w.store.setting("max_range_weeks", MAX_RANGE_WEEKS)
+            if weeks and max(weeks) - min(weeks) + 1 > longest:
+                raise HTTPException(422, f"A request can cover at most {longest} week{'s' if longest != 1 else ''}.")
+            if kinds == {"unavailable"} and len(weeks) > 1:
+                raise HTTPException(422, "classes are moved one week per request")
+        try:
+            r = w.intake.from_portal(u["id"], body.text, makeup=body.makeup or kinds == {"unavailable"})
+        except UnknownSender:
+            raise HTTPException(403, "unknown user") from None
+        if r is None:
+            raise HTTPException(409, "duplicate request")
+        # made from the timetable (the chat's popup): in the chat too, as what was asked and its request card
+        w.store.add_chat(u["id"], "you", "text", {"text": body.text})
+        w.store.add_chat(u["id"], "assistant", "request", {"case": r.id})
+        w.submit(r, form=out)
         return {"id": r.id}
 
     @app.get("/api/cases")
     def cases(scope: str = "mine", u: dict = Depends(user)) -> list[dict]:
+        """``mine``: the person's own requests, without those they took off their list, and others' requests that
+        wait on their answer (options sent to them); each with whether they may withdraw it and whether it waits
+        on them (``waits_on_you``: a question back, or options to choose from). ``all``: every request they may
+        see."""
         w = W()
         out = []
+        me = u["id"]
+        hidden = w.store.hidden(me) if scope == "mine" else set()
+        asked = {i.case_id for i in w.inbox.items.values() if i.to == me and i.reply is None and i.case_id}
         for r in reversed(w.store.requests()):
             case = w.orch.cases.get(r.id)
-            if scope == "mine" and r.sender_id != u["id"]:
+            if scope == "mine" and ((r.sender_id != me and r.id not in asked) or r.id in hidden):
                 continue
-            if visible(u, case, r):
-                out.append(_summary(w, r, case))
+            if visible(u, case, r) or r.id in asked:
+                s = _summary(w, r, case)
+                out.append(s | ({"can_withdraw": bool(case and withdraws(w, u, case)),
+                                 "waits_on_you": r.id in asked or (r.sender_id == me
+                                                                    and s["status"] == "clarification_requested")}
+                                if scope == "mine" else {}))
         return out
+
+    @app.post("/api/cases/{case_id}/hide")
+    def hide_case(case_id: str, u: dict = Depends(user)) -> dict:
+        """"Delete from list": takes one of the person's own finished requests off their list. It stays in the
+        records (and on the oversight pages); only their list changes."""
+        w = W()
+        r = w.store.request(case_id)
+        if r is None:
+            raise HTTPException(404)
+        if r.sender_id != u["id"]:
+            raise HTTPException(403, "only your own requests can be taken off your list")
+        case = w.orch.cases.get(case_id)
+        status = case.status if case else r.status
+        if status not in FINISHED:
+            raise HTTPException(409, f"it is not finished yet ({status.value}): withdraw it first")
+        w.store.hide(u["id"], case_id)
+        return {"id": case_id, "hidden": True}
 
     @app.get("/api/cases/{case_id}")
     def case(case_id: str, u: dict = Depends(user)) -> dict:
@@ -794,8 +1092,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         return u["id"] == case.request.sender_id and not running and w.orch.withdrawable(case) is None
 
     def handles(u: dict, case: Case) -> bool:
-        """A message forwarded to the coordinator, still unanswered, and this is the coordinator."""
-        return u["id"] == COORDINATOR and case.forwarded_to == "coordinator" and case.handled is None
+        """A message forwarded to the coordinator, or refused, still unanswered, and this is the coordinator."""
+        return u["id"] == COORDINATOR and W().orch.office_answers(case) and case.handled is None
 
     def decides(u: dict, case: Case) -> bool:
         """The person an escalation was sent to: "coordinator", "dean", "hod", or the heads by id."""
@@ -847,7 +1145,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(404)
         if u["id"] != COORDINATOR:
             raise HTTPException(403, "only the timetable office acts on forwarded messages")
-        if c.forwarded_to != "coordinator" or c.handled is not None:
+        if not w.orch.office_answers(c) or c.handled is not None:
             raise HTTPException(409, "this message is not waiting for the timetable office")
         r = w.intake.from_portal(u["id"], (body.text or c.request.raw_text).strip())
         if r is None:
@@ -958,6 +1256,16 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         return _inbox_item(w, item)
+
+    @app.get("/api/settings")
+    def settings(u: dict = Depends(user)) -> dict:
+        """What the coordinator set for everyone: the longest range of dates a request may cover."""
+        return {"max_range_weeks": W().store.setting("max_range_weeks", MAX_RANGE_WEEKS)}
+
+    @app.post("/api/settings")
+    def set_settings(body: SettingsBody, u: dict = Depends(view("settings"))) -> dict:
+        W().store.set_setting("max_range_weeks", body.max_range_weeks)
+        return {"max_range_weeks": body.max_range_weeks}
 
     @app.get("/api/autopilot")
     def autopilot(u: dict = Depends(user)) -> dict:
@@ -1157,7 +1465,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                 {"step": 1, "name": "Auto-substitute", "text": "If the hard constraints fit, repair the timetable "
                  "moving as little as possible and notify those affected."},
                 {"step": 2, "name": "Auto-relax", "text": "Preferences that cannot be kept are dropped by the "
-                 "objective; their owners are told and may appeal."},
+                 "objective; their owners are told, and can send the request again as a requirement."},
                 {"step": 3, "name": "Negotiate", "text": "Find the minimal conflict, the cheapest minimal corrections "
                  "(Tier 3-4 only), and ask the owner of the cheapest with 2-3 solver-verified alternatives."},
                 {"step": 4, "name": "Escalate", "text": "On deadlock, no reply, or a Tier 0-2 conflict, brief the "
