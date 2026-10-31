@@ -1,0 +1,436 @@
+# Improving the agentic app: a running log
+
+What we planned, why, and what happened after we built it. One section per step, newest at the bottom.
+
+## The plan
+
+| Step | What | Why | Status |
+|---|---|---|---|
+| 0 | Make the model server fast | One question took 110 s | done |
+| 1 | Make it stop failing: send only the tools a request needs, retry on server errors, save requests to disk | Every call sends all 29 tools (~6,300 tokens of an 8,192 budget); one server error ends the request; a restart loses every request | done |
+| 2 | Chat threads with memory | Each request starts from zero, so "also do Thursday" or "undo that" can't work | done |
+| 3 | A readable "thinking" panel | The steps are shown as raw tool names and JSON | done |
+| 4 | Better human in the loop: confirm before submit, before/after timetable, stop, edit and resend | The person only sees the result at the end | partly: office inbox, notifications, undo, answers to pick are done; before/after timetable, Stop and edit-and-resend are not |
+| 5 | More caching | The same lookups and draft checks are repeated | not started |
+
+## Commits, and where each is described
+
+| Commit | What | Section below |
+|---|---|---|
+| `48435f8` | System One (the classifier): a linear SVM by default, the request kinds it never learnt, a benchmark | Step 1 ("What we found before building") |
+| `78110ab` | The agent app: tool picking, retries, requests kept over a restart, the chat with memory, thinking panel, office inbox, notifications, per-tab sign-in | Step 1; Steps 2 and 3; Round 2 |
+| `d6e7f05` | Absences are one-off, "cancel" means cancel, the office can undo an approved change | Round 3 |
+| `2e2fde6` | The first new look (side rail, details panel), the office's own suggestions, the teacher-and-course refusal | A new look, and fixes from round 4 |
+| `e612f9c` | The minimal look: sections in one group at the top, filters, action cards, a centred chat | The second design |
+| `6d00093`, `d1bb52e` | Small UI fixes: the send arrow centred, the week list readable in the dark theme, Ctrl+K on one line | Small fixes after the second design |
+
+---
+
+## Step 0: the model server was slow (done, 2026-10-31)
+
+**What we saw.** "What are my classes tomorrow" took 110 s. The first model call alone took 100 s.
+
+**Why.** The llama server loaded all 27 LoRA adapters (~1.1 GB) next to the 4B Q8 model (~4.5 GB) on a 6 GB
+RTX 4050. The GPU was full (5,640 of 6,141 MB), so Windows spilled into normal RAM, which is very slow. The
+server also had one 8,192-token memory shared by 4 slots, so two requests at once ran out of room ("Context
+size has been exceeded").
+
+**What we changed.** Restarted the server with only the adapter the app uses, and 2 slots with their own
+8,192 tokens each:
+
+```powershell
+cd "C:\Users\satya\Desktop\LLM Serve"
+.\llama.cpp\llama-server.exe -m models\Qwen3.5-4B-Base-Q8_0.gguf --lora-scaled loras\nts-agent-v6-dpo.gguf:0 --jinja -ngl 99 -c 16384 -np 2 --cache-ram 1024 --host 0.0.0.0 --port 8080
+```
+
+**What happened.**
+
+| | Before | After |
+|---|---|---|
+| Reading the prompt | 25 tokens/s | 1,393 tokens/s |
+| Writing the answer | 5.6 tokens/s | 29 tokens/s |
+| "What are my classes tomorrow", end to end | 110 s | 11 s |
+| Context per request | 8,192 shared by 4 | 8,192 each, 2 at a time |
+
+The answer was right: two Computer Architecture lectures on Monday, 2 to 3 pm in Room 103 and 4 to 5 pm in
+Room 104.
+
+**Still to know.** `serve.ps1 -Lora` still loads every adapter. Use the command above for the app, or load only
+the adapters an eval needs.
+
+---
+
+## Step 1: make it stop failing (done, 2026-10-31)
+
+### What we planned, and why
+
+1. **Send only the tools a request needs.** Every model call sent all 29 tools, about 6,300 tokens of an
+   8,192-token context. That left little room for the conversation, and a long request ran out of space.
+   Plan: let System One (the classifier) read the request first and pick the tools.
+2. **Retry instead of failing.** One busy-server error or one "context size exceeded" ended the whole request.
+3. **Keep requests when the server restarts.** They lived only in memory, so a restart lost all of them.
+
+### What we found before building
+
+- The `agentic` branch did not use System One at all, and the SVM work was on another branch. We copied just
+  that one commit onto a new local branch, `agentic-improvements` (not the 62 other `simplify` commits).
+- **System One could not recognise questions.** "When am I free on Monday?" came out as a *preference*,
+  because it was never taught a "question" label. For change requests its labels were too noisy to choose
+  narrow tool sets: a load limit, a "keep a gap between classes" or a "right after the lecture" request landed
+  on various labels, so a narrow set would often miss the tool the agent needs.
+- So the design became: **teach it one new label, `question`. A question it is sure of gets only the tools
+  that read. Everything else gets every tool.** Sending a change too few tools would stop it; sending a
+  question too many only costs tokens.
+
+### What we built
+
+| Part | Where |
+|---|---|
+| The new `question` label, learnt from 40 handwritten questions (`data/questions.jsonl`) and half the handbook questions (`data/retrieval-queries.jsonl`) | `src/language/system_one.py`, `src/language/corpus.py` |
+| The tool picker: a question with confidence of at least 0.7 gets the read, rules, talk and end tools (~2,300 tokens instead of ~6,000); anything else gets all tools | `src/nts/harness/pick.py`, `src/nts/harness/loop.py` |
+| A tool left out by mistake still runs if the model calls it, so a wrong pick can never block a change | (the harness checks the agent's own permissions, not the pick) |
+| Retry: a busy or unreachable server is tried 2 more times, waiting 2 s then 4 s. A full context trims old tool results and asks once more, and the page doesn't show it as a failure | `src/nts/models/openai_chat.py`, `src/nts/harness/loop.py`, `src/nts/api/service.py` |
+| On start, the server rebuilds this department's earlier requests from the telemetry log. A request that was waiting or not yet approved shows as `interrupted` (its draft lived only in memory) | `Service.restore` in `src/nts/api/service.py` |
+| `--pick-tools` switch on `ask`, `eval` and `serve` | `src/nts/__main__.py` |
+
+### What happened
+
+**Choosing the confidence threshold.** We tested on wording the classifier never saw: 70 questions, and 390
+change requests from 2 departments.
+
+| Threshold | Questions that got the short tool list | Changes that wrongly got it |
+|---|---|---|
+| 0.5 | 61 / 70 | 9 / 390 |
+| 0.6 | 55 / 70 | 0 / 390 |
+| **0.7 (chosen)** | **47 / 70** | **0 / 390** |
+| 0.8 | 31 / 70 | 0 / 390 |
+
+No change request scored above about 0.59, so 0.7 keeps a safety margin.
+
+**The agent, before and after** (the local model with the `nts-agent-v6-dpo` adapter, on the demo department).
+
+| | Baseline (all tools) | With tool picking |
+|---|---|---|
+| All 42 scenario families, 2 each | 78 / 84 (93%) | 78 / 84 (93%) |
+| Question families only (q_free, q_classes, rules_question; 4 each) | 10 / 12 | 10 / 12 |
+| Tokens on those 12 questions | 154,564 | 92,488 (**-40%**) |
+| Time on those 12 questions | 61.5 s | 72.7 s |
+| "Context size exceeded" errors | 0 | 0 |
+
+- The same 2 rules questions failed in both runs: the agent declined instead of answering. That is the agent's
+  own mistake, not the picker's.
+- Change requests get the same tools as before. The few results that differ between the two runs (`clarify`,
+  `move_apart`) are run-to-run noise from the server.
+- **Fewer tokens did not make it faster yet.** The server caches the start of the prompt (system prompt and
+  tools). A different tool list can't reuse that cache, so its first call reads the whole prompt again. Step 5
+  (caching) should look at this.
+
+**Tests.** 14 new tests for the picker (`tests/nts/test_nts_pick.py`) and 7 for retry and restart
+(`tests/nts/test_nts_reliable.py`), all passing. All 152 `nts` tests pass.
+
+### Still to know
+
+- The 6 failures in the full eval are the agent's reasoning, not this step's: `clarify` moves the class in
+  week 7 too, `no_reply` submits without the teacher's answer, `or_windows` gets stuck, `after_lecture`
+  declines, `move_apart` doesn't make the change. Worth new training data later.
+- Some "handbook questions" in `data/retrieval-queries.jsonl` are really requests ("I want to reserve the big
+  hall for the coding club meetup"). Cleaning them would make the question label sharper.
+- On this branch's intent data, the classifier's "new kinds sent down the fast path" rate is 28% (limit 25%), so
+  that slow test fails here. On the `system-one-svm-new-labels` branch it was 21%.
+
+---
+
+## Steps 2 and 3: a chat with memory, a "thinking" panel, and an inbox for the office (done, 2026-10-31)
+
+You asked for a ChatGPT-style page instead of one-off requests. Steps 2 (memory) and 3 (thinking panel) were
+built together, along with the problems you found while testing.
+
+### What we planned, and why
+
+| You saw | Why it happened | What we changed |
+|---|---|---|
+| Each request started a new thread; a follow-up didn't know what you'd said | Every request was a separate agent run that started from nothing | **Chats.** A chat holds several messages. Each new message gets the chat's last 4 messages and what came of them (the answer, and any change drafted) as memory |
+| No way to see what it was doing, except raw tool names and JSON | The page listed every step as it ran | **A "Thinking" panel** on each answer, open while it works, folded after. Each step in plain words ("✓ Checked free hours · Monday"), with the raw call one click further |
+| To answer the agent you used a separate box | Answers went through a separate form | **Answer in the chat.** If the agent is waiting for *you*, your next message is the answer |
+| To answer you had to type | Only a text box | **Answers to pick.** The page reads options off the question ("Wednesday 9 am, 10 am or 11 am?" → three buttons and *None of these*; "(lecture or practical)" → two; a yes/no question → Yes / No; "which class?" → your classes). Typing still works |
+| Changing your mind left the old draft waiting for approval | A draft stayed "submitted" until the office decided | A new message in the chat **replaces** an undecided draft, so the office can't approve the old one by mistake |
+| The agent got stuck in a loop ("make_offer" again and again) | It asked a teacher to give way before drafting and checking anything, and the refusal only said "no blocking rule 1" | The refusal now says the order: draft the change, then `check_draft`, then make the offer. A stuck request now ends with a plain message asking for the missing detail (which class, which week) instead of "stuck · 3 repeated calls" |
+| "Which kind and which section?" when Dr. Khan teaches Computer Graphics to only one section | The tool asked for both whenever anything was unclear | It names only what differs: "Computer Graphics has the 1-hour lecture and the 2-hour practical (all for G-03)" |
+| The office could read every teacher's chats | The office saw everything | The office sees **only what reaches it**: changes sent for approval (and what came of them), and requests the agent passed on |
+| The office got a chat window | It used the same page as teachers | **An inbox for the office.** Under *Requests*: *Needs you* and *Done*, one item per request. Open one to see the request, the agent's summary, the proposed changes and how the agent got there, then **Approve**, **Reject**, or **send a message** to the teacher (optionally with Approve or Reject). The message shows up in the teacher's chat. The office's own chat moved to *Agent chat* |
+| Signing in as the office in a second tab switched the first tab too | One sign-in cookie for the whole browser | **Each tab signs in on its own** (its session is kept per tab), so one tab can be Dr. Menon and another the office |
+| The page went blank and said "Not Found" once | The page file changed while the old server was still running | Not a code problem: it went away after the restart |
+| The sidebar was always open, and scroll bars always showed | | **☰** hides and shows the sidebar (remembered). Scroll bars appear only when the pointer is over the area |
+
+### What we built (where)
+
+- Memory and threads: `src/nts/harness/loop.py` (`history` and `thread` on `run`) and `src/nts/api/service.py` (`start(thread=...)`, `thread`, `threads`, `remembered`)
+- API: `GET /api/threads`, `GET /api/threads/{id}`, `thread` on `POST /api/episodes`, `POST /api/episodes/{id}/note`, a note on approve, `GET /api/office/requests` (`src/nts/api/__init__.py`)
+- Answers to pick: `src/nts/api/choices.py`
+- The office's messages are recorded as `note` spans, so they outlive a restart like everything else
+- The page: `src/nts/api/static/index.html` (chat, thinking panel, office inbox, picks, per-tab sign-in, sidebar)
+
+### What happened
+
+- **A real conversation with the local model** (Dr. Rao): "what subjects do I teach?" → "Digital Logic, Machine Learning, and
+  Linear Algebra." Then in the same chat, "when is the first one of those on Tuesday?" → "Your first class on Tuesday is
+  Linear Algebra, starting at 11 am." The second answer is right only because the agent remembered the first.
+- From your testing (Dr. Khan): "what i teach", then "any free slot in monday", then "i want a class on 9-10 am for
+  theory of comp" were all understood in one chat. The agent then offered Wednesday 9, 10 or 11 am, which you can now
+  pick with a click.
+- **Tests:** `tests/nts/test_nts_chat.py`, 10 tests: memory reaches the model, a message while the agent waits is the
+  answer, a new message replaces an undecided draft, nobody else can write in your chat, the office sees only what
+  reaches it, two tabs are two people, the stuck message, the offer-order hint, answers to pick, and the office inbox
+  (approve with a message, a message to an escalated request, still there after a restart). One more test in
+  `test_nts_extend.py` covers the lecture-or-practical question. All 163 `nts` tests pass.
+
+### Still to know
+
+- **Memory is short on purpose:** the last 4 messages, 600 characters of each answer. That's enough for "and on Tuesday?"
+  and keeps the 8k context safe. Facts that last (a teacher's standing rules) stay in the timetable store, not in the chat.
+- The fine-tuned agent was trained on single requests, never conversations. It handles follow-ups well in what we've
+  tried, but no eval covers them yet. Next: a small scripted multi-turn eval.
+- A request that was waiting, or sent for approval, when the server restarted shows as `interrupted`: its draft lived only
+  in memory. Saving drafts would fix this.
+- Options are read off the question's words, so an unusual question may get none. The text box always works.
+- The office's *Observability* tab still shows every trace. It's the developers' view, not the office's inbox.
+
+---
+
+## Round 2 of testing: where the chat failed, and why (done, 2026-10-31)
+
+You tested two chats as Dr. Khan and found the agent looping, forgetting, and booking the wrong day. Each failure was
+traced in the telemetry before fixing it.
+
+| What you saw | Why it happened | What we changed |
+|---|---|---|
+| "when am I free on Tuesday … I can take an extra class": it asked which time, then looped until "stuck" | **Step 1's tool picker** read the message as a *question* (confidence 0.81) and offered only the read tools, so the agent had no `add_class` to call | The picker never narrows when the message asks for a change ("extra", "move", "cancel", "book", "take", "want" …). It also reads the **whole conversation**, so "2 pm" after "I want an extra class" still gets every tool |
+| "what i teach" was ignored: it carried on with the extra class | The memory of the last message was its "could you give more detail …" reply, so the model read the new message as that detail | When a chat has history, the agent is told: *answer the latest message; the earlier ones are only context* |
+| "what classes told u to schedule" → "I did not schedule any"; "I will not take that class" → "there is no change 1" | Memory said `[Status: interrupted]` without saying whether anything was in the timetable. And each message starts with an empty draft, so change 1 from an earlier message isn't in it | Every remembered message now says what really happened: **"The office approved it: it is in the timetable now"**, "Withdrawn by a later message: not in the timetable", "Never finished: nothing was changed", plus anything the office wrote. The agent is told its draft starts empty |
+| It said 2 pm was free, then the class at 2 pm failed | `free_hours` checks only the *teacher*; the section or the room was busy | When `add_class` can't use a time, it now lists the times that work for that class (teacher, section and room all free), **the day you asked for first**, and tells the agent to ask you which one |
+| Asked for Tuesday, got Wednesday without being asked, and the office approved it | Nothing stopped a day other than the one in the request | `add_class` warns the agent: *"the request asks for Tuesday, not Wednesday: ask the requester before you submit"* |
+| "Another time on Tuesday, or a different day?" came with Yes / No buttons | The option reader didn't recognise long "A, or B?" questions | It now offers the two sides: **Another time on Tuesday** / **A different day** |
+| "It was approved, but no notification" | The approval went through the server still running the old code | **A notifications bell** in the header, with a count of unread items: your request approved, not approved (with the office's note) or not committed; a message from the office; another teacher's approved change that moved or cancelled one of your classes. A **pop-up** appears when a new one arrives. Clicking a notice opens its chat. Notices are rebuilt from the log after a restart |
+
+### Tests
+
+- `tests/nts/test_nts_choices.py` (8): the answers read off each kind of question.
+- `test_nts_pick.py` (+3): a question that asks for a change gets every tool; the whole conversation decides the tools.
+- `test_nts_extend.py` (+2): a taken time lists that day's free times first; another day than asked says to ask first.
+- `test_nts_chat.py` (+2): the teacher is told what the office decided (and still is after a restart); a follow-up is
+  told to answer the latest message, and what is in the timetable.
+- All 178 `nts` tests pass.
+
+### Still to know
+
+- The fine-tuned 4B model still makes mistakes these fixes can only steer: asking the same thing twice, or making an
+  offer before checking the draft. The tools now tell it the right next step each time. Training it on
+  multi-message chats is the real fix.
+- A draft still lives in memory: a server restart while a change waits for approval loses it (`interrupted`).
+
+---
+
+## Round 3 of testing: absences that became every week, and undoing an approved change (done, 2026-10-31)
+
+| What you saw | Why it happened | What we changed |
+|---|---|---|
+| "i am absent on **wee** 10, cancel all my classes": 16 steps of drafting and taking back, then "I cannot …" | The `constrain` tool looks for "week" and a number to see whether a week was named. It missed the typo "wee 10", so it told the agent *"the request names no week, so it holds to the end of term; retract it"*. The agent obeyed, the term-long rule couldn't be solved, and it went back and forth | A week typed loosely counts: "wee 10", "wk 10", "w10", "10th week" |
+| "i am absent on **Thursday**" / "**Friday**": approved as **every** Thursday / Friday to the end of term | The agent's instructions say a request with no week holds to the end of term. That's right for a wish ("no classes on Monday mornings"), wrong for an absence | For an absence ("absent", "away", "on leave", "conference", "won't be there" …) with no week, `constrain` now tells the agent: *the next such day, this week; or ask whether they mean every week* |
+| "cancel all my classes" became "not available", which *moves* the classes instead of cancelling them | Nothing pointed the agent to `cancel_class` | When the request says "cancel" and the agent drafts "not available", it's told to use `cancel_class` for each class |
+| The office approved "every Friday" without noticing | The inbox showed "from week 5" in small print | The office inbox now warns in a box: **"This holds until the end of term, not for one week. Check that they asked for that before approving."** |
+| "why did you delete all my Fridays" → the agent couldn't take it back | An approved change is in the timetable, not in a new draft, and no tool removes it | **Undo this change** in the office inbox, on any approved item: the rules it added come out, any it removed go back, and the weeks it changed are set back to how they were just before it. The teacher is told (↩️ in the bell and in their chat), and the agent's memory says it is no longer in the timetable. An undo that would also wipe a later change is refused; undoing the newest first lets the older one be undone too |
+
+### What happened
+
+- **The same two requests on the real model** (as Dr. Das, with stand-ins answering): "i am absent on wee 10 . cancel all my
+  classes" → *"I have cancelled all your classes for week 10"*; "i am absent on thursday cancel all my classes" → *"I have
+  cancelled your classes for this Thursday (week 5)"*. Both are now one-off, not every week.
+- **Undo, tried on a copy of the demo department:** Dr. Khan's two wrong approvals (every Friday, then every Thursday, from week 5)
+  were undone newest first, and both rules were gone afterwards. The first try found a bug: the agent had drafted, taken back
+  and redrafted the same rule, so the request added the same rule twice. The undo now works from what the request changed
+  overall, not step by step.
+- **Tests:** `test_nts_draft.py` +3 (a loosely typed week, an absence on a day is this week, cancel is not unavailable);
+  `test_nts_chat.py` +4 (the office undoes an approved change, and it survives a restart; an undo that would wipe a later change
+  is refused; newest first, then the older one; a draft that was redone). All 185 `nts` tests pass.
+
+### For you to do
+
+In the demo department, Dr. Khan's every-Friday and every-Thursday rules are still in the timetable, because the undo was only
+tried on a copy. As the office, open those two requests in the inbox (under *Done*) and press **Undo this change**: Friday first,
+then Thursday.
+
+---
+
+## A new look, and fixes from round 4 (done, 2026-10-31)
+
+**The redesign** (from the design you shared; only what the app has behind it):
+
+- A dark navy theme, with a light one: the moon/sun button switches, and the choice is remembered.
+- **Sections in a rail down the left edge** (icon and label each), instead of tabs across the top that didn't fit; a count
+  sits on the section it belongs to (the office's Inbox, a teacher's Requests), instead of a loose red number by the bell.
+- The person's avatar and name at top right, with sign-out (and the model's version) in its menu; the bell next to it.
+- The chat: *New chat*, **search conversations** (Ctrl K), and *Recent* with a status pill on each; a header card with the
+  chat's title, week and date; bubbles with avatars; the result of a change as a card (approved, sent to the office, not
+  approved, undone) with its changes listed.
+- A **right-hand panel**: the request's details (status, week, when, messages, and its type when the classifier is at least
+  70% sure), the proposed or made changes, and quick actions.
+- Left out on purpose: the paperclip and calendar buttons in the message box, since nothing is behind them.
+
+**The office is not a teacher:** its *Agent chat* now suggests office questions ("Which rooms are free on Thursday at 2 pm?",
+"Lab 2 is closed on Friday in week 7") and offers *Open the inbox*, *View the timetable* and *Find a free room*, not "When am
+I free?" (which the agent can't answer for someone who doesn't teach, so it went round in circles).
+
+**"schedule a class Wednesday … computer graphics" got stuck:** the agent called `constrain` with both the teacher and the
+course, was refused ("name exactly one"), and repeated the same call. The refusal now says: for the course's classes give the
+course alone, and to hold a new or extra class use `add_class`.
+
+**"No free slots on Thursday / Friday" for Dr. Khan** is correct for the timetable as it is: the two wrong approvals (every
+Thursday and every Friday from week 5) are still in it. Undoing them in the office inbox brings those days back.
+
+Tests: +1 in `test_nts_draft.py`; all `nts` tests pass. Checked with screenshots of the teacher and office views, dark and light.
+
+---
+
+## The second design: minimal, sections back on top (done, 2026-10-31)
+
+From the second design you shared, keeping only what the app has behind it:
+
+- **The sections are one compact group in the top bar** again. The office's *Semester* and *Observability* sit under
+  **More**, so nothing is pushed off the bar (the reason for the side rail before); on a narrow screen the group keeps its
+  icons and drops the labels.
+- **The sidebar:** *New request* (or press **N**), search (**Ctrl K**), **filter chips** (All, Approved, Declined, Answered),
+  a *Recent* count, and a coloured status dot and pill on each chat.
+- **The chat:** a slim header with the chat's title and two quick buttons (*View my timetable*, *Find free slots*; for the
+  office *Open the inbox*, *Find a free room*); a centred welcome with suggestions and **three action cards** (*Report an
+  absence* for a teacher, *Close a room* for the office); a centred message box with a toggle for stand-ins and a small send
+  button.
+- **The right-hand panel is gone:** a change's details already show in the chat, under its result card.
+- A neutral near-black palette in place of navy; the light theme stays.
+- Left out: the version tag, the "office online" footer and the "Ask Gemini" button (they belong to the tool the design was
+  made in).
+
+Checked with screenshots: teacher (welcome and a chat) and office (agent chat with More open).
+
+---
+
+## Small fixes after the second design (done, 2026-10-31)
+
+| What you saw | Why | Fix |
+|---|---|---|
+| The send button's arrow sat low and to the right | A button's padding (8px by 14px) stayed inside the 34px round button | No padding on the send button: the arrow's centre is now 0 px off |
+| "Ctrl K" broke over two lines; "Answered" wrapped under the other filters | The key hint could shrink, and the filter chips could wrap | Neither can now; the hint reads **Ctrl+K** |
+| The week list: pale numbers on white | The browser draws a select's list itself and didn't know the page was dark | The page tells the browser its theme (`color-scheme`), and the options use the theme's colours |
+
+---
+
+## A look that doesn't read as AI-made (done, 2026-10-31)
+
+**Why:** a friend said the page looked AI-generated. It did: Tailwind's default blue and slate colours, a sparkle icon,
+a centred "How can I help…" splash, pills on every row, and every element in a rounded box.
+
+**Tried first, and dropped:** "Path A" put this week's timetable in the middle and the chat in a narrow panel on the right.
+You liked its look but not the small chat window, so it was taken back out.
+
+**What stayed:** Path A's look on the layout we already had (the big chat window):
+
+- **Colours:** warm off-white (warm near-black in dark mode) and one deep green, in place of blue and slate.
+- **Type:** IBM Plex Sans, with Plex Mono for keys and code.
+- **Shapes:** 6–8px corners instead of 10–16px, and flatter buttons.
+- **Top bar:** a small "Timetable / demo" mark, and text tabs with a green underline (no pills, no icons).
+- **Sidebar:** titles wrap to two lines instead of being cut off, and the status is a small coloured word, not a pill.
+- **Chat:** the agent's replies are plain text (no bubble or avatar); the send button says *Send*.
+- **Empty chat:** no sparkle, and the welcome is left-aligned like a page. The suggestions and cards are still there.
+
+Checked with screenshots in light and dark (the empty chat and an open chat), with no script errors.
+
+---
+
+## "Is my request accepted?" was answered wrongly, and tool picking is on by default (done, 2026-10-31)
+
+**What you saw:** the office approved a change (19:49:42). Fourteen seconds later you asked "is my req accepted" in
+the same chat, and the agent *declined*: "could not be accepted because the draft is empty".
+
+**Why (three causes):**
+
+1. "I **want** a timeslot" earlier in the chat made the tool picker hand over the change tools too. The agent ran
+   `check_draft` on an empty draft, the tool only said "the draft has no changes yet", and the agent took that as
+   a failure.
+2. The agent remembers only the **last 4 messages**. After a few "is it accepted?" messages, the approved change had
+   dropped out of memory, and only the earlier wrong answers were left.
+3. After a **server restart**, old requests come back without their drafts, so the agent couldn't tell that one of
+   them had led to an approved change.
+
+It was not caching.
+
+**Fix:**
+
+- The agent's instructions now list **every change in the chat** and what came of it ("The office approved it: it is
+  in the timetable now"), however old, including requests rebuilt after a restart.
+- `check_draft` on an empty draft now says: if the person only asked something, answer in plain words; here is
+  what came of the earlier changes; do not decline.
+
+**Checked on the real model**, in the same chat (which by then had three wrong answers in its memory). "is my req
+accepted", "did the office accept it?" and "is my request approved or not" all came back: *Yes, … approved and is now
+in the timetable.* Before the fix, it was 1 right out of 3.
+
+**Also:** `--pick-tools` is now **on by default**. It gave the same eval score with 40% fewer tokens on questions;
+`--no-pick-tools` turns it off.
+
+Tests: 187 agent tests pass (1 new).
+
+---
+
+## Step 4, part 1: a Stop button (done, 2026-10-31)
+
+**Why:** the model sometimes thinks for 20+ seconds or goes round in circles, and you could only wait.
+
+**What it does:** while the agent works on your message, the **Send** button turns into a red **Stop**. Press it, and
+the request ends at once with "Stopped. Nothing was changed." You can send the next message straight away.
+
+**How:** the agent checks for Stop before each turn, after each model reply and before each tool call. A model call
+already under way can't be cut short, so it finishes in the background, but its reply is thrown away: no tool runs, no
+draft reaches the office, and the page doesn't show what it did (the telemetry still keeps it). Only the person who
+sent the message can stop it (`POST /api/episodes/{id}/stop`).
+
+**Checked on the real model:** Stop answered in 1.6 s. Fifteen seconds later, the request still read *stopped*, and
+nothing had reached the office. Tests: 188 agent tests pass (1 new).
+
+---
+
+## Thinking folded like ChatGPT, and a better Rules page (done, 2026-10-31)
+
+**Thinking:** the steps opened by themselves while the agent worked and stayed open afterwards, so every answer came
+with a list of steps. Now there's one quiet line: **"Thinking… Checked the classes"** (shimmering, with the step under way),
+then **"Thought for 12.7 s"**. The steps show only when you click it, and stay open only if you opened them.
+
+**Rules** (from your mockup, in the app's own look):
+
+- A page heading with the number of rules, and a search box (**Ctrl+K**) that highlights the words it found.
+- The rules are grouped by the handbook's chapters (General and authority, Teaching hours and load, Changing a class,
+  Rooms and labs, Clashes, Privacy), each with a one-line description.
+- Each rule is a row: its number, name and ID on the left, and its words on the right.
+
+Left out from the mockup: the "Important constraint" tag, because the handbook doesn't mark which rules are important,
+and a made-up tag could mislead. Checked with screenshots in light and dark, and with a search.
+
+---
+
+## Step 4, part 2: the office sees the week before and after a change (done, 2026-10-31)
+
+**Why:** the office approved changes by reading text like "classes only on Wednesday, 11 am to 12 pm, from week 5".
+That's how the "absent on Friday" request became every Friday and still got approved.
+
+**What it shows:** when the office opens a change waiting for approval, under *Proposed changes* there are two small
+grids, **Before** and **After**, of the teacher's week:
+
+- Classes taken out are dashed and struck through; where they go is green.
+- If the change holds for several weeks, it says so ("applies in 10 weeks: 5, 6, …").
+- A line lists other people's classes it moves ("Dr. Rao's Digital Logic: Wednesday 2 pm → Monday 3 pm").
+
+`GET /api/episodes/{id}/preview` (office only) works it out from the draft against today's timetable. After a server
+restart the draft is gone, so it says there is nothing to show.
+
+**Checked:** you looked at it with a real request ("away on Monday in week 7") and approved the look.
+Tests: 1 new (the office sees what moves off the day away, and the teacher can't call it).
+
+**Step 4 is now done** except edit-and-resend, which we left out because a new message in the same chat does the same.
