@@ -54,6 +54,8 @@ def _slots(base_url: str) -> threading.BoundedSemaphore:
             _SLOTS[base_url] = threading.BoundedSemaphore(max(1, int(os.environ.get("NTS_LOCAL_CONCURRENCY", "4"))))
         return _SLOTS[base_url]
 
+_RETRY_WAITS = (2.0, 4.0, 8.0, 16.0)  # seconds before each new try of a dropped connection
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -107,18 +109,26 @@ class LocalClient:
         self._lock = threading.Lock()
 
     def _request(self, path: str, payload: dict | None = None, *, root: bool = False) -> dict:
-        """``path`` under the API (``/v1``), or under the server's root with ``root`` (``/lora-adapters``)."""
+        """``path`` under the API (``/v1``), or under the server's root with ``root`` (``/lora-adapters``).
+        A dropped or refused connection (the server restarting, a blip on the network) is tried again after
+        2, 4, 8 and 16 s before it fails; a timeout is not, as the server is busy and another call adds to it."""
         data = json.dumps(payload).encode() if payload is not None else None
         base = self.base_url.removesuffix("/v1") if root else self.base_url
         req = urllib.request.Request(f"{base}{path}", data=data,
                                      headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read())
-        except urllib.error.HTTPError as e:
-            raise LLMError(f"local server {e.code}: {e.read()[:300]!r}") from e
-        except (urllib.error.URLError, TimeoutError) as e:
-            raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+        for wait in (*_RETRY_WAITS, None):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    return json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                raise LLMError(f"local server {e.code}: {e.read()[:300]!r}") from e
+            except (urllib.error.URLError, ConnectionError) as e:
+                if wait is None or not isinstance(getattr(e, "reason", e), ConnectionError):
+                    raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+                time.sleep(wait)
+            except TimeoutError as e:
+                raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+        raise AssertionError("unreachable")
 
     def _served_model(self) -> str:
         ids = [m["id"] for m in self._request("/models").get("data", [])]

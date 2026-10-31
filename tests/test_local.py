@@ -10,6 +10,7 @@ from agents.negotiation import _ParsedReply
 from agents.policy import PolicyOutput
 from core.generator import generate_department
 from evaluation.metrics import exact_match
+from language import local
 from language.compiler import CompilerParser, completion, gold_output
 from language.corpus import ExpectedAction, generate_corpus
 from language.llm import LLMError
@@ -92,9 +93,29 @@ def test_grammar_keeps_training_key_order():
         assert grammar_schema(schema.model_json_schema()) == schema.model_json_schema()
 
 
-def test_unreachable_server_is_a_clear_error(tmp_path):
+def test_unreachable_server_is_a_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(local, "_RETRY_WAITS", (0.0,))  # refused: tried again, then a clear error
     with pytest.raises(LLMError, match="not reachable"):
         LocalClient(base_url="http://127.0.0.1:9/v1", cache_dir=tmp_path, timeout=2)
+
+
+def test_a_dropped_connection_is_tried_again(server, tmp_path, monkeypatch):
+    client = LocalClient(base_url=server.url, cache_dir=tmp_path)
+    real, calls = local.urllib.request.urlopen, []
+
+    def flaky(req, timeout):
+        calls.append(req.full_url)
+        if len(calls) == 1:  # the server restarting under a call
+            raise ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host")
+        return real(req, timeout=timeout)
+
+    monkeypatch.setattr(local, "_RETRY_WAITS", (0.0, 0.0))
+    monkeypatch.setattr(local.urllib.request, "urlopen", flaky)
+    assert client._request("/models")["data"] and len(calls) == 2
+    calls.clear()
+    monkeypatch.setattr(local, "_RETRY_WAITS", ())  # no more tries: an LLMError the scorers count, not a crash
+    with pytest.raises(LLMError, match="not reachable"):
+        client._request("/models")
 
 
 def test_router_mode_needs_a_model_and_names_it(server, tmp_path, monkeypatch):
