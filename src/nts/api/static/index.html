@@ -359,7 +359,39 @@ main.chat, main.chat.two { height: calc(100vh - 52px); }
 .msg .avatar { display: none; }
 .msg.agent .bubble { background: none; border: 0; padding: 0; }
 .msg.user .bubble { padding: 8px 14px; border-radius: 8px; }
-.thinking { border-left-width: 1px; }
+.thinking { border-left: 0; padding: 0; }
+.thinking > summary { list-style: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; user-select: none; }
+.thinking > summary::-webkit-details-marker { display: none; }
+.thinking > summary:hover { color: var(--ink); }
+.thinking > summary .ic { transition: transform .15s; }
+.thinking[open] > summary .ic { transform: rotate(90deg); }
+.thinking[open] > ol { border-left: 1px solid var(--line); margin: 6px 0 0 6px; padding: 2px 0 2px 26px; }
+.shimmer { background: linear-gradient(90deg, var(--muted) 0%, var(--ink) 50%, var(--muted) 100%); background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.6s linear infinite; }
+/* the rules: a page of the handbook, chapter by chapter; the name on the left, the rule's words on the right */
+.rules-page { max-width: 1100px; margin: 0 auto; width: 100%; background: none; border: 0; padding: 8px 0 40px; }
+.rules-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.rules-head h1 { margin: 0 0 2px; font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+.rules-page .search { background: var(--panel); margin: 4px 0 8px; }
+.chapter { margin-top: 26px; }
+.chapter h2 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 15px; font-weight: 600; margin: 0 0 8px;
+  color: var(--ink); text-transform: none; letter-spacing: 0; }
+.chapter h2 span { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.rule-row { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 24px; padding: 14px 16px; background: var(--panel);
+  border: 1px solid var(--line); border-top-width: 0; }
+.rule-row:first-of-type { border-top-width: 1px; border-radius: 8px 8px 0 0; }
+.rule-row:last-child { border-radius: 0 0 8px 8px; }
+.rule-row:only-of-type { border-radius: 8px; }
+.rule-row:hover { background: color-mix(in srgb, var(--soft) 50%, var(--panel)); }
+.rule-name { display: flex; gap: 12px; align-items: flex-start; }
+.rule-name .num { font: 500 12px "IBM Plex Mono", ui-monospace, monospace; color: var(--accent); padding-top: 2px; min-width: 26px; }
+.rule-name b { display: block; font-weight: 600; }
+.rule-name code { display: inline-block; margin-top: 4px; font: 11px "IBM Plex Mono", ui-monospace, monospace; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.rule-row p { margin: 0; color: var(--ink); line-height: 1.6; }
+mark { background: color-mix(in srgb, var(--warn) 30%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+@media (max-width: 760px) { .rule-row { grid-template-columns: 1fr; gap: 6px; } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .result { padding: 12px 14px; gap: 10px; }
 .change { padding: 7px 10px; border-radius: 4px; }
 .composer { padding: 8px 10px; }
@@ -759,7 +791,10 @@ function episodeHtml(c) {
   let html = `<div class="msg user"><div class="col"><div class="bubble">${esc(c.request)}</div><div class="small stamp">${esc(c.started.slice(11, 16))}</div></div>
     <span class="avatar">${initial(me.name)}</span></div>
     <div class="msg agent"><span class="avatar bot">${icon("bot", 20)}</span><div class="col">`;
-  if (steps.length || working) html += `<details class="thinking" ${working ? "open" : ""}><summary>${working ? "Thinking…" : "Thought"} · ${steps.length} step${steps.length === 1 ? "" : "s"}${ms ? ` · ${(ms / 1000).toFixed(1)} s` : ""}</summary>
+  // folded, as in ChatGPT: one quiet line ("Thinking…" with the step under way, then "Thought for 6.2 s"); a click opens it
+  const now = c.events.findLast((e) => e.type === "tool");
+  if (steps.length || working) html += `<details class="thinking"><summary>${icon("chevron", 14)}<span class="${working ? "shimmer" : ""}">${working
+      ? `Thinking…${now ? ` ${esc(STEP[now.name] || now.name)}` : ""}` : `Thought for ${(ms / 1000).toFixed(1)} s`}</span></summary>
       <ol>${steps.join("")}${working ? `<li class="small">working…</li>` : ""}</ol></details>`;
   const end = c.events.findLast((e) => e.type === "end");
   if (!working && !p) {
@@ -1049,17 +1084,34 @@ async function fairnessView() {
       <td><div class="bar" style="width:${(100 * t.burden / top).toFixed(1)}%"></div></td><td class="small">${esc(t.for.join(", "))}</td></tr>`).join("")}</table>`;
 }
 
+// the handbook's chapters (the first part of a rule's number): what each is about
+const CHAPTERS = {1: ["General and authority", "What the rules cover, and who may ask for a change"],
+  2: ["Teaching hours and load", "The teaching day, the lunch break, and how much anyone teaches"],
+  3: ["Changing a class", "Preferences, make-up classes, swaps and online classes"],
+  4: ["Rooms and labs", "Laboratories, room sizes and bookings"], 5: ["Clashes", "Reporting a clash in the timetable"],
+  6: ["Privacy", "What stays confidential"]};
+
 async function rulesView() {
-  $("pane").innerHTML = dep.rules ? `<div class="row"><input id="rq" placeholder="Search the regulations: lunch, Saturday, make-up classes…" style="flex:1">
-    </div><div id="rlist" class="stack"></div>` : `<div class="empty">No regulations are loaded for this department.</div>`;
-  if (!dep.rules) return;
+  if (!dep.rules) { $("pane").innerHTML = `<div class="empty">No regulations are loaded for this department.</div>`; return; }
+  $("pane").classList.add("rules-page");
+  $("pane").innerHTML = `<div class="rules-head"><div><h1>Rules</h1><div class="small">The department's timetable regulations. The agent checks
+      every change against them.</div></div><span class="small" id="rcount"></span></div>
+    <label class="search">${icon("search", 16)}<input id="rq" placeholder="Search the rules: lunch, Saturday, make-up, P-LOAD…" aria-label="Search the rules"><kbd>Ctrl+K</kbd></label>
+    <div id="rlist"></div>`;
   let t = null;
+  const mark = (s, q) => q ? esc(s).replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").split(/\s+/).filter(Boolean).join("|")})`, "gi"), "<mark>$1</mark>") : esc(s);
   const draw = async () => {
-    const r = await api(`/api/rules?q=${encodeURIComponent($("rq").value)}`);
-    $("rlist").innerHTML = r.rules.map((x) => `<div class="rule"><h3>§${esc(x.number)} ${esc(x.title)} <span class="small">[${esc(x.id)}]</span></h3><div>${esc(x.text)}</div></div>`).join("")
-      || `<div class="empty">No rule matches.</div>`;
+    const q = $("rq").value.trim(), r = await api(`/api/rules?q=${encodeURIComponent(q)}`);
+    const n = r.rules.length;
+    $("rcount").textContent = `${n} rule${n === 1 ? "" : "s"}${q ? (n === 1 ? " matches" : " match") : ""}`;
+    const groups = Object.entries(Object.groupBy(r.rules, (x) => x.number.split(".")[0]));
+    $("rlist").innerHTML = groups.map(([ch, rules]) => `<section class="chapter"><h2>${esc(CHAPTERS[ch]?.[0] || `Chapter ${ch}`)}
+        <span>${esc(CHAPTERS[ch]?.[1] || "")}</span></h2>${rules.map((x) => `<article class="rule-row">
+        <div class="rule-name"><span class="num">${esc(x.number)}</span><div><b>${mark(x.title, q)}</b><code>${mark(x.id, q)}</code></div></div>
+        <p>${mark(x.text, q)}</p></article>`).join("")}</section>`).join("") || `<div class="empty">No rule matches “${esc(q)}”.</div>`;
   };
   $("rq").oninput = () => { clearTimeout(t); t = setTimeout(draw, 200); };
+  document.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && $("rq")) { e.preventDefault(); $("rq").focus(); } };
   draw();
 }
 

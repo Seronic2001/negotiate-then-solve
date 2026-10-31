@@ -394,3 +394,21 @@ sent the message can stop it (`POST /api/episodes/{id}/stop`).
 
 **Checked on the real model:** Stop answered in 1.6 s. Fifteen seconds later, the request still read *stopped*, and
 nothing had reached the office. Tests: 188 agent tests pass (1 new).
+
+---
+
+## Thinking folded like ChatGPT, and a better Rules page (done, 2026-10-31)
+
+**Thinking:** the steps opened by themselves while the agent worked and stayed open afterwards, so every answer came
+with a list of steps. Now there's one quiet line: **"Thinking… Checked the classes"** (shimmering, with the step under way),
+then **"Thought for 12.7 s"**. The steps show only when you click it, and stay open only if you opened them.
+
+**Rules** (from your mockup, in the app's own look):
+
+- A page heading with the number of rules, and a search box (**Ctrl+K**) that highlights the words it found.
+- The rules are grouped by the handbook's chapters (General and authority, Teaching hours and load, Changing a class,
+  Rooms and labs, Clashes, Privacy), each with a one-line description.
+- Each rule is a row: its number, name and ID on the left, and its words on the right.
+
+Left out from the mockup: the "Important constraint" tag, because the handbook doesn't mark which rules are important,
+and a made-up tag could mislead. Checked with screenshots in light and dark, and with a search.
