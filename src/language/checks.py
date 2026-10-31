@@ -20,7 +20,15 @@ show what was changed and why.
     time as the destination ("I need my lecture on Thursday at 2 pm");
   - a wish to move a class to where it already is is asked about;
   - a reading that refers to no class, of a message that names one of the sender's classes, is asked
-    about (is it that class, or every class?): the reading left out what the message is about;
+    about (is it that class, or every class?): the reading left out what the message is about; unless the
+    message says the times are for that course's classes ("any day apart from Friday works for my Data
+    Structures classes"), which the reading is then about, teaching only on all days but some read as
+    avoiding those days;
+  - a move of a course the message does not name, in a message that names one of the sender's, is made up:
+    dropped, with what refers to it;
+  - a lone move as firm as the labelling rule makes it ("it has to move"), and a clash at the time of the
+    class the message moves dropped ("where it is now clashes with a meeting" is why it moves);
+  - a club booking has the start and end the message gives as one range ("7-9pm", "from 2 till 4 pm");
   - a reading of room needs only, of a message that names a day the class is not referred to by, gets the
     time back as a move of that class ("needs the routers, and it has to be on Tuesday afternoon": the
     time was left out; the message says it plainly, so asking again would only repeat it);
@@ -43,7 +51,9 @@ from core.schemas import Placement, Request
 from .corpus import FULL_DAY, hour
 from .intents import (
     Avoid,
+    ClashReport,
     ClassRef,
+    ClubBooking,
     IntentOutput,
     Limit,
     LoadLimit,
@@ -54,6 +64,7 @@ from .intents import (
     Relate,
     TimeSpec,
     Unresolved,
+    Who,
     classes,
     meeting,
     slots,
@@ -69,6 +80,7 @@ from .lexicon import (
     whole_term,
     words,
 )
+from .names import course_id
 
 # the kinds whose firmness the message alone decides; a move has its own rule (``_check_move``)
 _FIRMABLE = (Avoid, Only, Limit, Relate)
@@ -192,7 +204,7 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
     text, sender = request.raw_text, request.sender_id
     soft_words = (not necessary(text)) if strict else (hedged(text) and not necessary(text))
     intents, question, missing = [], None, []
-    items = _untangle(out.intents, text, notes)
+    items = _untangle(_named_only(instance, out.intents, text, sender, notes), text, notes)
     for i, intent in enumerate(items):
         if getattr(intent, "hard", False) and soft_words:
             notes.append(f"intent {i} ({intent.kind}): hard, but the message "
@@ -205,7 +217,14 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
             notes.append(f"intent {i} ({intent.kind}): a wish, but the message says it must be so; read as a "
                          "requirement")
             intent = intent.model_copy(update={"hard": True})
+        elif (len(items) == 1 and isinstance(intent, Move) and not intent.hard
+              and firmness_rule("move", text)):
+            notes.append(f"intent {i} (move): a wish, but the message says the class has to move; read as a "
+                         "requirement")
+            intent = intent.model_copy(update={"hard": True})
         intent = _ground_period(intent, text, notes, i)
+        if isinstance(intent, ClubBooking):
+            intent = _club_times(intent, text, notes, i)
         if isinstance(intent, Move):
             intent, q = _check_move(instance, intent, sender, timetable, notes, i)
             if q and question is None:
@@ -215,7 +234,11 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
     if (question is None and intents and not any(map(_about_classes, intents))
             and not all(isinstance(i, (Limit, LoadLimit)) for i in intents)):
         named = _own_courses_named(instance, text, sender)
-        if len(named) == 1:
+        if len(named) == 1 and _FOR_COURSE(named[0]).search(normalise(text)):
+            notes.append(f"the reading is about all your times, in a message that says it is for your {named[0]} "
+                         "classes: read as about them")
+            intents = [_for_course(x, named[0], instance.calendar.days, text, notes) for x in intents]
+        elif len(named) == 1:
             notes.append(f"the reading is about all your times, in a message about {named[0]}")
             question, missing = (f"Should this apply to your {named[0]} classes only, or to all your classes?",
                                  ["session"])
@@ -269,6 +292,12 @@ def _untangle(intents: list, text: str, notes: list[str]) -> list:
             if getattr(c, "hard", False):  # a must said of the choice is said of what is left of it
                 out = [x.model_copy(update={"hard": True}) if getattr(x, "id", None) == c.of[0] and hasattr(x, "hard")
                        else x for x in out]
+    moved = {(x.which.day, x.which.time) for x in out if isinstance(x, Move) and x.which.day and x.which.time}
+    for x in list(out):  # "where it is now clashes with a meeting": why the class moves, not a clash of classes
+        if (isinstance(x, ClashReport) and not x.courses and moved and x.time.days and x.time.at
+                and {(d, a) for d in x.time.days for a in x.time.at} <= moved):
+            notes.append("a clash at the time of a class the message moves: the reason for the move; dropped")
+            out.remove(x)
     held = {i for x in out if hasattr(x, "of") for i in x.of}
     moves = {x.id for x in out if isinstance(x, Move) and x.id}
     for x in list(out):  # a second move of a class already moved, that no choice holds, repeats the first
@@ -286,6 +315,22 @@ def _untangle(intents: list, text: str, notes: list[str]) -> list:
         r.same for x in out for n in ("which", "other", "mine", "theirs")
         if isinstance(r := getattr(x, n, None), ClassRef) and r.same}
     return [x.model_copy(update={"id": None}) if getattr(x, "id", None) and x.id not in used else x for x in out]
+
+
+def _named_only(instance: Instance, intents: list, text: str, sender: str, notes: list[str]) -> list:
+    """``intents`` without moves of a course the message does not name, in a message that names one of the
+    sender's ("Wednesday morning would suit my Signals and Systems lab": a second lab moved and set apart from
+    it is made up), and without what refers to them."""
+    if not _own_courses_named(instance, text, sender):
+        return intents
+    stray = {x.id for x in intents if isinstance(x, Move) and x.id and x.which.course
+             and not _names(text, instance.course_title(course_id(instance, x.which.course)))}
+    if not stray:
+        return intents
+    notes.append(f"{len(stray)} move(s) of a course the message does not name: dropped")
+    refers = lambda x: any(isinstance(r := getattr(x, n, None), ClassRef) and r.same in stray  # noqa: E731
+                           for n in ("which", "other", "mine", "theirs")) or bool(set(getattr(x, "of", [])) & stray)
+    return [x for x in intents if getattr(x, "id", None) not in stray and not refers(x)]
 
 
 def _about_classes(intent) -> bool:
@@ -321,8 +366,56 @@ def _own_courses_named(instance: Instance, text: str, sender: str) -> list[str]:
     """The titles of the sender's courses the message names: in full (a typo allowed), or by an acronym in
     capitals ("my ML lecture"; "this is a must" names no IS)."""
     titles = {instance.course_title(s.course) for s in instance.sessions if s.faculty == sender}
-    return sorted(t for t in titles if mentions(text, t)
-                  or (len(a := acronym(t).upper()) >= 2 and re.search(rf"(?<![\w.]){a}(?![\w.])", text)))
+    return sorted(t for t in titles if _names(text, t))
+
+
+def _names(text: str, title: str) -> bool:
+    return mentions(text, title) or (len(a := acronym(title).upper()) >= 2
+                                     and re.search(rf"(?<![\w.]){a}(?![\w.])", text) is not None)
+
+
+def _FOR_COURSE(title: str) -> re.Pattern:
+    """ "... works for my Data Structures classes": the message says whose times it is about."""
+    return re.compile(rf"\bfor (?:my|the) {re.escape(normalise(title))} (?:class|lecture|lab|practical|tutorial|session)",
+                      re.IGNORECASE)
+
+
+def _for_course(intent, title: str, week: list[str], text: str, notes: list[str]):
+    """``intent`` about the classes of ``title``; and teaching only on all days but some is avoiding those days
+    ("any day apart from Friday works"), as firm as the labelling rule makes an avoidance."""
+    if not isinstance(intent, (Only, Avoid)) or intent.who is not None:
+        return intent
+    intent = intent.model_copy(update={"who": Who(kind="course", id=title)})
+    t = intent.time
+    if (isinstance(intent, Only) and t.days and not t.part and not t.at and not t.before and not t.after
+            and set(t.days) < set(week) and len(t.days) >= len(week) - 2):
+        rest = [d for d in week if d not in t.days]
+        notes.append(f"only on every day but {', '.join(rest)}: read as avoiding {', '.join(rest)}")
+        intent = Avoid(who=intent.who, time=TimeSpec(days=rest), period=intent.period,
+                       hard=firmness_rule("avoid", text), justification=intent.justification)
+    return intent
+
+
+_RANGE = re.compile(r"\b(\d{1,2})(?::(\d\d))?\s*(am|pm)?\s*(?:-|–|to|till|until)\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)\b",
+                    re.IGNORECASE)
+
+
+def _club_times(intent: ClubBooking, text: str, notes: list[str], i: int) -> ClubBooking:
+    """A booking with the start and end the message gives as one range ("7-9pm", "from 2 till 4 pm"): a reader
+    that leaves the end out has the request asked again, one that misreads the start books the wrong hours."""
+    ranges = list(_RANGE.finditer(text))
+    if len(ranges) != 1:
+        return intent
+    m = ranges[0]
+    end = clock(f"{m[4]}:{m[5] or '00'} {m[6]}")
+    start = clock(f"{m[1]}:{m[2] or '00'} {m[3] or m[6]}")
+    if start and end and start > end and not m[3]:  # "11-1 pm": the start is in the morning
+        start = clock(f"{m[1]}:{m[2] or '00'} am")
+    if not start or not end or start >= end or (intent.start, intent.end) == (start, end):
+        return intent
+    notes.append(f"intent {i} (club_booking): {intent.start or '?'}-{intent.end or '?'}, but the message says "
+                 f"{start}-{end}")
+    return intent.model_copy(update={"start": start, "end": end})
 
 
 def _ground_period(intent, text: str, notes: list[str], i: int):
@@ -344,24 +437,24 @@ def _ground_period(intent, text: str, notes: list[str], i: int):
 def _check_move(instance: Instance, intent: Move, sender: str, timetable: Mapping[str, Placement] | None,
                 notes: list[str], i: int) -> tuple[Move, str | None]:
     ref, to = intent.which, intent.to
-    if not to.has_times and to.days is None and (ref.day or ref.time) and timetable:
-        try:
-            classes(instance, ref, sender, timetable)
-        except Unresolved:
-            bare = ref.model_copy(update={"day": None, "time": None})
-            try:
-                classes(instance, bare, sender, timetable)
-            except Unresolved:
-                return intent, None
+    # the reading names courses by title, the timetable by ID: looked up by ID, kept as the reading wrote it
+    by_id = (lambda r: r.model_copy(update={"course": course_id(instance, r.course)}) if r.course else r)  # noqa: E731
+    bare = ref.model_copy(update={"day": None, "time": None})
+    if (ref.day or ref.time) and timetable and not _resolves(instance, by_id(ref), sender, timetable)             and _resolves(instance, by_id(bare), sender, timetable):
+        if not to.has_times and to.days is None:
             target = TimeSpec(days=[ref.day] if ref.day else None, at=[ref.time] if ref.time else None)
             notes.append(f"intent {i}: no class of yours is at {ref.day or ''} {ref.time or ''}; read as where the "
                          "class should go")
             intent = intent.model_copy(update={"which": bare, "to": target})
             to = target
+        elif ref.day in (to.days or [ref.day]) and ref.time in (to.at or [ref.time]):
+            notes.append(f"intent {i}: no class of yours is at {ref.day or ''} {ref.time or ''}, where the class "
+                         "should go; read as where it should go only")
+            intent = intent.model_copy(update={"which": bare})
     if not timetable or not (to.has_times or to.days):
         return intent, None
     try:
-        sid = meeting(instance, intent.which, sender, timetable, to.days)
+        sid = meeting(instance, by_id(intent.which), sender, timetable, to.days)
         wanted = slots(instance, to)
     except Unresolved:
         return intent, None
@@ -372,6 +465,14 @@ def _check_move(instance: Instance, intent: Move, sender: str, timetable: Mappin
         return intent, (f"Your {_class_name(instance, sid)} is already on {FULL_DAY[p.day]} at {hour(p.slot)}. "
                         "When would you like it instead?")
     return intent, None
+
+
+def _resolves(instance: Instance, ref: ClassRef, sender: str, timetable: Mapping[str, Placement]) -> bool:
+    try:
+        classes(instance, ref, sender, timetable)
+    except Unresolved:
+        return False
+    return True
 
 
 def checked_compile(instance: Instance, request: Request, out: IntentOutput, *,

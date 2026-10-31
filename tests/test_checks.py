@@ -16,6 +16,7 @@ from language.checks import (
 )
 from language.intents import (
     Avoid,
+    ClashReport,
     ClassRef,
     ClubBooking,
     IntentOutput,
@@ -23,8 +24,10 @@ from language.intents import (
     NeedsRoom,
     Only,
     Period,
+    Relate,
     TimeSpec,
     Unavailable,
+    Who,
 )
 from language.lexicon import (
     firmness_rule,
@@ -292,9 +295,10 @@ def test_what_the_message_cannot_have_asked_for_is_dropped(instance, lecture):
     # a choice the message does not offer is its first item, firm if the choice was; its label goes
     got = check_reading(instance, plain, IntentOutput(action="compile", intents=[a, b, AnyOf(of=["a", "b"], hard=True)]))
     assert got.output.intents == [a.model_copy(update={"id": None, "hard": True})]
-    # a second move of the same class outside any choice repeats the first
+    # a second move of the same class outside any choice repeats the first (and, the one request left, is as
+    # firm as the labelling rule makes it: "it can't stay")
     assert check_reading(instance, plain, IntentOutput(action="compile", intents=[a, b])).output.intents == \
-        [a.model_copy(update={"id": None})]
+        [a.model_copy(update={"id": None, "hard": True})]
     # an item said twice, once by naming the other's class, is read once
     cancel = Cancel(id="a", which=ref, period=Period(weeks=[5]))
     twice = Cancel(id="b", which=ClassRef(same="a"), period=Period(weeks=[5]))
@@ -311,3 +315,71 @@ def test_what_the_message_cannot_have_asked_for_is_dropped(instance, lecture):
     assert check_reading(instance, request(lecture.faculty, "No two of my lectures on one day."),
                          IntentOutput(action="compile", intents=days)).output.intents == \
         [Relate(which=lec, relation="different_day")]
+
+
+def test_a_course_named_by_title_has_its_time_read_as_where_it_should_go(instance, lecture, placed):
+    # the reading names the course as the message does; the timetable knows it by ID
+    title = instance.course_title(lecture.course)
+    text = f"4 pm on Thursday would suit my {title} class better."
+    out = IntentOutput(action="compile", intents=[Move(which=ClassRef(course=title, day="Thu", time="16:00"))])
+    c = check_reading(instance, request(lecture.faculty, text), out, placed)
+    [move] = c.output.intents
+    assert (move.which.day, move.which.time, move.to.days, move.to.at) == (None, None, ["Thu"], ["16:00"])
+    # the same time given as where the class is and where it should go: where it should go
+    out = IntentOutput(action="compile", intents=[
+        Move(which=ClassRef(course=title, day="Thu", time="16:00"), to=TimeSpec(days=["Thu"], at=["16:00"]))])
+    [move] = check_reading(instance, request(lecture.faculty, text), out, placed).output.intents
+    assert (move.which.day, move.which.time, move.to.at) == (None, None, ["16:00"])
+
+
+def test_a_message_for_one_courses_classes_is_read_as_about_them(instance, lecture):
+    title = instance.course_title(lecture.course)
+    days = instance.calendar.days
+    out = IntentOutput(action="compile", intents=[Only(time=TimeSpec(days=[d for d in days if d != "Fri"]), hard=True)])
+    c = check_reading(instance, request(lecture.faculty, f"Any day apart from Friday works for my {title} classes."),
+                      out)
+    assert c.question is None
+    [avoid] = c.output.intents
+    assert (avoid.kind, avoid.who, avoid.time.days, avoid.hard) == ("avoid", Who(kind="course", id=title), ["Fri"],
+                                                                    False)
+    # naming the course without saying the times are for it is still asked about
+    c = check_reading(instance, request(lecture.faculty, f"About {title}: any day apart from Friday works."), out)
+    assert c.question and title in c.question
+
+
+def test_a_clash_that_is_why_a_class_moves_is_not_a_clash_report(instance, lecture):
+    text = "My Wednesday 2 pm lecture has to move to Monday morning; where it is now clashes with a meeting."
+    out = IntentOutput(action="compile", intents=[
+        Move(which=ClassRef(kind="lecture", day="Wed", time="14:00"), to=TimeSpec(days=["Mon"], part="morning")),
+        ClashReport(time=TimeSpec(days=["Wed"], at=["14:00"]), justification="stated")])
+    c = check_reading(instance, request(lecture.faculty, text), out)
+    [move] = c.output.intents
+    assert move.kind == "move" and move.hard is True  # "has to move", once it is the message's one request
+    # a clash at another time is left as read
+    other = out.model_copy(update={"intents": [out.intents[0], ClashReport(time=TimeSpec(days=["Thu"], at=["10:00"]))]})
+    assert len(check_reading(instance, request(lecture.faculty, text), other).output.intents) == 2
+
+
+def test_a_club_booking_has_the_hours_the_message_gives(instance, lecture):
+    out = IntentOutput(action="compile", intents=[ClubBooking(club="Robotics Club", day="Tue", start="19:00")])
+    c = check_reading(instance, request(lecture.faculty, "Robotics Club session: Tuesday, 7-9pm, 12-odd people."), out)
+    assert (c.output.intents[0].start, c.output.intents[0].end) == ("19:00", "21:00")
+    wrong = out.model_copy(update={"intents": [ClubBooking(club="Coding Club", day="Fri", start="16:00", end="16:40")]})
+    c = check_reading(instance, request(lecture.faculty, "Coding Club contest: Friday, from 2 till 4 pm."), wrong)
+    assert (c.output.intents[0].start, c.output.intents[0].end) == ("14:00", "16:00")
+    c = check_reading(instance, request(lecture.faculty, "Coding Club contest on Friday afternoon."), wrong)
+    assert c.output.intents == wrong.intents  # no range said: as read
+
+
+def test_a_move_of_a_course_the_message_does_not_name_is_dropped(instance, lecture):
+    title = instance.course_title(lecture.course)
+    other = next(t for t in sorted(set(instance.course_titles.values())) if t != title and t not in title)
+    out = IntentOutput(action="compile", intents=[
+        Move(id="a", which=ClassRef(course=title), to=TimeSpec(days=["Wed"], part="morning")),
+        Move(id="b", which=ClassRef(course=other), to=TimeSpec(days=["Wed"], part="morning")),
+        Relate(which=ClassRef(same="a"), relation="different_day", other=ClassRef(same="b"))])
+    c = check_reading(instance, request(lecture.faculty, f"Wednesday morning would suit my {title} class better."), out)
+    [move] = c.output.intents
+    assert move.which.course == title
+    both = check_reading(instance, request(lecture.faculty, f"Move {title} and {other} to Wednesday morning."), out)
+    assert len(both.output.intents) == 3
