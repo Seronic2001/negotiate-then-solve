@@ -1,11 +1,14 @@
 """Conversations: the requests of a thread, the agent remembering the earlier ones, and who sees what."""
 
+import threading
+import time
+
 from fastapi.testclient import TestClient
 
 from nts.agents import COORDINATOR_V3
 from nts.api import Service, create_app
 from nts.harness import Harness
-from nts.harness.loop import STUCK
+from nts.harness.loop import STOPPED, STUCK
 from nts.models import ScriptedModel, call, say
 from nts.telemetry import MemorySink, Tracer
 from nts.tools import ALL_TOOLS, Registry
@@ -311,3 +314,34 @@ def test_an_undo_of_a_draft_that_was_redone_along_the_way(store):
     office.post(f"/api/episodes/{ep['id']}/approve")
     assert office.post(f"/api/episodes/{ep['id']}/undo").status_code == 200
     assert dict(store.world.constraints) == dict(before.constraints)
+
+
+def test_stop_ends_a_request_while_the_agent_works(store):
+    """Stop while the model is thinking: the request ends at once, and the calls the model then makes are not run."""
+    inst = store.world.instance
+    thinking, go_on = threading.Event(), threading.Event()
+
+    def slow(_messages):
+        thinking.set()
+        go_on.wait(5)
+        return call("classes_of", teacher="me", week=5)
+
+    a, service = app(store, [slow, say("never asked")])
+    me, other = signed_in(a, inst.faculty[0].name), signed_in(a, inst.faculty[1].name)
+    ep = me.post("/api/episodes", json={"request": "what do I teach?", "week": 5}).json()
+    assert thinking.wait(5)
+    assert me.get(f"/api/episodes/{ep['id']}").json()["can"]["stop"]
+    assert other.post(f"/api/episodes/{ep['id']}/stop").status_code == 404  # not theirs to see, nor to stop
+    got = me.post(f"/api/episodes/{ep['id']}/stop").json()
+    assert got["status"] == "stopped" and got["text"] == STOPPED
+    go_on.set()
+    for _ in range(100):
+        if service.get(ep["id"]).outcome is not None:
+            break
+        time.sleep(0.05)
+    out = service.get(ep["id"]).outcome
+    assert out.status == "stopped" and not out.calls and len(service.harness.model.seen) == 1
+    assert [e["type"] for e in service.get(ep["id"]).events] == ["end"] and service.get(ep["id"]).status == "stopped"
+    assert me.post(f"/api/episodes/{ep['id']}/stop").status_code == 409  # already stopped
+    nxt = me.post("/api/episodes", json={"request": "what do I teach?", "week": 5, "thread": ep["thread"]})
+    assert nxt.status_code == 200  # the conversation goes on

@@ -14,6 +14,7 @@ Every episode ends with one status:
   escalated         ... the model passed it to a person
   waiting           a talk tool asked someone, and no one was there to answer (``people=None``):
                     ``harness.resume(outcome, Reply(...))`` goes on once the answer comes
+  stopped           the requester pressed Stop (``cancel`` was set): after the step under way, nothing more runs
 
 A talk tool's ask goes to ``people`` (simulators, a terminal), and the reply is what the model sees
 as the tool's result. Calls the model made in the same turn after an ask are refused: they were made
@@ -32,6 +33,7 @@ call with the exact messages and reply, each tool call with its result, each rep
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import Counter
 from collections.abc import Sequence
@@ -90,6 +92,7 @@ CONVERSATION = ("This request continues a conversation: its earlier messages com
                 "in [brackets]. Answer the latest message; use the earlier ones only to understand it. Your draft "
                 "starts empty: nothing an earlier message drafted is in it, and the brackets say whether that change "
                 "is in the timetable now. To change it again, draft it anew.")
+STOPPED = "Stopped. Nothing was changed."
 STUCK = ("I kept going round in circles on this one, so I stopped. Could you say it with a little more detail: "
          "which class (course, day and time), what you want done with it, and for which week?")
 
@@ -105,7 +108,8 @@ class Harness:
 
     def run(self, agent: AgentConfig, request: str, store: Store, actor: str, week: int | None = None,
             *, episode_id: str | None = None, people: People | None = None,
-            history: Sequence[tuple[str, str]] = (), thread: str | None = None, changes: Sequence[str] = ()) -> Outcome:
+            history: Sequence[tuple[str, str]] = (), thread: str | None = None, changes: Sequence[str] = (),
+            cancel: threading.Event | None = None) -> Outcome:
         """``history``: the earlier requests of the same conversation (``thread``) and what came of each, oldest first;
         the model sees them as earlier turns, so "and on Tuesday?" or "move that one instead" can be read.
         ``changes``: every change the conversation drafted and whether it is in the timetable, however long ago."""
@@ -128,6 +132,7 @@ class Harness:
             if changes else "")
         transcript = [Message(role="system", content=system), *earlier, Message(role="user", content=read)]
         run = _Run(eid, agent, ctx, transcript, tools, people)
+        run.cancel = cancel or threading.Event()
         run.screened = screened.flagged
 
         with self.tracer.span("episode", agent.name, trace_id=eid, agent=agent.name, agent_version=agent.version(tools),
@@ -165,6 +170,9 @@ class Harness:
     def _loop(self, run: _Run) -> None:
         b = run.agent.budgets
         while run.turns < b.max_turns:
+            if run.cancel.is_set():
+                run.stop("stopped", "stopped by the requester", text=STOPPED)
+                return
             n = run.turns + 1
             last = n == b.max_turns
             allowed = {Scope.END} & run.agent.scopes if last else run.agent.scopes  # the last turn can still end it
@@ -179,6 +187,9 @@ class Harness:
                 run.turns = n
                 reply = self._ask(run, sent, offered)
                 if reply is None:
+                    return
+                if run.cancel.is_set():  # Stop came while the model was thinking: its reply is not used
+                    run.stop("stopped", "stopped by the requester", text=STOPPED)
                     return
                 run.transcript.append(reply.as_message())
                 if not reply.tool_calls:
@@ -196,6 +207,8 @@ class Harness:
         one is there to answer: the calls after it wait in ``run.waiting``."""
         b = run.agent.budgets
         for i, call in enumerate(calls):
+            if not run.status and run.cancel.is_set():  # the model's reply came after Stop: run none of its calls
+                run.stop("stopped", "stopped by the requester", text=STOPPED)
             if run.status:  # an end tool already ended it: answer the rest so the transcript stays whole
                 result = _refuse(call, "episode_ended", "the request was already ended")
             elif after_ask:
@@ -343,6 +356,7 @@ class _Run:
         self.status, self.detail, self.text = "", "", ""
         self.elapsed = 0.0
         self.screened = False
+        self.cancel = threading.Event()  # set by Stop; checked before each turn and each tool call
 
     def stop(self, status: str, detail: str = "", *, text: str = "") -> None:
         self.status, self.detail, self.text = status, detail, text

@@ -9,6 +9,7 @@
     GET  /api/episodes/{id}/poll?after=n   the same events as JSON (for clients without SSE)
     POST /api/episodes/{id}/reply   {"answer": "yes" | "no" | "said" | "no_reply" | "counter", "text": "...",
                                      "day": "Thu", "hour": "2 pm"}   (the one asked; day and hour for a counter)
+    POST /api/episodes/{id}/stop    while the agent works on it                           (the requester)
     POST /api/episodes/{id}/approve | /reject {"note": "..."}                             (the office)
     GET  /api/inbox                 what waits for my answer
     GET  /api/notices               what approved changes did to my classes
@@ -326,7 +327,19 @@ def create_app(departments: dict[str, Service] | Service, users: Users | None = 
         ep = service(s).get(eid)
         p = ep.pending
         answer = p is not None and not ep.busy and (p.to == s.person or (p.to == REQUESTER and ep.actor == s.person))
-        return {"answer": answer, "decide": s.office and ep.status == "submitted" and not ep.busy}
+        return {"answer": answer, "decide": s.office and ep.status == "submitted" and not ep.busy,
+                "stop": ep.busy and ep.actor == s.person}
+
+    @app.post("/api/episodes/{eid}/stop")
+    def stop(s: Me, eid: str) -> dict:
+        episode(s, eid)
+        if not _can(s, eid)["stop"]:
+            raise HTTPException(409, "the agent is not working on a request of yours here")
+        try:
+            service(s).stop(eid)
+        except Conflict as e:
+            raise HTTPException(409, str(e)) from None
+        return service(s).detail(eid)
 
     @app.post("/api/episodes/{eid}/reply")
     def reply(s: Me, eid: str, body: Answer) -> dict:

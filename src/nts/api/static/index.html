@@ -364,6 +364,8 @@ main.chat, main.chat.two { height: calc(100vh - 52px); }
 .change { padding: 7px 10px; border-radius: 4px; }
 .composer { padding: 8px 10px; }
 .send { width: auto; height: 30px; border-radius: 6px; padding: 0 14px; font-weight: 500; font-size: 13px; }
+.send.stopping { background: var(--panel); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.s-stopped { color: var(--muted); }
 .switch { border: 0; padding: 4px 2px; }
 .pick, .welcome .pick { border-radius: 6px; color: var(--ink); border-color: var(--line); background: var(--panel); }
 .pick:hover { background: var(--soft); }
@@ -762,7 +764,7 @@ function episodeHtml(c) {
   const end = c.events.findLast((e) => e.type === "end");
   if (!working && !p) {
     const text = c.text || end?.text || c.detail || end?.detail || "";
-    const quiet = ["answered", "submitted", "approved", "rejected", "replaced", "undone", "not_committed"].includes(c.status);
+    const quiet = ["answered", "submitted", "approved", "rejected", "replaced", "undone", "not_committed", "stopped"].includes(c.status);
     html += `<div class="bubble">${quiet ? "" : `${pill(c.status)} `}${esc(text)}</div>`;
   }
   if (p && !c.busy) {
@@ -812,6 +814,12 @@ function draw() {
     : p?.to_requester ? "Answer the agent's question…" : "Ask a follow-up, or change what you asked…";
   const locked = !!chat && (!chat.mine || last?.busy || last?.status === "running" || (!!p && !p.to_requester));
   $("text").disabled = $("send").disabled = locked;
+  // while the agent works on your message, Send becomes Stop
+  const stoppable = !!chat?.mine && !!last?.can?.stop && (last.busy || last.status === "running");
+  $("send").textContent = stoppable ? "Stop" : "Send";
+  $("send").classList.toggle("stopping", stoppable);
+  $("send").disabled = locked && !stoppable;
+  $("send").onclick = stoppable ? () => stopRun(last.id) : send;
   if (!chat?.episodes) {
     $("msgs").innerHTML = `<div class="welcome">
       <h3>${me.role === "office" ? "How can I help the office?" : "How can I help with your timetable?"}</h3>
@@ -834,6 +842,12 @@ function draw() {
     for (const b of document.querySelectorAll("[data-decide]")) b.onclick = () => decide(b.dataset.ep, b.dataset.decide);
   }
   for (const b of document.querySelectorAll("[data-act]")) b.onclick = () => act(b.dataset.act);
+}
+
+async function stopRun(eid) {
+  $("send").disabled = true;
+  try { await api(`/api/episodes/${eid}/stop`, {method: "POST"}); } catch (e) { $("sendErr").textContent = e.message; }
+  if (chat) await openThread(chat.id);
 }
 
 async function answer(eid, kind) {

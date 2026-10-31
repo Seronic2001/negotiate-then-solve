@@ -27,6 +27,7 @@ from typing import Any
 
 from nts.bookings import Desk
 from nts.harness import AgentConfig, Harness, Outcome, approve, reject
+from nts.harness.loop import STOPPED
 from nts.models import Model
 from nts.notices import notices
 from nts.people import Cast
@@ -74,6 +75,7 @@ class Episode:
     notes: list[dict] = field(default_factory=list)  # the office's messages to the requester about it
     kind: str = ""  # what System One took the request for (nts.harness.pick), when it was fairly sure
     cond: threading.Condition = field(default_factory=threading.Condition)
+    cancel: threading.Event = field(default_factory=threading.Event)  # Stop: the harness ends after its current step
 
     def push(self, event: dict) -> None:
         with self.cond:
@@ -105,6 +107,8 @@ class _Events:
         ep = self.service.episodes.get(span.trace_id)
         if ep is not None and span.kind == "episode":
             ep.kind = kind_of(span)
+        if ep is not None and ep.cancel.is_set():
+            return  # stopped: what the harness does after Stop is not shown (the telemetry still has it)
         if ep is not None and (event := to_event(span)) is not None:
             ep.push(event)
 
@@ -271,7 +275,20 @@ class Service:
         history = [(e.request, self.remembered(e)) for e in earlier[-MEMORY:]]
         changes = [f for e in earlier if (f := self.fate(e))]  # every change of the conversation, not only the last few
         self._spawn(ep, lambda: self.harness.run(self.agent, request, self.store, actor, week, episode_id=ep.id,
-                                                 people=people, history=history, thread=ep.thread, changes=changes))
+                                                 people=people, history=history, thread=ep.thread, changes=changes,
+                                                 cancel=ep.cancel))
+        return ep
+
+    def stop(self, eid: str) -> Episode:
+        """Stop a request while the agent works on it. It ends at once for the page; the harness finishes the step
+        under way (a model call can't be cut short) and runs nothing more, so nothing reaches the office."""
+        ep = self.get(eid)
+        with ep.cond:
+            if not ep.busy or ep.cancel.is_set():
+                raise Conflict("the agent is not working on this")
+            ep.cancel.set()
+            ep.status, ep.text, ep.detail, ep.busy = "stopped", STOPPED, "stopped by the requester", False
+        ep.push({"type": "end", "status": "stopped", "text": STOPPED, "detail": ep.detail})
         return ep
 
     def _options(self, ep: Episode) -> list[str]:
@@ -347,12 +364,18 @@ class Service:
             try:
                 out = work()
             except Exception as e:  # noqa: BLE001 -- shown on the episode, the server goes on
+                if ep.cancel.is_set():
+                    return  # it was stopped already
                 with ep.cond:
                     ep.status, ep.detail, ep.busy = "model_error", f"{type(e).__name__}: {e}", False
                 ep.push({"type": "end", "status": "model_error", "text": "", "detail": ep.detail})
                 return
             with ep.cond:
-                ep.outcome, ep.status, ep.text, ep.detail, ep.busy = out, out.status, out.text, out.detail, False
+                ep.outcome = out
+                if ep.cancel.is_set():  # stopped: the page was told already
+                    ep.cond.notify_all()
+                    return
+                ep.status, ep.text, ep.detail, ep.busy = out.status, out.text, out.detail, False
                 ep.options = self._options(ep)
                 ep.cond.notify_all()
 

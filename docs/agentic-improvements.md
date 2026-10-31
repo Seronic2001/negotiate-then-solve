@@ -377,3 +377,20 @@ in the timetable.* Before the fix, it was 1 right out of 3.
 `--no-pick-tools` turns it off.
 
 Tests: 187 agent tests pass (1 new).
+
+---
+
+## Step 4, part 1: a Stop button (done, 2026-10-31)
+
+**Why:** the model sometimes thinks for 20+ seconds or goes round in circles, and you could only wait.
+
+**What it does:** while the agent works on your message, the **Send** button turns into a red **Stop**. Press it, and
+the request ends at once with "Stopped. Nothing was changed." You can send the next message straight away.
+
+**How:** the agent checks for Stop before each turn, after each model reply and before each tool call. A model call
+already under way can't be cut short, so it finishes in the background, but its reply is thrown away: no tool runs, no
+draft reaches the office, and the page doesn't show what it did (the telemetry still keeps it). Only the person who
+sent the message can stop it (`POST /api/episodes/{id}/stop`).
+
+**Checked on the real model:** Stop answered in 1.6 s. Fifteen seconds later, the request still read *stopped*, and
+nothing had reached the office. Tests: 188 agent tests pass (1 new).
