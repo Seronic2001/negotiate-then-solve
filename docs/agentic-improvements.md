@@ -320,3 +320,25 @@ Checked with screenshots: teacher (welcome and a chat) and office (agent chat wi
 | The send button's arrow sat low and to the right | A button's padding (8px by 14px) stayed inside the 34px round button | No padding on the send button: the arrow's centre is now 0 px off |
 | "Ctrl K" broke over two lines; "Answered" wrapped under the other filters | The key hint could shrink, and the filter chips could wrap | Neither can now; the hint reads **Ctrl+K** |
 | The week list: pale numbers on white | The browser draws a select's list itself and didn't know the page was dark | The page tells the browser its theme (`color-scheme`), and the options use the theme's colours |
+
+---
+
+## A look that doesn't read as AI-made (done, 2026-10-31)
+
+**Why:** a friend said the page looked AI-generated. It did: Tailwind's default blue and slate colours, a sparkle icon,
+a centred "How can I help…" splash, pills on every row, and every element in a rounded box.
+
+**Tried first, and dropped:** "Path A" put this week's timetable in the middle and the chat in a narrow panel on the right.
+You liked its look but not the small chat window, so it was taken back out.
+
+**What stayed:** Path A's look on the layout we already had (the big chat window):
+
+- **Colours:** warm off-white (warm near-black in dark mode) and one deep green, in place of blue and slate.
+- **Type:** IBM Plex Sans, with Plex Mono for keys and code.
+- **Shapes:** 6–8px corners instead of 10–16px, and flatter buttons.
+- **Top bar:** a small "Timetable / demo" mark, and text tabs with a green underline (no pills, no icons).
+- **Sidebar:** titles wrap to two lines instead of being cut off, and the status is a small coloured word, not a pill.
+- **Chat:** the agent's replies are plain text (no bubble or avatar); the send button says *Send*.
+- **Empty chat:** no sparkle, and the welcome is left-aligned like a page. The suggestions and cards are still there.
+
+Checked with screenshots in light and dark (the empty chat and an open chat), with no script errors.
