@@ -216,6 +216,87 @@ kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line
   main, main.chat, main.chat.two { grid-template-columns: 1fr; padding: 12px 16px; height: auto; }
   .side { max-height: 40vh; } .msgs { max-height: 65vh; }
 }
+
+/* -- the second design: neutral near-black, sections in one group at the top, a centred conversation ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0f11; --panel: #17171a; --panel-2: #131315; --ink: #ececf0; --muted: #9b9ba5; --line: #27272c;
+    --accent: #5b9cff; --accent-soft: #1a2a45; --soft: #1e1e23; --code: #0c0c0e; --user: #1f2b45; --bar: #5b9cff;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f0f11; --panel: #17171a; --panel-2: #131315; --ink: #ececf0; --muted: #9b9ba5; --line: #27272c;
+  --accent: #5b9cff; --accent-soft: #1a2a45; --soft: #1e1e23; --code: #0c0c0e; --user: #1f2b45; --bar: #5b9cff;
+}
+header { height: 56px; background: var(--bg); }
+.brand { font-size: 15px; }
+.brand .logo { width: 30px; height: 30px; border-radius: 8px; }
+nav.seg { flex: none; display: flex; gap: 2px; padding: 4px; margin: 0 auto; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); }  /* not a scroll box: it would clip the More menu; narrow screens drop the labels instead */
+nav.seg button { position: relative; padding: 6px 12px; font-size: 13.5px; border-radius: 8px; gap: 7px; }
+nav.seg .rail-dot { position: absolute; top: -3px; right: -3px; }
+.morebox { position: relative; }
+.menu.more { width: 210px; top: 42px; }
+.menu.more .menu-item { margin-top: 2px; }
+.user .avatar { width: 32px; height: 32px; }
+main.chat, main.chat.two { grid-template-columns: 300px minmax(0, 1fr); height: calc(100vh - 56px); padding: 0; gap: 0; max-width: none; }
+main.chat.closed, main.chat.two.closed { grid-template-columns: minmax(0, 1fr); }
+.side { padding: 14px; border-right: 1px solid var(--line); gap: 8px; }
+.side h2 { text-transform: uppercase; letter-spacing: .06em; font-size: 11.5px; margin: 12px 6px 2px; display: flex; justify-content: space-between; }
+.new-req { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel); font-weight: 600; }
+.new-req span { flex: 1; text-align: left; }
+.search { border-radius: 10px; background: var(--panel); }
+.search input { padding: 8px 0; }
+.filters { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0; }
+.filters button { border: 0; background: none; color: var(--muted); padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.filters button:hover { color: var(--ink); }
+.filters button.on { background: var(--soft); color: var(--ink); }
+.list li { padding: 9px 10px; border-radius: 10px; }
+.list li.sel { background: var(--soft); border-color: transparent; }
+.sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; color: var(--muted); align-self: flex-start; margin-top: 7px; }
+.sdot.s-approved, .sdot.s-answered { color: var(--ok); } .sdot.s-running, .sdot.s-submitted { color: var(--accent); }
+.sdot.s-waiting, .sdot.s-declined, .sdot.s-escalated { color: var(--warn); }
+.sdot.s-rejected, .sdot.s-stuck, .sdot.s-model_error, .sdot.s-not_committed, .sdot.s-budget_exhausted { color: var(--bad); }
+.list li .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.convo { border: 0; border-radius: 0; background: var(--bg); }
+.convo-head { padding: 8px 16px; gap: 10px; min-height: 52px; }
+.head-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.head-text b { overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; }
+.head-text .small { overflow: hidden; text-overflow: ellipsis; }
+.head-text .small::before { content: "· "; }
+.head-acts { display: flex; gap: 8px; }
+.ghost { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; font-size: 13px; border-radius: 9px; background: none;
+  color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.ghost:hover { background: var(--accent-soft); }
+.msgs { padding: 22px max(20px, calc((100% - 820px) / 2)); }
+.composer { width: min(820px, calc(100% - 40px)); margin: 0 auto 20px; border-radius: 16px; background: var(--panel); }
+.send { width: 34px; height: 34px; border-radius: 50%; }
+.send:disabled { background: var(--soft); color: var(--muted); }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 10px; padding: 5px 10px; cursor: pointer; }
+.switch input { display: none; }
+.switch .track { width: 28px; height: 16px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); position: relative; transition: background .15s; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
+.switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(12px); background: #fff; }
+.welcome { padding: 9vh 0 24px; gap: 12px; }
+.welcome .spark { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--panel);
+  border: 1px solid var(--line); color: var(--accent); }
+.welcome h3 { font-size: 26px; font-weight: 650; letter-spacing: -.01em; }
+.welcome .sub { color: var(--muted); max-width: 520px; font-size: 15px; }
+.welcome .pick { color: var(--ink); border-color: var(--line); background: var(--panel); padding: 8px 16px; font-weight: 500; }
+.welcome .pick:hover { border-color: var(--muted); background: var(--soft); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; margin-top: 18px; }
+.acard { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 12px; background: var(--panel); }
+.acard:hover { border-color: var(--muted); }
+.acard-top { display: flex; justify-content: space-between; color: var(--accent); margin-bottom: 8px; }
+.acard-top .ic:last-child { color: var(--muted); }
+.acard b { font-size: 14.5px; }
+@media (max-width: 1150px) { nav.seg button span:not(.dot) { display: none; } .head-acts .ghost { font-size: 0; gap: 0; } }
+@media (max-width: 860px) {
+  main.chat, main.chat.two { grid-template-columns: 1fr; height: auto; } .cards { grid-template-columns: 1fr; }
+  .side { border-right: 0; border-bottom: 1px solid var(--line); }
+}
 </style>
 </head>
 <body>
@@ -223,10 +304,10 @@ kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line
   <div class="brand"><span class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></span>
     <span>Timetable Office Agent</span></div>
-  <span class="grow-head"></span>
+  <nav id="nav" class="seg" aria-label="Sections"></nav>
   <div class="me" id="who"></div>
 </header>
-<div class="shell"><nav id="nav" class="rail" aria-label="Sections"></nav><div id="app"></div></div>
+<div id="app"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
@@ -324,6 +405,12 @@ const PATHS = {
   down: '<path d="m6 9 6 6 6-6"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/>',
+  dots: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  sparkle: '<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/><path d="M19 3v4M17 5h4"/>',
+  up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  chevron: '<path d="m9 18 6-6-6-6"/>',
+  away: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5M22 8l-5 5"/>',
+  door: '<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01"/><path d="M13 4.56v16.157a.5.5 0 0 1-.622.485l-7-1.75A.5.5 0 0 1 5 19V5.562a.5.5 0 0 1 .379-.485l7-1.75A.5.5 0 0 1 13 3.81z"/>',
 };
 const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] || ""}</svg>`;
@@ -361,6 +448,7 @@ async function enter() {
   document.onclick = (e) => {
     if ($("userMenu") && !e.target.closest(".userbox")) $("userMenu").hidden = true;
     if ($("bellPanel") && !e.target.closest(".bellbox")) $("bellPanel").hidden = true;
+    if ($("moreMenu") && !e.target.closest(".morebox")) $("moreMenu").hidden = true;
   };
   if ($("bell")) { $("bell").onclick = (e) => { e.stopPropagation(); toggleBell(); }; refreshBell(); }
   $("logout").onclick = async () => { await api("/api/logout", {method: "POST"}); tabToken(""); me = null; chat = null; showLogin(); };
@@ -384,10 +472,13 @@ function show(which) {
   if (me.role === "club" && which === "requests") which = view = "bookings";
   const tabs = [...(me.role === "club" ? [] : [["requests", me.role === "office" ? "Inbox" : "Requests", me.role === "office" ? "inbox" : "chat"]]),
     ...(me.role === "office" ? [["chat", "Agent chat", "chat"]] : []),
-    ["timetable", "Timetable", "calendar"], ["bookings", "Bookings", "booking"], ["fairness", "Fairness", "chart"], ["rules", "Rules", "file"],
-    ...(me.role === "office" ? [["semester", "Semester", "layers"], ["obs", "Observability", "activity"]] : [])];
-  $("nav").innerHTML = tabs.map(([k, l, i]) => `<button data-tab="${k}" class="${k === which ? "on" : ""}" title="${l}">${icon(i)}<span>${l}</span>
-    <span class="dot rail-dot" data-dot="${k}" hidden></span></button>`).join("");
+    ["timetable", "Timetable", "calendar"], ["bookings", "Bookings", "booking"], ["fairness", "Fairness", "chart"], ["rules", "Rules", "file"]];
+  const more = me.role === "office" ? [["semester", "Semester", "layers"], ["obs", "Observability", "activity"]] : [];
+  $("nav").innerHTML = tabs.map(([k, l, i]) => `<button data-tab="${k}" class="${k === which ? "on" : ""}" title="${l}">${icon(i, 16)}<span>${l}</span>
+      <span class="dot rail-dot" data-dot="${k}" hidden></span></button>`).join("")
+    + (more.length ? `<span class="morebox"><button id="moreBtn" class="${more.some(([k]) => k === which) ? "on" : ""}" title="More">${icon("dots", 16)}<span>More</span></button>
+      <div class="panel menu more" id="moreMenu" hidden>${more.map(([k, l, i]) => `<button class="menu-item" data-tab="${k}">${icon(i, 16)} ${l}</button>`).join("")}</div></span>` : "");
+  if ($("moreBtn")) $("moreBtn").onclick = (e) => { e.stopPropagation(); $("moreMenu").hidden = !$("moreMenu").hidden; };
   if (which === "requests" && me.role === "office") officeView();
   else if (which === chatTab()) requestsView();
   else { $("app").innerHTML = `<main class="wide"><div id="pane" class="panel stack"></div></main>`;
@@ -428,26 +519,38 @@ function sideToggle() {  // the side bar folds away, as in a chat app; the choic
   for (const b of document.querySelectorAll(".side-btn")) b.onclick = () => remember("nts.side", main.classList.toggle("closed") ? "closed" : "open");
 }
 
+let filter = "all";  // the sidebar's status chips
+const FILTERS = [["all", "All"], ["approved", "Approved"], ["declined", "Declined"], ["answered", "Answered"]];
+const FILTERED = {approved: ["approved"], declined: ["declined", "rejected", "stuck", "not_committed"], answered: ["answered"]};
+
+// what each person can do in one click: [action, icon, title, line]
+const CARDS = () => me.role === "office"
+  ? [["inbox", "inbox", "Open the inbox", "Changes waiting for approval"], ["rooms", "search", "Find a free room", "Rooms free at a time you pick"],
+     ["closure", "door", "Close a room", "Maintenance, an event, an exam"]]
+  : [["timetable", "calendar", "View my timetable", "This week's classes and rooms"], ["free", "search", "Find free slots", "Your free hours this week"],
+     ["absence", "away", "Report an absence", "Cancel or move a day's classes"]];
+
 function requestsView() {
-  $("app").innerHTML = `<main class="chat">
+  $("app").innerHTML = `<main class="chat two">
     <aside class="side">
-      <button class="primary new" id="newChat">${icon("plus")} New chat</button>
+      <button class="new-req" id="newChat">${icon("plus", 16)}<span>New request</span><kbd>N</kbd></button>
       <label class="search">${icon("search", 16)}<input id="find" placeholder="Search conversations…" aria-label="Search conversations"><kbd>Ctrl K</kbd></label>
+      <div class="filters">${FILTERS.map(([k, l]) => `<button data-filter="${k}" class="${filter === k ? "on" : ""}">${l}</button>`).join("")}</div>
       <section id="inboxBox" hidden><h2>Waiting for you</h2><ul class="list" id="inbox"></ul></section>
-      <h2>Recent</h2><ul class="list" id="threads"></ul>
+      <h2 class="recent">Recent <span id="recentN"></span></h2><ul class="list" id="threads"></ul>
     </aside>
-    <section class="convo card">
+    <section class="convo">
       <div class="convo-head"><button class="iconbtn side-btn" title="Show or hide the side bar" aria-label="Show or hide the side bar">${icon("panel")}</button>
-        <span class="itile">${icon("calendar", 20)}</span><div class="grow"><div class="title" id="chatTitle">New chat</div><div class="small" id="chatSub"></div></div></div>
+        <div class="grow head-text"><b id="chatTitle">New chat</b><span class="small" id="chatSub"></span></div>
+        <div class="head-acts">${CARDS().slice(0, 2).map(([a, i, t]) => `<button class="ghost" data-act="${a}">${icon(i, 16)} ${t}</button>`).join("")}</div></div>
       <div id="msgs" class="msgs"></div>
       <div class="composer">
         <textarea id="text" rows="2"></textarea>
         <div class="row"><label class="chip" title="The week the request is about">Week <select id="week" aria-label="Week">${Array.from({length: dep.weeks}, (_, i) => `<option>${i + 1}</option>`).join("")}</select></label>
-          <label class="chip" title="Simple stand-ins answer the agent's questions to other teachers"><input type="checkbox" id="simulate"> Stand-ins answer</label>
-          <span class="small" id="sendErr"></span><button class="send" id="send" title="Send" aria-label="Send">${icon("send", 20)}</button></div>
+          <label class="switch" title="Simple stand-ins answer the agent's questions to other teachers"><input type="checkbox" id="simulate"><span class="track"></span>Stand-ins answer</label>
+          <span class="small" id="sendErr"></span><button class="send" id="send" title="Send" aria-label="Send">${icon("up", 18)}</button></div>
       </div>
-    </section>
-    <aside class="details" id="details"></aside></main>`;
+    </section></main>`;
   $("week").value = remember("nts.week") || 5;
   $("week").onchange = () => remember("nts.week", $("week").value);
   $("simulate").checked = dep.simulate;
@@ -455,7 +558,16 @@ function requestsView() {
   sideToggle();
   $("newChat").onclick = newChat;
   $("find").oninput = drawThreads;
-  document.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && $("find")) { e.preventDefault(); $("find").focus(); } };
+  for (const b of document.querySelectorAll("[data-filter]")) b.onclick = () => {
+    filter = b.dataset.filter;
+    for (const x of document.querySelectorAll("[data-filter]")) x.classList.toggle("on", x === b);
+    drawThreads();
+  };
+  document.onkeydown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && $("find")) { e.preventDefault(); $("find").focus(); }
+    else if (e.key.toLowerCase() === "n" && !e.ctrlKey && !e.metaKey && !e.altKey && $("newChat")
+             && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) { e.preventDefault(); newChat(); }
+  };
   $("text").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
   refreshLists();
   if (chat) openThread(chat.id); else draw();
@@ -492,11 +604,13 @@ async function refreshLists() {
 function drawThreads() {
   if (!$("threads")) return;
   const q = ($("find")?.value || "").trim().toLowerCase();
-  const shown = threadList.filter((t) => !q || t.title.toLowerCase().includes(q) || (t.actor || "").toLowerCase().includes(q));
+  const shown = threadList.filter((t) => (!q || t.title.toLowerCase().includes(q) || (t.actor || "").toLowerCase().includes(q))
+    && (filter === "all" || FILTERED[filter].includes(t.status)));
+  if ($("recentN")) $("recentN").textContent = shown.length || "";
   $("threads").innerHTML = shown.length ? shown.map((t) => `<li data-thread="${esc(t.id)}" class="${chat?.id === t.id ? "sel" : ""}">
-      <span class="li-icon">${icon("chat")}</span><div class="grow"><div class="req">${esc(t.title)}</div>
+      <span class="sdot s-${esc(t.status)}"></span><div class="grow"><div class="req">${esc(t.title)}</div>
       <div class="small">${t.week ? `Week ${t.week} · ` : ""}${esc(when(t.updated).split(" · ")[1] || "")}${t.messages > 1 ? ` · ${t.messages} messages` : ""}${t.mine ? "" : ` · ${esc(t.actor)}`}</div></div>
-      ${pill(t.status)}</li>`).join("") : `<li class="small none">${q ? "No conversation matches." : "No chats yet."}</li>`;
+      ${pill(t.status)}</li>`).join("") : `<li class="small none">${q || filter !== "all" ? "No conversation matches." : "No chats yet."}</li>`;
   for (const li of document.querySelectorAll("#threads li[data-thread]")) li.onclick = () => openThread(li.dataset.thread);
 }
 
@@ -593,28 +707,17 @@ function episodeHtml(c) {
   return html + "</div></div>";
 }
 
-const KIND = {question: "Question", policy_question: "Question about the rules", preference: "Preference", unavailability: "Absence",
-  unavailable_relative: "Absence", move: "Move a class", swap: "Swap classes", cancel: "Class cancellation", extra_class: "Extra class",
-  club_booking: "Room booking", room_issue: "Room problem", load_limit: "Load limit", avoid_between: "Gap between classes",
-  withdraw: "Take back a request", clash_report: "Clash report"};
-
-function detailsHtml() {  // the right-hand panel: the latest request of the open chat, and quick actions
-  const c = chat?.episodes?.at(-1);
-  const changed = [...(chat?.episodes || [])].reverse().find((e) => e.draft.length);
-  const row = (k, v) => `<div class="kv"><span class="small">${k}</span><span>${v}</span></div>`;
-  return `${c ? `<div class="card"><div class="card-head"><span class="itile">${icon("calendar", 18)}</span><b>Request details</b></div>
-      ${row("Status", pill(c.status))}${row("Week", esc(c.week ?? "–"))}${row("Asked", esc(when(c.started)))}
-      ${row("Messages", chat.episodes.length)}${KIND[c.kind] ? row("Type", KIND[c.kind]) : ""}</div>` : ""}
-    ${changed ? `<div class="card"><div class="card-head"><span class="itile">${icon("file", 18)}</span><b>${changed.status === "approved" ? "Changes made" : "Proposed changes"}</b>
-      <span class="count">${changed.draft.length}</span></div>${changed.draft.map((l) => `<div class="change"><span class="li-icon">${icon("calendar", 16)}</span><span>${esc(l)}</span></div>`).join("")}
-      <div>${pill(changed.status)}</div></div>` : ""}
-    <div class="card"><div class="card-head"><span class="itile">${icon("zap", 18)}</span><b>Quick actions</b></div>
-      ${me.role === "office" ? `<button class="action" data-act="inbox">${icon("inbox")} Open the inbox</button>
-      <button class="action" data-act="timetable">${icon("calendar")} View the timetable</button>
-      <button class="action" data-act="rooms">${icon("search")} Find a free room</button>` :
-      `<button class="action" data-act="timetable">${icon("calendar")} View my timetable</button>
-      <button class="action" data-act="free">${icon("search")} Find free slots</button>`}
-      <button class="action" data-act="new">${icon("plus")} Make another request</button></div>`;
+function act(what) {  // a quick action, from the header or a welcome card
+  if (what === "timetable") show("timetable");
+  else if (what === "inbox") show("requests");
+  else if (what === "new") newChat();
+  else {
+    newChat();
+    $("text").value = {free: `When am I free in week ${$("week").value}?`, rooms: `Which rooms are free on Monday at 10 am in week ${$("week").value}?`,
+      absence: "I'm away on  in week " + $("week").value + ", please cancel my classes that day.",
+      closure: `Room  is closed on  in week ${$("week").value} for maintenance.`}[what] || "";
+    if (what === "free") send(); else $("text").focus();
+  }
 }
 
 function draw() {
@@ -624,38 +727,33 @@ function draw() {
   $("chatTitle").textContent = first ? first.request : "New chat";
   $("chatSub").textContent = first ? `Week ${last.week ?? "–"} · ${when(first.started)}${chat.mine ? "" : ` · ${first.actor}`}` :
     me.role === "office" ? "Ask about rooms and people, or make a change" : "Ask about your timetable, or ask for a change";
-  $("text").placeholder = !chat ? (me.role === "office" ? "e.g. Lab 2 is closed on Thursday next week for maintenance." :
+  $("text").placeholder = !chat ? (me.role === "office" ? "Ask about rooms and people, or close a room…" :
       "Ask about your timetable, request a change, or check availability…")
     : p?.to_requester ? "Answer the agent's question…" : "Ask a follow-up, or change what you asked…";
   const locked = !!chat && (!chat.mine || last?.busy || last?.status === "running" || (!!p && !p.to_requester));
   $("text").disabled = $("send").disabled = locked;
-  $("details").innerHTML = detailsHtml();
-  for (const b of document.querySelectorAll("[data-act]")) b.onclick = () => {
-    if (b.dataset.act === "timetable") show("timetable");
-    else if (b.dataset.act === "inbox") show("requests");
-    else if (b.dataset.act === "new") newChat();
-    else if (b.dataset.act === "rooms") { newChat(); $("text").value = `Which rooms are free on Monday in week ${$("week").value}?`; $("text").focus(); }
-    else { newChat(); $("text").value = `When am I free in week ${$("week").value}?`; send(); }
-  };
   if (!chat?.episodes) {
-    $("msgs").innerHTML = `<div class="welcome"><span class="avatar bot big">${icon("bot", 28)}</span><h3>${me.role === "office" ? "How can I help the office?" : "How can I help with your timetable?"}</h3>
-      <div class="small">${me.role === "office" ? "Ask about rooms, people and the rules, or make a change for the department." :
+    $("msgs").innerHTML = `<div class="welcome"><span class="spark">${icon("sparkle", 22)}</span>
+      <h3>${me.role === "office" ? "How can I help the office?" : "How can I help with your timetable?"}</h3>
+      <div class="sub">${me.role === "office" ? "Ask about rooms, people and the rules, or make a change for the department." :
       "Each chat remembers what was said in it. Changes go to the office for approval."}</div>
-      <div class="picks">${(me.role === "office" ? ["Which rooms are free on Thursday at 2 pm?", "Who is free on Monday at 10 am?",
-        "Lab 2 is closed on Friday in week 7 for maintenance"] : ["When am I free on Monday?", "What do I teach this week?",
-        "I'm away next Tuesday, cancel my classes that day"]).map((x) =>
-        `<button class="pick" data-try="${esc(x)}">${esc(x)}</button>`).join("")}</div></div>`;
+      <div class="picks">${(me.role === "office" ? ["Which rooms are free on Thursday at 2 pm?", "Who is free on Monday at 10 am?"]
+        : ["When am I free on Monday?", "What do I teach this week?", "I'm away next Tuesday, cancel my classes that day"]).map((x) =>
+        `<button class="pick" data-try="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+      <div class="cards">${CARDS().map(([a, i, t, line]) => `<button class="acard" data-act="${a}"><span class="acard-top">${icon(i, 18)}${icon("chevron", 16)}</span>
+        <b>${t}</b><span class="small">${line}</span></button>`).join("")}</div></div>`;
     for (const b of document.querySelectorAll("[data-try]")) b.onclick = () => { $("text").value = b.dataset.try; $("text").focus(); };
-    return;
+  } else {
+    const box = $("msgs"), atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    const open = new Set([...box.querySelectorAll("details.thinking[open]")].map((d) => d.closest("[data-ep-box]").dataset.epBox));
+    box.innerHTML = chat.episodes.map((c) => `<div data-ep-box="${esc(c.id)}">${episodeHtml(c)}</div>`).join("");
+    for (const d of box.querySelectorAll("details.thinking")) if (open.has(d.closest("[data-ep-box]").dataset.epBox)) d.open = true;
+    if (atEnd) box.scrollTop = box.scrollHeight;
+    for (const b of document.querySelectorAll("[data-a]")) b.onclick = () => answer(b.dataset.ep, b.dataset.a);
+    for (const b of document.querySelectorAll("[data-pick]")) b.onclick = () => { $("text").value = b.dataset.pick; send(); };
+    for (const b of document.querySelectorAll("[data-decide]")) b.onclick = () => decide(b.dataset.ep, b.dataset.decide);
   }
-  const box = $("msgs"), atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  const open = new Set([...box.querySelectorAll("details.thinking[open]")].map((d) => d.closest("[data-ep-box]").dataset.epBox));
-  box.innerHTML = chat.episodes.map((c) => `<div data-ep-box="${esc(c.id)}">${episodeHtml(c)}</div>`).join("");
-  for (const d of box.querySelectorAll("details.thinking")) if (open.has(d.closest("[data-ep-box]").dataset.epBox)) d.open = true;
-  if (atEnd) box.scrollTop = box.scrollHeight;
-  for (const b of document.querySelectorAll("[data-a]")) b.onclick = () => answer(b.dataset.ep, b.dataset.a);
-  for (const b of document.querySelectorAll("[data-pick]")) b.onclick = () => { $("text").value = b.dataset.pick; send(); };
-  for (const b of document.querySelectorAll("[data-decide]")) b.onclick = () => decide(b.dataset.ep, b.dataset.decide);
+  for (const b of document.querySelectorAll("[data-act]")) b.onclick = () => act(b.dataset.act);
 }
 
 async function answer(eid, kind) {

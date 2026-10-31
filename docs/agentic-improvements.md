@@ -277,3 +277,25 @@ course alone, and to hold a new or extra class use `add_class`.
 Thursday and every Friday from week 5) are still in it. Undoing them in the office inbox brings those days back.
 
 Tests: +1 in `test_nts_draft.py`; all `nts` tests pass. Checked with screenshots of the teacher and office views, dark and light.
+
+---
+
+## The second design: minimal, sections back on top (done, 2026-10-31)
+
+From the second design you shared, keeping only what the app has behind it:
+
+- **The sections are one compact group in the top bar** again. The office's *Semester* and *Observability* sit under
+  **More**, so nothing is pushed off the bar (the reason for the side rail before); on a narrow screen the group keeps its
+  icons and drops the labels.
+- **The sidebar:** *New request* (or press **N**), search (**Ctrl K**), **filter chips** (All, Approved, Declined, Answered),
+  a *Recent* count, and a coloured status dot and pill on each chat.
+- **The chat:** a slim header with the chat's title and two quick buttons (*View my timetable*, *Find free slots*; for the
+  office *Open the inbox*, *Find a free room*); a centred welcome with suggestions and **three action cards** (*Report an
+  absence* for a teacher, *Close a room* for the office); a centred message box with a toggle for stand-ins and a small send
+  button.
+- **The right-hand panel is gone:** a change's details already show in the chat, under its result card.
+- A neutral near-black palette in place of navy; the light theme stays.
+- Left out: the version tag, the "office online" footer and the "Ask Gemini" button (they belong to the tool the design was
+  made in).
+
+Checked with screenshots: teacher (welcome and a chat) and office (agent chat with More open).
