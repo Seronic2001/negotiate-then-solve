@@ -185,3 +185,24 @@ def test_code_decides_the_slot_rules_where_the_parse_is_plain(rules, instance):
     both = PolicyDecision(verdict=Verdict.FORBIDDEN, cited=["P-LUNCH", "P-HOURS"])
     agent = PolicyAgent(rules, StubClient(deny), instance)
     assert agent.slot_rules(both, text, _parse(instance, text, before)) is both
+
+
+def test_a_run_stated_in_words_breaks_the_hours_in_a_row(rules, instance):
+    # smoke S-10: "4 of my lectures back-to-back" read as "only Thursday before 12": three slots, no slot breaks
+    # the limit, but the message says how long the run is
+    text = "Please put 4 of my lectures back-to-back on Thursday from 9, so the rest of my week is free."
+    morning = DraftConstraint(type="prefer", hard=True, scope_kind="faculty", scope_id="F-105", days=["Thu"],
+                              slots=[0, 1, 2])
+    deny = PolicyOutput(verdict="forbidden", cited_rules=["P-MAXCONSEC"], explanation="Too many in a row.")
+    d = PolicyAgent(rules, StubClient(deny), instance).review(text, _parse(instance, text, morning))
+    assert d.verdict == Verdict.FORBIDDEN and d.cited == ["P-MAXCONSEC"] and d.overruled is None
+    allow = PolicyOutput(verdict="allowed", explanation="Fine.")
+    d = PolicyAgent(rules, StubClient(allow), instance).review(text, _parse(instance, text, morning))
+    assert d.verdict == Verdict.FORBIDDEN and d.cited == ["P-MAXCONSEC"]
+    # a run within the limit is still overruled, and a number that is not a run is no denial
+    ok = "Please put 2 of my lectures back-to-back on Thursday from 9."
+    d = PolicyAgent(rules, StubClient(deny), instance).review(ok, _parse(instance, ok, morning))
+    assert d.verdict == Verdict.ALLOWED and d.overruled
+    ok = "I want 4 lectures on Thursday."
+    d = PolicyAgent(rules, StubClient(deny), instance).review(ok, _parse(instance, ok, morning))
+    assert d.verdict != Verdict.FORBIDDEN

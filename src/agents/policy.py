@@ -353,6 +353,17 @@ def _longest_run(slots: list[int]) -> int:
 
 
 _RUN = re.compile(r"back.to.back|in a row|straight|consecutive|without (any )?breaks?", re.IGNORECASE)
+# a run's length said in words, which no slot of the parse carries: "4 of my lectures back-to-back", "five hours"
+_COUNTS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+_STATED = re.compile(r"\b(\d|" + "|".join(_COUNTS) + r")\s+(?:of\s+(?:my|the)\s+)?(?:\w+\s+)?"
+                     r"(?:lectures?|classes|hours?|periods|sessions|lessons|slots)\b", re.IGNORECASE)
+
+
+def _stated_run(text: str) -> int:
+    """The longest run of classes the message asks for in words, when it says they are a run; else 0."""
+    if not _RUN.search(text):
+        return 0
+    return max((int(n) if n.isdigit() else _COUNTS[n.lower()] for n in _STATED.findall(text)), default=0)
 
 
 def slot_breaks(instance: Instance, parse: ParseResult | None, text: str) -> dict[str, bool] | None:
@@ -368,8 +379,9 @@ def slot_breaks(instance: Instance, parse: ParseResult | None, text: str) -> dic
     wanted = [c for c in parse.constraints if c.type.value == "prefer" and c.hard]
     lunch = cal.lunch_slot is not None and any(
         cal.lunch_slot in (c.when.slots or []) and len(c.when.slots) <= 2 for c in wanted)
-    consec = (bool(pol.max_consecutive) and bool(_RUN.search(text))
-              and any(_longest_run(sorted(c.when.slots or [])) > pol.max_consecutive for c in wanted))
+    consec = (bool(pol.max_consecutive) and bool(_RUN.search(text)) and bool(wanted)
+              and (_stated_run(text) > pol.max_consecutive
+                   or any(_longest_run(sorted(c.when.slots or [])) > pol.max_consecutive for c in wanted)))
     return {"P-LUNCH": lunch, "P-MAXCONSEC": consec}
 
 
@@ -385,8 +397,8 @@ def slot_clear(instance: Instance, parse: ParseResult | None, text: str) -> set[
     clear = set()
     if cal.lunch_slot is None or not any(cal.lunch_slot in c.when.slots for c in wanted):
         clear.add("P-LUNCH")
-    if not pol.max_consecutive or not _RUN.search(text) or not any(
-            _longest_run(sorted(c.when.slots)) > pol.max_consecutive for c in wanted):
+    if not pol.max_consecutive or not _RUN.search(text) or not (_stated_run(text) > pol.max_consecutive or any(
+            _longest_run(sorted(c.when.slots)) > pol.max_consecutive for c in wanted)):
         clear.add("P-MAXCONSEC")
     return clear
 
