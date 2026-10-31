@@ -4,14 +4,25 @@ What we planned, why, and what happened after we built it. One section per step,
 
 ## The plan
 
-| Step | What | Why |
+| Step | What | Why | Status |
+|---|---|---|---|
+| 0 | Make the model server fast | One question took 110 s | done |
+| 1 | Make it stop failing: send only the tools a request needs, retry on server errors, save requests to disk | Every call sends all 29 tools (~6,300 tokens of an 8,192 budget); one server error ends the request; a restart loses every request | done |
+| 2 | Chat threads with memory | Each request starts from zero, so "also do Thursday" or "undo that" can't work | done |
+| 3 | A readable "thinking" panel | The steps are shown as raw tool names and JSON | done |
+| 4 | Better human in the loop: confirm before submit, before/after timetable, stop, edit and resend | The person only sees the result at the end | partly: office inbox, notifications, undo, answers to pick are done; before/after timetable, Stop and edit-and-resend are not |
+| 5 | More caching | The same lookups and draft checks are repeated | not started |
+
+## Commits, and where each is described
+
+| Commit | What | Section below |
 |---|---|---|
-| 0 | Make the model server fast | One question took 110 s |
-| 1 | Make it stop failing: send only the tools a request needs, retry on server errors, save requests to disk | Every call sends all 29 tools (~6,300 tokens of an 8,192 budget); one server error ends the request; a restart loses every request |
-| 2 | Chat threads with memory | Each request starts from zero, so "also do Thursday" or "undo that" can't work |
-| 3 | A readable "thinking" panel | The steps are shown as raw tool names and JSON |
-| 4 | Better human in the loop: confirm before submit, before/after timetable, stop, edit and resend | The person only sees the result at the end |
-| 5 | More caching | The same lookups and draft checks are repeated |
+| `48435f8` | System One (the classifier): a linear SVM by default, the request kinds it never learnt, a benchmark | Step 1 ("What we found before building") |
+| `78110ab` | The agent app: tool picking, retries, requests kept over a restart, the chat with memory, thinking panel, office inbox, notifications, per-tab sign-in | Step 1; Steps 2 and 3; Round 2 |
+| `d6e7f05` | Absences are one-off, "cancel" means cancel, the office can undo an approved change | Round 3 |
+| `2e2fde6` | The first new look (side rail, details panel), the office's own suggestions, the teacher-and-course refusal | A new look, and fixes from round 4 |
+| `e612f9c` | The minimal look: sections in one group at the top, filters, action cards, a centred chat | The second design |
+| `6d00093`, `d1bb52e` | Small UI fixes: the send arrow centred, the week list readable in the dark theme, Ctrl+K on one line | Small fixes after the second design |
 
 ---
 
@@ -299,3 +310,13 @@ From the second design you shared, keeping only what the app has behind it:
   made in).
 
 Checked with screenshots: teacher (welcome and a chat) and office (agent chat with More open).
+
+---
+
+## Small fixes after the second design (done, 2026-10-31)
+
+| What you saw | Why | Fix |
+|---|---|---|
+| The send button's arrow sat low and to the right | A button's padding (8px by 14px) stayed inside the 34px round button | No padding on the send button: the arrow's centre is now 0 px off |
+| "Ctrl K" broke over two lines; "Answered" wrapped under the other filters | The key hint could shrink, and the filter chips could wrap | Neither can now; the hint reads **Ctrl+K** |
+| The week list: pale numbers on white | The browser draws a select's list itself and didn't know the page was dark | The page tells the browser its theme (`color-scheme`), and the options use the theme's colours |
