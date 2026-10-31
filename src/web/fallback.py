@@ -65,11 +65,11 @@ class ModelLink:
         self._set(False, f"{type(e).__name__}: {e}"[:300])
 
     def _set(self, up: bool, error: str | None) -> None:
-        changed = self.up is not up
+        changed, first = self.up is not up, self.up is None
         self.up, self.error = up, error
         if changed:
             self.since = time.time()
-            print(f"[model] {'reachable again' if up else 'unreachable, using the rule-based stand-ins'}"
+            print(f"[model] {('reachable' if first else 'reachable again') if up else 'unreachable, using the rule-based stand-ins'}"
                   + (f": {error}" if error else ""), flush=True)
             if self.on_change is not None:
                 self.on_change(up, error)
