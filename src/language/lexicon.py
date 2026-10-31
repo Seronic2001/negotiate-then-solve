@@ -9,7 +9,8 @@ Small functions with no knowledge of intents, shared by the rule parser, the che
 * ``mentions`` says whether a text names a phrase, allowing a typo or two in a long one ("computer
   architecure") and its acronym ("CA") when asked to;
 * ``hedged`` and ``necessary`` find the words that say how strongly something is asked: a wish
-  ("if possible", "no worries if not") or a requirement ("must", "no other time works").
+  ("if possible", "no worries if not") or a requirement ("must", "no other time works"); ``firmness_rule``
+  is the labelling rule built on them, by kind of request.
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ def mentions(text: str, phrase: str, *, typos: bool = True, acronyms: bool = Fal
 
 # how strongly something is asked
 _HEDGES = re.compile(
-    r"\b(if (at all )?possible|if you can|if that can be managed|where (possible|feasible|the timetable allows)|"
+    r"\b(if (at all )?possible|if you can|if (that|it) can be managed|where (possible|feasible|the timetable allows)|"
     r"ideally|would prefer|i'd prefer|prefer|i'd rather|rather not|would be nice|would suit|"
     r"no (problem|worries)( at all)? if (it can't|not|it cannot)|not urgent|not essential|only a preference|"
     r"would you mind|try to|if it's not too much trouble)\b",  # "is it possible", "any chance": politeness
@@ -213,3 +214,36 @@ def placement_is_hard(text: str) -> bool:
     project brief's tiers: a preferred time is a preference (Tier 5), so a move is a requirement only when the
     message says it must be so, or names a conflict that rules out the time the class is at now."""
     return firmness(text) == "firm" or (_CONFLICT.search(normalise(text)) is not None and not hedged(text))
+
+
+# saying outright that it is a requirement ("a hard rule", "not negotiable"); "hard for me" is a difficulty;
+# what the sender can only do ("I can only teach afternoons"), and what may not be done ("nothing of mine may
+# be placed on Wednesday")
+_SAID_FIRM = re.compile(r"\b(hard|strict|firm) (rule|requirement|constraint|limit)|\b(not|non)[- ]?negotiable\b|"
+                        r"\bis a must\b|\babsolutely (essential|necessary|required)\b|"
+                        r"\b(i|we) can only\b|\bmay (not )?be (placed|scheduled|put|booked)\b|"
+                        r"\bthe only (days?|times?|hours?) (i'm|i am|i can be) (on campus|in|here|around|free|available)\b",
+                        re.IGNORECASE)
+# the sender's own time, not the timetable's ("that's my only time to eat"): no must about a class
+_OWN_ONLY = re.compile(r"\bmy only (time|slot)\b", re.IGNORECASE)
+# asking for something, with a reason that is why it is wanted ("I'd like ... so I can do fieldwork")
+_WISH = re.compile(r"\b(i'd like|i would like|i'd love|i want)\b", re.IGNORECASE)
+
+
+def firmness_rule(kind: str, text: str) -> bool:
+    """The labelling rule for how firm a message of one request is, by the request's kind: an unavailability
+    is always a requirement, a move follows ``placement_is_hard``, and anything else is a requirement when the
+    message says it must be so ("must", "I need", "a hard rule", "not negotiable", "I can only", "may not be
+    placed"), or, for teaching kept to
+    some times only, when it says the sender cannot be there otherwise ("I'm away the rest of the week") and
+    does not ask for it as a wish ("I'd like to teach only on Mondays so I can do fieldwork").
+    The generators label by it and the checks hold a reading to it, so data and checks follow one rule."""
+    if kind == "unavailable":
+        return True
+    if kind == "move":
+        return placement_is_hard(text)
+    low = normalise(text)
+    if hedged(text) and not necessary(text):
+        return False
+    return (necessary(_OWN_ONLY.sub(" ", low)) or _SAID_FIRM.search(low) is not None
+            or (kind == "only" and unable(text) and not _WISH.search(low)))

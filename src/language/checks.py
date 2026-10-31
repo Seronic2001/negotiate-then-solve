@@ -11,7 +11,9 @@ show what was changed and why.
   "3 pm") is put right before it is validated, instead of losing the whole answer;
 * ``check_reading``: an ``IntentOutput`` beside the message and the timetable:
   - a before/after range that is one time ("after 15:00 and before 15:00") is that start time;
-  - a requirement (``hard``) in a message that hedges and says nothing must be so is a wish;
+  - a requirement (``hard``) in a message that hedges and says nothing must be so is a wish; and a wish
+    in a message of one request that the labelling rule (``lexicon.firmness_rule``) makes a requirement
+    ("I need that time kept free", "a hard rule") is a requirement;
   - a period the message does not say is every week: weeks or a "this week" in a message that names no
     week, stretch of the term or date, and "the rest of the semester" for "the whole semester";
   - a move with no destination whose class reference names a time the class is not at reads that
@@ -21,7 +23,12 @@ show what was changed and why.
     about (is it that class, or every class?): the reading left out what the message is about;
   - a reading of room needs only, of a message that names a day the class is not referred to by, gets the
     time back as a move of that class ("needs the routers, and it has to be on Tuesday afternoon": the
-    time was left out; the message says it plainly, so asking again would only repeat it).
+    time was left out; the message says it plainly, so asking again would only repeat it);
+  - items the message cannot have asked for are dropped (``_untangle``): an item said twice, a choice
+    (any_of, ranked) in a message that offers no alternative ("or", "otherwise", "failing that"...) is its
+    first item, a second move of the same class (``same``) that no choice holds, and labels (``id``)
+    nothing refers to. A reader that has seen labels only in programs writes one on a plain move and
+    then makes up the second option the label seemed to call for.
 """
 
 from __future__ import annotations
@@ -35,20 +42,36 @@ from core.schemas import Placement, Request
 
 from .corpus import FULL_DAY, hour
 from .intents import (
+    Avoid,
     ClassRef,
     IntentOutput,
     Limit,
     LoadLimit,
     Move,
     NeedsRoom,
+    Only,
     Period,
+    Relate,
     TimeSpec,
     Unresolved,
     classes,
     meeting,
     slots,
 )
-from .lexicon import acronym, hedged, mentions, names_weeks, necessary, normalise, whole_term, words
+from .lexicon import (
+    acronym,
+    firmness_rule,
+    hedged,
+    mentions,
+    names_weeks,
+    necessary,
+    normalise,
+    whole_term,
+    words,
+)
+
+# the kinds whose firmness the message alone decides; a move has its own rule (``_check_move``)
+_FIRMABLE = (Avoid, Only, Limit, Relate)
 
 _CLOCK = re.compile(r"^\s*(\d{1,2})(?:[:.](\d\d))?\s*(am|pm|a\.m\.|p\.m\.)?\s*$", re.IGNORECASE)
 _DAYS = {d.lower(): d for d in FULL_DAY} | {v.lower(): k for k, v in FULL_DAY.items()}
@@ -169,12 +192,19 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
     text, sender = request.raw_text, request.sender_id
     soft_words = (not necessary(text)) if strict else (hedged(text) and not necessary(text))
     intents, question, missing = [], None, []
-    for i, intent in enumerate(out.intents):
+    items = _untangle(out.intents, text, notes)
+    for i, intent in enumerate(items):
         if getattr(intent, "hard", False) and soft_words:
             notes.append(f"intent {i} ({intent.kind}): hard, but the message "
                          + ("says nothing must be so" if strict else "hedges and says nothing must be so")
                          + "; read as a wish")
             intent = intent.model_copy(update={"hard": False})
+        # the other way, where the message is one request: whose words the must is about is then plain
+        elif (len(items) == 1 and isinstance(intent, _FIRMABLE) and not intent.hard
+              and firmness_rule(intent.kind, text)):
+            notes.append(f"intent {i} ({intent.kind}): a wish, but the message says it must be so; read as a "
+                         "requirement")
+            intent = intent.model_copy(update={"hard": True})
         intent = _ground_period(intent, text, notes, i)
         if isinstance(intent, Move):
             intent, q = _check_move(instance, intent, sender, timetable, notes, i)
@@ -197,6 +227,65 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
         intents += [Move(which=x.which, to=to, hard=necessary(text), justification=x.justification)
                     for x in list(intents)]
     return Checked(out.model_copy(update={"intents": intents}), notes, question, missing)
+
+
+_ALTERNATIVE = re.compile(r"\b(or|either|otherwise|instead|failing that|first choice|second choice|else|"
+                          r"if (?:that|it|this)(?:'s| is)? not|if not|not possible|can't be done|cannot be done|"
+                          r"won't fit|doesn't work|does not work|back-?up|next best|alternatively|whichever|"
+                          r"(?:don't|do not) mind which|any (?:day|one|of them))\b", re.IGNORECASE)
+_CHOICES = ("any_of", "ranked")
+
+
+def _untangle(intents: list, text: str, notes: list[str]) -> list:
+    """``intents`` without what the message cannot have asked for (see the module docstring)."""
+    by_id = {x.id: x for x in intents if getattr(x, "id", None)}
+
+    def same_as(x):  # what ``x`` says, with a class named as another item's spelled out
+        d = x.model_dump(mode="json", exclude={"id"})
+        for n in ("which", "other", "mine", "theirs"):
+            ref = (d.get(n) or {}).get("same") if isinstance(d.get(n), dict) else None
+            if ref in by_id and isinstance(getattr(by_id[ref], "which", None), ClassRef):
+                d[n] = by_id[ref].which.model_dump(mode="json")
+        return d
+
+    out, renamed = [], {}
+    for x in intents:  # an item said twice is one item; a reference to the copy is to the first
+        twin = next((y for y in out if y.kind not in _CHOICES + ("fallback",) and same_as(y) == same_as(x)), None)
+        if twin is not None:
+            notes.append(f"{x.kind} said twice: read once")
+            if getattr(x, "id", None) and getattr(twin, "id", None):
+                renamed[x.id] = twin.id
+            continue
+        out.append(x)
+    if renamed:
+        out = [x.model_copy(update={"of": list(dict.fromkeys(renamed.get(i, i) for i in x.of))})
+               if hasattr(x, "of") else x for x in out]
+        out = [x for x in out if not hasattr(x, "of") or len(x.of) >= 2]
+    if not _ALTERNATIVE.search(text):  # a choice the message does not offer: its first item
+        for c in [x for x in out if x.kind in _CHOICES]:
+            notes.append(f"{c.kind}: the message offers no alternative; read as its first item")
+            rest = set(c.of[1:])
+            out = [x for x in out if x is not c and getattr(x, "id", None) not in rest]
+            if getattr(c, "hard", False):  # a must said of the choice is said of what is left of it
+                out = [x.model_copy(update={"hard": True}) if getattr(x, "id", None) == c.of[0] and hasattr(x, "hard")
+                       else x for x in out]
+    held = {i for x in out if hasattr(x, "of") for i in x.of}
+    moves = {x.id for x in out if isinstance(x, Move) and x.id}
+    for x in list(out):  # a second move of a class already moved, that no choice holds, repeats the first
+        if isinstance(x, Move) and x.which.same in moves and x.id not in held:
+            notes.append("a second move of the same class, outside any choice: dropped")
+            out.remove(x)
+    ids = {x.id for x in out if getattr(x, "id", None)}
+    for k, x in enumerate(out):  # a class named as an item's that is not there names no class
+        for n in ("which", "other", "mine", "theirs"):
+            ref = getattr(x, n, None)
+            if isinstance(ref, ClassRef) and ref.same and ref.same not in ids:
+                notes.append(f"{x.kind}: refers to an item '{ref.same}' that is not there; reference dropped")
+                out[k] = x = x.model_copy(update={n: ref.model_copy(update={"same": None})})
+    used = {i for x in out if hasattr(x, "of") for i in x.of} | {
+        r.same for x in out for n in ("which", "other", "mine", "theirs")
+        if isinstance(r := getattr(x, n, None), ClassRef) and r.same}
+    return [x.model_copy(update={"id": None}) if getattr(x, "id", None) and x.id not in used else x for x in out]
 
 
 def _about_classes(intent) -> bool:
