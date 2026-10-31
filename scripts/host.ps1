@@ -8,7 +8,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\host.ps1 -Adapters adapters-router.toml  # a router server
 #
 # By default each task goes to its own LoRA adapter on the GPU server's base model (adapters-lora.toml, what
-# the server at 10.1.25.191 runs): requests are read by nts-intents-v6-read100, which the app then asks for
+# the server at 10.1.25.191 runs): requests are read by nts-intents-v12-read-100, which the app then asks for
 # intents (NTS_INTENTS); policy, replies and explanations by nts-read100; timetable questions by nts-lookup-v1.
 param(
     [string]$GpuUrl = "http://10.1.25.191:8080/v1",

@@ -1,13 +1,14 @@
 # The tasks on LoRA adapters of one base model (llama-server -m <base> --lora a.gguf --lora b.gguf,
 # all at scale 0 until a request switches one on; language.local finds them at /lora-adapters).
 # Used by scripts/host.ps1 (-Adapters adapters-lora.toml) and the evaluations (--adapters adapters-lora.toml).
-# The intents adapter (v6, its final epoch: 99.8% outcome match on the test split, v4 98.8%) is trained on
-# reading requests only; the multi-task adapter (Read100) keeps the policy agent, reading replies and explanations.
+# The intents adapter (v12, its final epoch: 96.4% outcome match on the test split, 95.9% with typos or noise,
+# 97.5-100% on the relation, limit-firmness and out-for-me suites v11 missed) is trained on reading
+# requests only; the multi-task adapter (Read100) keeps the policy agent, reading replies and explanations.
 
 base = "Qwen3.5-4B-Base-Q8_0"
 
 [adapters]
-nts-intents-v6-read100 = ["compile"]
+nts-intents-v12-read-100 = ["compile"]
 nts-read100 = ["policy", "reply", "explain"]
 nts-lookup-v1 = ["lookup"]       # timetable questions: which lookup to do (notebooks/train_lookup_kaggle.ipynb)
 
