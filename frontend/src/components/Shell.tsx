@@ -315,10 +315,12 @@ function Sidebar({
         {!collapsed && ov?.model && ov.model.up !== null && (
           <p
             className={clsx("-mt-1 mb-2 flex items-center gap-2 px-2.5 text-[11.5px]", ov.model.up ? "text-ink-3" : "text-warn")}
-            title={ov.model.up ? "Requests and replies are read by the model" : `The model server is not answering, so the rule-based stand-ins read requests and replies until it is back. ${ov.model.error ?? ""}`}
+            title={ov.model.up ? "Requests and replies are read by the model" : `The model server is not answering. Requests that would change the timetable wait for it, for ${ov.model.hold_minutes ?? 10} minutes at most before the rule-based reader takes them; questions about the rules, messages for other offices and replies are read by the rules now. ${ov.model.error ?? ""}`}
           >
             <LiveDot tone={ov.model.up ? "ok" : "warn"} />
-            {ov.model.up ? (ov.model.mode === "gemini" ? "Gemini connected" : "Fine-tuned model connected") : "Model offline · using rules"}
+            {ov.model.up
+              ? (ov.model.mode === "gemini" ? "Gemini connected" : "Fine-tuned model connected")
+              : `Model offline · ${ov.model.held ? `${ov.model.held} request${ov.model.held === 1 ? "" : "s"} waiting` : "changes wait for it"}`}
           </p>
         )}
         <Account collapsed={collapsed} />

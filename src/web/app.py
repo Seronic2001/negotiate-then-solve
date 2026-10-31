@@ -723,7 +723,10 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                              "mean_rounds": mean([o.rounds for o in outcomes if o.rounds])},
             "recent": w.store.events(limit=None)[-12:],
             "models": w.models, "sessions": len(w.instance.sessions), "faculty": len(w.instance.faculty),
-            "model": None if w.model_link is None else {**w.model_link.status(), "mode": w.parser_mode},
+            # while it is away: how many requests wait for it, and for how long at most (``World._hold``)
+            "model": None if w.model_link is None else {**w.model_link.status(), "mode": w.parser_mode,
+                                                        "held": len(w.held),
+                                                        "hold_minutes": float(os.environ.get("NTS_HOLD_MINUTES", "10"))},
             "rooms": len(w.instance.rooms), "groups": len(w.instance.groups),
             "test_run": w.test_run,
         }

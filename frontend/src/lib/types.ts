@@ -281,7 +281,8 @@ export interface Overview {
   negotiations: { agreed: number; escalated: number; feasible: number; mean_rounds: number | null };
   recent: EventRow[];
   models: { parser: string; policy: string };
-  model?: { up: boolean | null; error: string | null; since: number; mode: string } | null; // null: offline mode
+  /** null: offline mode. ``held``: requests waiting for the model while it is away, each for ``hold_minutes`` at most. */
+  model?: { up: boolean | null; error: string | null; since: number; mode: string; held?: number; hold_minutes?: number } | null;
   sessions: number;
   faculty: number;
   rooms: number;

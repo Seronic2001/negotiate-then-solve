@@ -742,7 +742,7 @@ class World:
     def _hold(self, request: Request) -> bool:
         """While the model that reads requests cannot be reached, a request that may change the timetable waits
         for it instead of being acted on as the rule parser reads it (right on 52% of the test split and silently
-        wrong on 20%, where the fine-tuned reader is right on 99.8%). Questions about the rules and messages for
+        wrong on 21%, where the fine-tuned reader, nts-intents-v12-read-100, is right on 96.4%). Questions about the rules and messages for
         another office go ahead: the stand-ins handle them well. A request held ``NTS_HOLD_MINUTES`` (10) goes
         ahead on the stand-in after all, so nothing waits for ever."""
         if not self._may_hold(request):
