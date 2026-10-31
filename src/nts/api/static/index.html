@@ -391,6 +391,20 @@ main.chat, main.chat.two { height: calc(100vh - 52px); }
 .rule-row p { margin: 0; color: var(--ink); line-height: 1.6; }
 mark { background: color-mix(in srgb, var(--warn) 30%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
 @media (max-width: 760px) { .rule-row { grid-template-columns: 1fr; gap: 6px; } }
+/* before and after a change, for the office */
+.preview { display: flex; flex-direction: column; gap: 8px; }
+.pv { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mini-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.mini { display: grid; grid-template-columns: 46px repeat(var(--days), minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+  font-size: 11px; background: var(--panel); }
+.mini > div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 34px; padding: 2px; min-width: 0; }
+.mini .mh { min-height: 0; color: var(--muted); padding: 3px 5px; background: var(--bg); }
+.mini .mh.hr { text-align: right; font-size: 10.5px; white-space: nowrap; color: var(--muted); }
+.mini .lunch { background: repeating-linear-gradient(135deg, transparent 0 5px, var(--soft) 5px 6px); }
+.mb { background: var(--soft); border-radius: 3px; padding: 2px 4px; line-height: 1.25; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mb span { display: block; color: var(--muted); font-size: 10px; }
+.mb.moved, .mb.removed { opacity: .7; text-decoration: line-through; outline: 1.5px dashed var(--bad); outline-offset: -1.5px; background: none; }
+.pv .mini-wrap:last-child .mb.moved, .mb.added { opacity: 1; text-decoration: none; outline: 1.5px solid var(--ok); background: color-mix(in srgb, var(--ok) 18%, var(--panel)); }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .result { padding: 12px 14px; gap: 10px; }
 .change { padding: 7px 10px; border-radius: 4px; }
@@ -955,6 +969,7 @@ function drawOffice(items) {
       <div class="small">${esc(c.actor)} ${what}.</div>
       ${c.text || c.detail ? `<div><b>The agent:</b> ${esc(c.text || c.detail)}</div>` : ""}
       ${c.draft.length ? `<div><b>Proposed changes</b><ul>${c.draft.map((d) => `<li>${esc(d)}</li>`).join("")}</ul></div>` : ""}
+      ${c.draft.length ? `<div id="oPreview" class="small">Loading the timetable before and after…</div>` : ""}
       ${c.status === "submitted" && c.draft.some((d) => /\bfrom week \d+\b(?!\s*to)|\bevery week\b/.test(d)) ? `<div class="callout">⚠️ This holds
         <b>until the end of term</b>, not for one week. Check that ${esc(c.actor)} asked for that before approving.</div>` : ""}
       ${c.stale && c.status === "submitted" ? `<div class="callout">The timetable changed since this was drafted, so it can't be approved as it is. Tell ${esc(c.actor)} to send it again.</div>` : ""}
@@ -971,6 +986,7 @@ function drawOffice(items) {
       await refreshOffice(); dep = await api("/api/department"); meta();
     } catch (e) { $("oErr").textContent = e.message; }
   };
+  if ($("oPreview")) beforeAfter(c.id);
   const note = () => $("oNote").value.trim();
   if ($("oYes")) $("oYes").onclick = () => act("approve", {note: note()});
   if ($("oNo")) $("oNo").onclick = () => act("reject", {note: note()});
@@ -979,6 +995,25 @@ function drawOffice(items) {
   $("oSay").onclick = () => note() ? act("note", {note: note()}) : $("oNote").focus();
 }
 
+
+// the requester's week before and after the change, side by side: what the office approves, not just its wording
+async function beforeAfter(eid) {
+  let p;
+  try { p = await api(`/api/episodes/${eid}/preview`); } catch (e) { if ($("oPreview")) $("oPreview").textContent = e.message; return; }
+  if (!$("oPreview")) return;
+  const hours = dep.hours.slice(0, -1), wk = p.week ? `week ${p.week}` : "every week";
+  const grid = (rows, title) => `<div class="mini-wrap"><div class="mini-title">${title}</div><div class="mini" style="--days:${dep.days.length}">
+    <div></div>${dep.days.map((d) => `<div class="mh">${esc(d.slice(0, 3))}</div>`).join("")}
+    ${hours.map((h) => `<div class="mh hr">${esc(h)}</div>${dep.days.map((d) => `<div class="mc ${h === dep.lunch ? "lunch" : ""}">${rows
+      .filter((r) => r.day === d && r.from === h).map((r) => `<div class="mb ${r.change}" title="${esc(`${r.course} (${r.kind}) · ${r.room}`)}">
+        ${esc(r.course)}<span>${esc(r.room)}</span></div>`).join("")}</div>`).join("")}`).join("")}</div></div>`;
+  const more = p.weeks.length > 1 ? ` The same change applies in ${p.weeks.length} weeks: ${p.weeks.map((w) => w ?? "semester").join(", ")}.` : "";
+  $("oPreview").className = "preview";
+  $("oPreview").innerHTML = `<b>${esc(p.teacher)}'s ${wk}, before and after</b><div class="small">Dashed: taken out. Green: where it goes.${esc(more)}</div>
+    <div class="pv">${grid(p.before, "Before")}${grid(p.after, "After")}</div>
+    ${p.others.length ? `<div class="small"><b>It also moves other people's classes:</b> ${p.others.map((o) =>
+      `${esc(o.teacher)}'s ${esc(o.course)}: ${esc(o.was || "new")} → ${esc(o.now)}`).join("; ")}</div>` : ""}`;
+}
 
 // -- notifications: a bell in the header ---------------------------------------------------------------------------
 // Your requests approved or not, the office's messages, and other people's approved changes that move your classes.

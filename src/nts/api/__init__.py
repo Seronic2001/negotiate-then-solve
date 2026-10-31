@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 from nts.bookings import Booking
 from nts.fairness import standing
 from nts.state import InvalidChange
+from nts.state.events import ClassCancelled, TimetableSet
 from nts.tools import Refusal, Reply
 from nts.tools.draft import OFFICE
 from nts.tools.names import FULL_DAY, Directory, hour
@@ -221,6 +222,42 @@ def create_app(departments: dict[str, Service] | Service, users: Users | None = 
         rows = [_at(inst, x, p) for sid, p in tt.assignment.items() if sid not in tt.cancelled
                 for x in [inst.session_by_id[sid]] if (fid is None or x.faculty == fid) and (gid is None or gid in x.groups)]
         return {"week": week, "own": week is not None and week in w.timetables, "version": w.version, "classes": rows}
+
+    @app.get("/api/episodes/{eid}/preview")
+    def preview(s: Office, eid: str) -> dict:
+        """The requester's week before and after a change waiting for approval, and the classes it moves, so the
+        office sees what it approves instead of reading rules ("classes only on Wednesday, from week 5")."""
+        ep = episode(s, eid)
+        if ep.outcome is None:
+            raise HTTPException(409, "the change is not kept after a restart: there is nothing to show")
+        draft, now = ep.outcome.draft, service(s).store.world
+        after_w, inst = draft.world, now.instance
+        weeks = sorted({c.week for c in draft.changes if isinstance(c, TimetableSet | ClassCancelled)}, key=lambda w: w or 0)
+        week = weeks[0] if weeks else ep.week
+        before, after = now.timetable(week), after_w.timetable(week)
+        if before is None or after is None:
+            raise HTTPException(404, "no timetable yet")
+
+        def held(tt):
+            return {sid: p for sid, p in tt.assignment.items() if sid not in tt.cancelled}
+
+        b, a = held(before), held(after)
+        changed = {sid for sid in b.keys() | a.keys() if b.get(sid) != a.get(sid)}
+
+        def rows(placed, mark):
+            return [{**_at(inst, x, p), "id": sid, "change": mark(sid) if sid in changed else ""}
+                    for sid, p in placed.items() for x in [inst.session_by_id[sid]] if x.faculty == ep.actor]
+
+        def where(x, p):
+            r = _at(inst, x, p)
+            return f"{r['day']} {r['from']}, {r['room']}"
+
+        others = [{"teacher": inst.faculty_by_id[x.faculty].name, "course": inst.course_title(x.course),
+                   "was": where(x, b[sid]) if sid in b else "", "now": where(x, a[sid]) if sid in a else "not held"}
+                  for sid in sorted(changed) for x in [inst.session_by_id[sid]] if x.faculty != ep.actor]
+        return {"weeks": weeks, "week": week, "teacher": ep.actor_name,
+                "before": rows(b, lambda sid: "removed" if sid not in a else "moved"),
+                "after": rows(a, lambda sid: "added" if sid not in b else "moved"), "others": others}
 
     @app.get("/api/fairness")
     def fairness(s: Me) -> dict:

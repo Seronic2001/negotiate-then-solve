@@ -412,3 +412,25 @@ then **"Thought for 12.7 s"**. The steps show only when you click it, and stay o
 
 Left out from the mockup: the "Important constraint" tag, because the handbook doesn't mark which rules are important,
 and a made-up tag could mislead. Checked with screenshots in light and dark, and with a search.
+
+---
+
+## Step 4, part 2: the office sees the week before and after a change (done, 2026-10-31)
+
+**Why:** the office approved changes by reading text like "classes only on Wednesday, 11 am to 12 pm, from week 5".
+That's how the "absent on Friday" request became every Friday and still got approved.
+
+**What it shows:** when the office opens a change waiting for approval, under *Proposed changes* there are two small
+grids, **Before** and **After**, of the teacher's week:
+
+- Classes taken out are dashed and struck through; where they go is green.
+- If the change holds for several weeks, it says so ("applies in 10 weeks: 5, 6, …").
+- A line lists other people's classes it moves ("Dr. Rao's Digital Logic: Wednesday 2 pm → Monday 3 pm").
+
+`GET /api/episodes/{id}/preview` (office only) works it out from the draft against today's timetable. After a server
+restart the draft is gone, so it says there is nothing to show.
+
+**Checked:** you looked at it with a real request ("away on Monday in week 7") and approved the look.
+Tests: 1 new (the office sees what moves off the day away, and the teacher can't call it).
+
+**Step 4 is now done** except edit-and-resend, which we left out because a new message in the same chat does the same.

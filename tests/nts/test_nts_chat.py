@@ -345,3 +345,19 @@ def test_stop_ends_a_request_while_the_agent_works(store):
     assert me.post(f"/api/episodes/{ep['id']}/stop").status_code == 409  # already stopped
     nxt = me.post("/api/episodes", json={"request": "what do I teach?", "week": 5, "thread": ep["thread"]})
     assert nxt.status_code == 200  # the conversation goes on
+
+
+def test_the_office_sees_the_week_before_and_after_a_change(store):
+    inst = store.world.instance
+    t = inst.faculty[1]
+    day = inst.calendar.days[0]
+    a, service = app(store, away(day))
+    me, office = signed_in(a, t.name), signed_in(a, "office")
+    ep = me.post("/api/episodes", json={"request": "away week 6", "week": 6}).json()
+    service.wait(ep["id"])
+    assert me.get(f"/api/episodes/{ep['id']}/preview").status_code == 403  # the office's view
+    p = office.get(f"/api/episodes/{ep['id']}/preview").json()
+    assert p["week"] == 6 and p["teacher"] == t.name and 6 in p["weeks"]
+    gone = [r for r in p["before"] if r["change"]]
+    assert gone and all(r["day"] == FULL_DAY[day] for r in gone)  # what moves was on the day away
+    assert not any(r["day"] == FULL_DAY[day] for r in p["after"])  # and nothing is left on it
