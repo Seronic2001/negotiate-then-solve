@@ -248,7 +248,12 @@ main.chat.closed, main.chat.two.closed { grid-template-columns: minmax(0, 1fr); 
 .search { border-radius: 10px; background: var(--panel); }
 .search input { padding: 8px 0; }
 .filters { display: flex; gap: 2px; flex-wrap: nowrap; padding: 2px 0; }
-kbd { white-space: nowrap; }
+kbd { white-space: nowrap; flex: none; }
+/* the browser draws a select's list itself: tell it the theme, so the options are not pale text on white */
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+option { background: var(--panel); color: var(--ink); }
 .filters button { border: 0; background: none; color: var(--muted); padding: 4px 9px; border-radius: 8px; font-size: 13px; white-space: nowrap; }
 .filters button:hover { color: var(--ink); }
 .filters button.on { background: var(--soft); color: var(--ink); }
@@ -535,7 +540,7 @@ function requestsView() {
   $("app").innerHTML = `<main class="chat two">
     <aside class="side">
       <button class="new-req" id="newChat">${icon("plus", 16)}<span>New request</span><kbd>N</kbd></button>
-      <label class="search">${icon("search", 16)}<input id="find" placeholder="Search conversations…" aria-label="Search conversations"><kbd>Ctrl K</kbd></label>
+      <label class="search">${icon("search", 16)}<input id="find" placeholder="Search conversations…" aria-label="Search conversations"><kbd>Ctrl+K</kbd></label>
       <div class="filters">${FILTERS.map(([k, l]) => `<button data-filter="${k}" class="${filter === k ? "on" : ""}">${l}</button>`).join("")}</div>
       <section id="inboxBox" hidden><h2>Waiting for you</h2><ul class="list" id="inbox"></ul></section>
       <h2 class="recent">Recent <span id="recentN"></span></h2><ul class="list" id="threads"></ul>
