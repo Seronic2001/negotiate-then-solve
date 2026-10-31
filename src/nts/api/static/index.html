@@ -247,8 +247,9 @@ main.chat.closed, main.chat.two.closed { grid-template-columns: minmax(0, 1fr); 
 .new-req span { flex: 1; text-align: left; }
 .search { border-radius: 10px; background: var(--panel); }
 .search input { padding: 8px 0; }
-.filters { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0; }
-.filters button { border: 0; background: none; color: var(--muted); padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.filters { display: flex; gap: 2px; flex-wrap: nowrap; padding: 2px 0; }
+kbd { white-space: nowrap; }
+.filters button { border: 0; background: none; color: var(--muted); padding: 4px 9px; border-radius: 8px; font-size: 13px; white-space: nowrap; }
 .filters button:hover { color: var(--ink); }
 .filters button.on { background: var(--soft); color: var(--ink); }
 .list li { padding: 9px 10px; border-radius: 10px; }
@@ -270,7 +271,7 @@ main.chat.closed, main.chat.two.closed { grid-template-columns: minmax(0, 1fr); 
 .ghost:hover { background: var(--accent-soft); }
 .msgs { padding: 22px max(20px, calc((100% - 820px) / 2)); }
 .composer { width: min(820px, calc(100% - 40px)); margin: 0 auto 20px; border-radius: 16px; background: var(--panel); }
-.send { width: 34px; height: 34px; border-radius: 50%; }
+.send { width: 34px; height: 34px; border-radius: 50%; padding: 0; }  /* a button's padding pushed the arrow off centre */
 .send:disabled { background: var(--soft); color: var(--muted); }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); border: 1px solid var(--line);
   border-radius: 10px; padding: 5px 10px; cursor: pointer; }
