@@ -55,6 +55,13 @@ def _slots(base_url: str) -> threading.BoundedSemaphore:
         return _SLOTS[base_url]
 
 _RETRY_WAITS = (2.0, 4.0, 8.0, 16.0)  # seconds before each new try of a dropped connection
+_SHARED_CONTEXT = 8192  # tokens the server's slots share (llama-server -c); a call needing more never fits
+
+
+def _fits_alone(payload: dict) -> bool:
+    """Whether a call could fit the server's context with nothing beside it (about four characters a token)."""
+    chars = sum(len(m.get("content") or "") for m in payload.get("messages", []))
+    return chars // 4 + payload.get("max_tokens", 0) < _SHARED_CONTEXT
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -111,7 +118,9 @@ class LocalClient:
     def _request(self, path: str, payload: dict | None = None, *, root: bool = False) -> dict:
         """``path`` under the API (``/v1``), or under the server's root with ``root`` (``/lora-adapters``).
         A dropped or refused connection (the server restarting, a blip on the network) is tried again after
-        2, 4, 8 and 16 s before it fails; a timeout is not, as the server is busy and another call adds to it."""
+        2, 4, 8 and 16 s before it fails; a timeout is not, as the server is busy and another call adds to it.
+        Nor is a full context, unless it is the one the server's parallel slots share: calls running beside
+        this one filled it, and it is free again once they end."""
         data = json.dumps(payload).encode() if payload is not None else None
         base = self.base_url.removesuffix("/v1") if root else self.base_url
         req = urllib.request.Request(f"{base}{path}", data=data,
@@ -121,7 +130,11 @@ class LocalClient:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     return json.loads(resp.read())
             except urllib.error.HTTPError as e:
-                raise LLMError(f"local server {e.code}: {e.read()[:300]!r}") from e
+                body = e.read()[:300]
+                if wait is None or not (e.code == 500 and b"Context size has been exceeded" in body
+                                        and payload is not None and _fits_alone(payload)):
+                    raise LLMError(f"local server {e.code}: {body!r}") from e
+                time.sleep(wait)
             except (urllib.error.URLError, ConnectionError) as e:
                 if wait is None or not isinstance(getattr(e, "reason", e), ConnectionError):
                     raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e

@@ -1,5 +1,6 @@
 """Local client against a fake OpenAI-compatible server (no GPU needed)."""
 
+import io
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -163,3 +164,24 @@ def test_calls_to_one_server_are_capped_per_process(server, tmp_path, monkeypatc
     for t in threads:
         t.join()
     assert most == 2
+
+
+def test_a_context_full_of_other_calls_is_tried_again(server, tmp_path, monkeypatch):
+    client = LocalClient(base_url=server.url, cache_dir=tmp_path)
+    real, calls = local.urllib.request.urlopen, []
+    full = b'{"error":{"code":500,"message":"Context size has been exceeded.","type":"server_error"}}'
+
+    def busy(req, timeout):
+        calls.append(req.full_url)
+        if len(calls) == 1:  # the slots beside this call hold the shared context
+            raise local.urllib.error.HTTPError(req.full_url, 500, "", {}, io.BytesIO(full))
+        return real(req, timeout=timeout)
+
+    monkeypatch.setattr(local, "_RETRY_WAITS", (0.0,))
+    monkeypatch.setattr(local.urllib.request, "urlopen", busy)
+    assert client._request("/chat/completions", {"messages": [{"content": "short"}], "max_tokens": 512})
+    assert len(calls) == 2
+    calls.clear()  # a call too long for the whole context fails at once
+    with pytest.raises(LLMError, match="Context size"):
+        client._request("/chat/completions", {"messages": [{"content": "x" * 40000}], "max_tokens": 512})
+    assert len(calls) == 1
