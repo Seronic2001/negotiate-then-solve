@@ -330,3 +330,18 @@ def test_an_absence_on_a_day_is_this_week_not_every_week(store):
 def test_cancel_is_not_unavailable(store):
     note = _noted(store, "i am absent in week 10, cancel all my classes", rule="unavailable", from_week=10, to_week=10)
     assert "cancel_class" in note
+
+
+def test_a_teacher_and_a_course_together_points_to_add_class(store):
+    """ "schedule a class on Wednesday ... computer graphics": the agent named both, and repeated the refused call."""
+    from nts.agents import COORDINATOR_V6
+    from nts.harness import Harness
+    from nts.models import ScriptedModel, call, say
+    from nts.tools import ALL_TOOLS, Registry
+
+    inst = store.world.instance
+    s = inst.sessions[0]
+    out = Harness(Registry(ALL_TOOLS), ScriptedModel([call("constrain", rule="classes_only", teacher="me",
+                                                           course=inst.course_title(s.course), days=["Wednesday"]),
+                                                      say("ok")])).run(COORDINATOR_V6, "schedule a class", store, s.faculty, 5)
+    assert "add_class" in out.calls[0].error.message

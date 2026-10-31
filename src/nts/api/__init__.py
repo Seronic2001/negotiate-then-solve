@@ -277,7 +277,7 @@ def create_app(departments: dict[str, Service] | Service, users: Users | None = 
             last = eps[-1]
             out.append({"id": eps[0].thread, "title": eps[0].request, "actor": eps[0].actor_name,
                         "mine": eps[0].actor == s.person, "updated": last.started.isoformat(timespec="seconds"),
-                        "status": last.status, "messages": len(eps)})
+                        "status": last.status, "messages": len(eps), "week": last.week})
         return out
 
     @app.get("/api/threads/{tid}")

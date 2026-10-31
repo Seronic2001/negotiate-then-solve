@@ -72,6 +72,7 @@ class Episode:
     busy: bool = True  # a thread is running the harness for it
     options: list[str] = field(default_factory=list)  # answers to pick for the requester's pending question
     notes: list[dict] = field(default_factory=list)  # the office's messages to the requester about it
+    kind: str = ""  # what System One took the request for (nts.harness.pick), when it was fairly sure
     cond: threading.Condition = field(default_factory=threading.Condition)
 
     def push(self, event: dict) -> None:
@@ -86,7 +87,7 @@ class Episode:
 
     def summary(self) -> dict:
         p = self.pending
-        return {"id": self.id, "thread": self.thread, "request": self.request, "actor": self.actor_name, "week": self.week,
+        return {"id": self.id, "thread": self.thread, "kind": self.kind, "request": self.request, "actor": self.actor_name, "week": self.week,
                 "started": self.started.isoformat(timespec="seconds"), "status": self.status, "text": self.text,
                 "detail": self.detail,
                 "pending": None if p is None else {"kind": p.kind, "to": self.actor_name if p.to == REQUESTER else p.to_name,
@@ -102,8 +103,16 @@ class _Events:
 
     def write(self, span: Span) -> None:
         ep = self.service.episodes.get(span.trace_id)
+        if ep is not None and span.kind == "episode":
+            ep.kind = kind_of(span)
         if ep is not None and (event := to_event(span)) is not None:
             ep.push(event)
+
+
+def kind_of(span: Span) -> str:
+    """The request type System One gave an episode's request, when it was as sure as the tool picker needs (0.7)."""
+    picked = span.attrs.get("picked") or {}
+    return picked.get("request_type", "") if picked.get("p", 0) >= 0.7 else ""
 
 
 def to_event(span: Span) -> dict | None:
@@ -209,7 +218,7 @@ class Service:
             a = head.attrs
             name = inst.faculty_by_id[a["actor"]].name if a.get("actor") in inst.faculty_by_id else "the timetable office"
             ep = Episode(eid, a.get("request", ""), a.get("actor", ""), name, a.get("week"), head.start, busy=False,
-                         thread=a.get("thread") or eid)
+                         thread=a.get("thread") or eid, kind=kind_of(head))
             for span in trace:
                 if (event := to_event(span)) is not None:
                     ep.push(event)

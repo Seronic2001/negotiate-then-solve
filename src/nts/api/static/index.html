@@ -6,136 +6,227 @@
 <title>Timetable Office Agent</title>
 <style>
 :root {
-  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a66; --line: #e3e1db;
-  --accent: #2f5d8a; --accent-ink: #ffffff; --ok: #2e7d4f; --warn: #a86a12; --bad: #b23a3a;
-  --soft: #eef2f6; --code: #f1efe9; --bar: #2f5d8a;
+  --bg: #f5f7fb; --panel: #ffffff; --panel-2: #f8fafc; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0;
+  --accent: #2563eb; --accent-ink: #ffffff; --accent-soft: #dbeafe; --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+  --soft: #eff4ff; --code: #f1f5f9; --bar: #2563eb; --user: #dbe6ff; --shadow: 0 10px 30px rgba(15, 23, 42, .12);
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161715; --panel: #1f201e; --ink: #ecebe6; --muted: #9c9a93; --line: #34352f;
-    --accent: #7fb0e0; --accent-ink: #10171f; --ok: #6cc28f; --warn: #e0a64c; --bad: #e07a7a;
-    --soft: #232a31; --code: #2a2b27; --bar: #7fb0e0;
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --panel: #111827; --panel-2: #0f172a; --ink: #e5e7eb; --muted: #94a3b8; --line: #1f2a3d;
+    --accent: #3b82f6; --accent-ink: #ffffff; --accent-soft: #172554; --ok: #22c55e; --warn: #f59e0b; --bad: #f87171;
+    --soft: #172036; --code: #0b1220; --bar: #3b82f6; --user: #1e3a6e; --shadow: 0 10px 30px rgba(0, 0, 0, .45);
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0b1120; --panel: #111827; --panel-2: #0f172a; --ink: #e5e7eb; --muted: #94a3b8; --line: #1f2a3d;
+  --accent: #3b82f6; --accent-ink: #ffffff; --accent-soft: #172554; --ok: #22c55e; --warn: #f59e0b; --bad: #f87171;
+  --soft: #172036; --code: #0b1220; --bar: #3b82f6; --user: #1e3a6e; --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; gap: 16px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-header .meta { color: var(--muted); font-size: 12px; }
-header .me { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+.ic { flex: none; display: block; }
+
+/* -- the top bar: brand, the sections, and the person ----------------------------------------------------------- */
+header { display: flex; gap: 16px; align-items: center; height: 64px; padding: 0 20px; border-bottom: 1px solid var(--line);
+  background: var(--panel-2); position: sticky; top: 0; z-index: 5; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; white-space: nowrap; }
+.brand .logo { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent); color: #fff; }
+.shell { display: flex; min-height: calc(100vh - 64px); }
+#app { flex: 1; min-width: 0; }
+nav.rail { width: 84px; flex: none; display: flex; flex-direction: column; gap: 4px; padding: 12px 8px; border-right: 1px solid var(--line);
+  background: var(--panel-2); position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto; scrollbar-width: none; }
+nav.rail button { position: relative; flex-direction: column; justify-content: center; gap: 5px; width: 100%; font-size: 11.5px; line-height: 1.2;
+  text-align: center; padding: 10px 4px; }
+nav.rail .ic { width: 20px; height: 20px; }
+.rail-dot { position: absolute; top: 4px; right: 10px; }
+.spacer { flex: 1; }
+nav.rail:empty { display: none; }
+header .grow-head { flex: 1; }
+nav button { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--muted); padding: 8px 14px;
+  border-radius: 10px; white-space: nowrap; }
+nav button:hover { color: var(--ink); background: var(--soft); }
+nav button.on { color: var(--ink); background: var(--accent-soft); }
+nav button.on .ic { color: var(--accent); }
+header .me { display: flex; gap: 6px; align-items: center; }
+.iconbtn { border: 0; background: none; color: var(--muted); padding: 8px; border-radius: 10px; display: grid; place-items: center; }
+.iconbtn:hover { color: var(--ink); background: var(--soft); }
+.userbox, .bellbox { position: relative; }
+.user { display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 4px 6px; border-radius: 12px; color: var(--ink); text-align: left; }
+.user:hover { background: var(--soft); }
+.user-text { display: flex; flex-direction: column; line-height: 1.25; }
+.user-text .small { font-size: 12px; }
+.menu { position: absolute; right: 0; top: 48px; width: 260px; z-index: 10; box-shadow: var(--shadow); }
+.menu-item { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 8px; border-radius: 8px; margin-top: 8px; }
+.menu-item:hover { background: var(--soft); }
+.avatar { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 600;
+  background: var(--soft); color: var(--ink); border: 1px solid var(--line); }
+.avatar.sm { width: 30px; height: 30px; font-size: 13px; }
+.avatar.bot { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.avatar.big { width: 56px; height: 56px; }
+
+/* -- shared pieces ----------------------------------------------------------------------------------------------- */
 select, input, textarea, button { font: inherit; color: inherit; }
-select, input, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+select, input, textarea { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; outline: none; }
+select:focus, input:focus, textarea:focus { border-color: var(--accent); }
 textarea { width: 100%; resize: vertical; min-height: 64px; }
-button { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
 button.danger { color: var(--bad); }
 button.link { border: 0; background: none; padding: 0; color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
-main { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
-main.wide { grid-template-columns: 1fr; }
-@media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 20px; max-width: 1600px; margin: 0 auto; }
+main.wide { grid-template-columns: 1fr; max-width: 1400px; }
+.panel, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 .stack > * + * { margin-top: 12px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.list { list-style: none; margin: 0; padding: 0; }
-.list li { padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
-.list li:hover { background: var(--soft); }
-.list li.sel { border-color: var(--accent); background: var(--soft); }
-.list .req { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.small { font-size: 12px; color: var(--muted); }
-.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
-.s-running { color: var(--accent); } .s-waiting { color: var(--warn); } .s-submitted { color: var(--accent); }
-.s-approved, .s-answered, .s-passed { color: var(--ok); } .s-declined, .s-escalated { color: var(--warn); }
+.grow { flex: 1; min-width: 0; }
+.small { font-size: 12.5px; color: var(--muted); }
+.badge { display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; text-transform: capitalize; padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+  color: var(--muted); background: color-mix(in srgb, currentColor 14%, transparent); border: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+.s-running, .s-submitted { color: var(--accent); } .s-waiting, .s-declined, .s-escalated { color: var(--warn); }
+.s-approved, .s-answered, .s-passed { color: var(--ok); }
 .s-rejected, .s-model_error, .s-budget_exhausted, .s-stuck, .s-not_committed, .s-failed { color: var(--bad); }
-.tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
-.tabs button.on { background: var(--soft); border-color: var(--accent); }
-.turn { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; margin: 8px 0; }
-.turn.model { border-color: var(--accent); } .turn.ask { border-color: var(--warn); }
-.turn.end { border-color: var(--ok); } .turn.bad { border-color: var(--bad); }
-.call { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; background: var(--code); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere; }
-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-pre { background: var(--code); padding: 8px; border-radius: 6px; overflow: auto; font-size: 12px; max-height: 300px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.callout { border: 1px solid var(--warn); border-radius: 8px; padding: 12px; background: color-mix(in srgb, var(--warn) 8%, transparent); }
-.callout.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
-.empty { color: var(--muted); padding: 24px; text-align: center; }
+.s-replaced, .s-interrupted, .s-undone { color: var(--muted); }
+.call { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; background: var(--code); border-radius: 6px; padding: 2px 6px; overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+pre { background: var(--code); padding: 10px; border-radius: 8px; overflow: auto; font-size: 12px; max-height: 300px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.callout { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 12px; padding: 12px 14px; background: color-mix(in srgb, var(--warn) 9%, transparent); }
+.callout.ok { border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.empty { color: var(--muted); padding: 32px; text-align: center; }
 table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
-table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
 table.data th { color: var(--muted); font-weight: 600; font-size: 12px; }
 table.data td.n { text-align: right; font-variant-numeric: tabular-nums; }
 table.data tr.click { cursor: pointer; } table.data tr.click:hover { background: var(--soft); }
-table.grid { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; min-width: 640px; }
-table.grid th, table.grid td { border: 1px solid var(--line); padding: 4px; vertical-align: top; }
-table.grid th { background: var(--soft); font-weight: 600; }
+table.grid { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; font-size: 12px; min-width: 640px; }
+table.grid th, table.grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 6px; vertical-align: top; }
+table.grid th { background: var(--panel-2); font-weight: 600; color: var(--muted); }
 table.grid td.h { width: 64px; color: var(--muted); white-space: nowrap; }
-.cls { background: var(--soft); border-radius: 4px; padding: 3px 5px; margin-bottom: 3px; }
+.cls { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; }
 .cls b { display: block; font-weight: 600; }
 .scroll { overflow-x: auto; }
-.dot { background: var(--warn); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; }
+.dot { background: var(--bad); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 600; line-height: 17px; }
 .bar { height: 8px; background: var(--bar); border-radius: 4px; min-width: 2px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.login { max-width: 380px; margin: 10vh auto; }
-main.chat { grid-template-columns: 280px 1fr; height: calc(100vh - 54px); }
-main.chat .side { overflow-y: auto; }
-main.chat .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 6px; font-weight: 600; }
-.convo { display: flex; flex-direction: column; min-height: 0; }
-.msgs { flex: 1; overflow-y: auto; padding: 4px 4px 12px; }
-.msg { display: flex; flex-direction: column; margin: 10px 0; max-width: 820px; }
-.msg.user { align-items: flex-end; margin-left: auto; }
-.msg .bubble { padding: 9px 13px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg.user .bubble { background: var(--soft); border-color: transparent; }
-.msg .bubble.ask { border-color: var(--warn); }
-.msg.agent > * + * { margin-top: 8px; }
-.thinking { border-left: 2px solid var(--line); padding: 2px 0 2px 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--panel-2); }
+.tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.login { max-width: 400px; margin: 10vh auto; }
+.rule h3 { margin: 0 0 4px; font-size: 14px; }
+.itile { width: 40px; height: 40px; flex: none; border-radius: 10px; display: grid; place-items: center; background: var(--panel-2);
+  border: 1px solid var(--line); color: var(--ink); }
+
+/* -- chat: the list of conversations, the conversation, and its details ---------------------------------------- */
+main.chat { grid-template-columns: 300px minmax(0, 1fr) 320px; height: calc(100vh - 64px); max-width: none; }
+main.chat.two { grid-template-columns: 320px minmax(0, 1fr); }
+main.chat.closed { grid-template-columns: minmax(0, 1fr) 320px; }
+main.chat.two.closed { grid-template-columns: minmax(0, 1fr); }
+main.chat.closed .side { display: none; }
+.side { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.side h2 { font-size: 12.5px; color: var(--muted); margin: 14px 4px 4px; font-weight: 500; }
+.side .new { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 12px; font-size: 15px; }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 0 10px; color: var(--muted); }
+.search input { border: 0; background: none; flex: 1; padding: 10px 0; color: var(--ink); }
+kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; color: var(--muted); }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.list li { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; }
+.list li:hover { background: var(--soft); }
+.list li.sel { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.list li.none { cursor: default; } .list li.none:hover { background: none; }
+.list .req { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.li-icon { color: var(--muted); display: grid; place-items: center; }
+.convo { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.convo-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.convo-head .title { font-weight: 600; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msgs { flex: 1; overflow-y: auto; padding: 18px 22px; }
+.msg { display: flex; gap: 12px; margin: 14px 0; align-items: flex-start; }
+.msg .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 760px; }
+.msg.user { justify-content: flex-end; }
+.msg.user .col { align-items: flex-end; }
+.msg .stamp { margin-top: -6px; }
+.bubble { padding: 11px 16px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user .bubble { background: var(--user); border-color: transparent; border-top-right-radius: 6px; }
+.msg.agent .bubble { border-top-left-radius: 6px; }
+.bubble.ask { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.bubble.office { border-left: 3px solid var(--accent); }
+.thinking { border-left: 2px solid var(--line); padding: 2px 0 2px 12px; }
 .thinking > summary { font-size: 13px; }
 .thinking ol { margin: 6px 0 0; padding-left: 20px; }
-.thinking li { margin: 3px 0; }
+.thinking li { margin: 4px 0; }
 .thinking li.bad { color: var(--bad); }
 .thinking li.note { color: var(--muted); font-style: italic; list-style: none; margin-left: -20px; }
 .thinking li details { display: inline-block; margin-left: 6px; }
-.composer { margin-top: 8px; }
-.composer textarea { min-height: 44px; }
-.s-replaced, .s-interrupted { color: var(--muted); }
-main.chat.closed { grid-template-columns: 1fr; }
-main.chat.closed .side { display: none; }
-.topbar { flex-wrap: nowrap; align-items: flex-start; }
-.topbar .tabs { flex: 1; }
-.side-btn { font-size: 20px; line-height: 1; padding: 6px 4px; color: var(--muted); }
-.side-btn:hover { color: var(--ink); }
-/* scroll bars only while the pointer is over what scrolls */
-.msgs, main.chat .side { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.msgs:hover, main.chat .side:hover { scrollbar-color: var(--line) transparent; }
-.msgs::-webkit-scrollbar, main.chat .side::-webkit-scrollbar { width: 8px; }
-.msgs::-webkit-scrollbar-thumb, main.chat .side::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.msgs:hover::-webkit-scrollbar-thumb, main.chat .side:hover::-webkit-scrollbar-thumb { background: var(--line); }
-.picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
-.pick { border-radius: 999px; border-color: var(--accent); color: var(--accent); padding: 4px 12px; }
-.pick:hover { background: var(--soft); }
-.bubble.office { border-color: var(--accent); border-left-width: 3px; }
-.office-item { max-width: 900px; }
-.bellbox { position: relative; }
-.bell { font-size: 18px; position: relative; }
-.bell .dot { position: absolute; top: -6px; right: -10px; }
-.bell-panel { position: absolute; right: 0; top: 30px; width: min(420px, 90vw); max-height: 70vh; overflow-y: auto; z-index: 10;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
-.toast { position: fixed; right: 20px; bottom: 20px; width: min(380px, 90vw); z-index: 20; cursor: pointer;
-  border-left: 4px solid var(--accent); box-shadow: 0 8px 24px rgba(0, 0, 0, .3); }
-.notice { padding: 8px; border-radius: 6px; cursor: pointer; border-top: 1px solid var(--line); }
+.result { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--panel-2); display: flex; flex-direction: column; gap: 12px; }
+.result-head { display: flex; gap: 12px; align-items: center; }
+.result-icon { display: grid; place-items: center; }
+.result.ok { border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); }
+.result.ok b, .result.ok .result-icon { color: var(--ok); }
+.result.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); } .result.warn b, .result.warn .result-icon { color: var(--warn); }
+.result.bad { border-color: color-mix(in srgb, var(--bad) 45%, transparent); } .result.bad b, .result.bad .result-icon { color: var(--bad); }
+.result.muted .result-icon { color: var(--muted); }
+.changes { display: flex; flex-direction: column; gap: 6px; }
+.change { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.composer { margin: 0 18px 18px; border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; background: var(--panel-2); }
+.composer textarea { border: 0; background: none; min-height: 44px; padding: 6px 4px; resize: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 10px; padding: 4px 10px; background: var(--panel); }
+.chip select { border: 0; padding: 0 2px; background: none; color: var(--ink); }
+.send { margin-left: auto; width: 46px; height: 46px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.send:hover { filter: brightness(1.08); }
+.welcome { text-align: center; padding: 8vh 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.welcome h3 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+.picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; justify-content: inherit; }
+.welcome .picks { justify-content: center; }
+.pick { border-radius: 999px; border-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--accent); padding: 5px 13px; background: none; }
+.pick:hover { background: var(--accent-soft); }
+.details { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 15px; }
+.card-head .itile { width: 36px; height: 36px; }
+.count { margin-left: auto; background: var(--soft); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+.kv { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; }
+.details .change { margin-bottom: 8px; }
+.action { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; padding: 11px 12px; text-align: left; background: var(--panel-2); }
+.action:hover { background: var(--soft); }
+.office-item { max-width: 900px; margin: 0 auto; }
+
+/* -- notifications ------------------------------------------------------------------------------------------------ */
+.bell { position: relative; }
+.bell .dot { position: absolute; top: 2px; right: 0; }
+.bell-panel { position: absolute; right: 0; top: 48px; width: min(420px, 90vw); max-height: 70vh; overflow-y: auto; z-index: 10; box-shadow: var(--shadow); }
+.toast { position: fixed; right: 20px; bottom: 20px; width: min(380px, 90vw); z-index: 20; cursor: pointer; border-left: 4px solid var(--accent); box-shadow: var(--shadow); }
+.notice { padding: 10px; border-radius: 10px; cursor: pointer; border-top: 1px solid var(--line); }
 .notice:hover { background: var(--soft); }
 .notice.new { border-left: 3px solid var(--accent); }
-@media (max-width: 860px) { main.chat { height: auto; } .msgs { max-height: 70vh; } }
-.rule h3 { margin: 0 0 4px; font-size: 14px; }
+
+/* scroll bars only while the pointer is over what scrolls */
+.msgs, .side, .details { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.msgs:hover, .side:hover, .details:hover { scrollbar-color: var(--line) transparent; }
+.msgs::-webkit-scrollbar, .side::-webkit-scrollbar, .details::-webkit-scrollbar { width: 8px; }
+.msgs::-webkit-scrollbar-thumb, .side::-webkit-scrollbar-thumb, .details::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.msgs:hover::-webkit-scrollbar-thumb, .side:hover::-webkit-scrollbar-thumb, .details:hover::-webkit-scrollbar-thumb { background: var(--line); }
+
+@media (max-width: 1250px) { main.chat, main.chat.closed { grid-template-columns: 280px minmax(0, 1fr); } main.chat.closed { grid-template-columns: minmax(0, 1fr); } .details { display: none; } }
+@media (max-width: 860px) {
+  nav.rail { width: 56px; } nav.rail button span:not(.dot) { display: none; }
+  header { padding: 0 12px; gap: 8px; } .brand > span:not(.logo), .user-text { display: none; }
+  main, main.chat, main.chat.two { grid-template-columns: 1fr; padding: 12px 16px; height: auto; }
+  .side { max-height: 40vh; } .msgs { max-height: 65vh; }
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>Timetable office agent</h1>
-  <span class="meta" id="meta"></span>
+  <div class="brand"><span class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></span>
+    <span>Timetable Office Agent</span></div>
+  <span class="grow-head"></span>
   <div class="me" id="who"></div>
 </header>
-<div id="app"></div>
+<div class="shell"><nav id="nav" class="rail" aria-label="Sections"></nav><div id="app"></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
@@ -170,7 +261,7 @@ async function start() {
 
 async function showLogin() {
   clearInterval(timer);
-  $("who").innerHTML = ""; $("meta").textContent = "";
+  $("who").innerHTML = ""; $("nav").innerHTML = "";
   const d = await api("/api/departments");
   $("app").innerHTML = `<div class="panel login stack"><h2>Sign in</h2>
     <label class="small" for="ldept">Department</label>
@@ -205,14 +296,73 @@ async function showLogin() {
   if ($("lpass")) $("lpass").onkeydown = (e) => { if (e.key === "Enter") go(); };
 }
 
+// -- icons (lucide-style line icons, drawn in the current text colour) -------------------------------------------
+
+const PATHS = {
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  booking: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17V9M13 17V5M18 17v-3"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+  bot: '<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/>',
+  check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  x: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
+  undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
+  zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/>',
+};
+const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] || ""}</svg>`;
+const initial = (name) => esc(String(name || "?").replace(/^(dr|prof|mr|mrs|ms)\.?\s+/i, "").trim().charAt(0).toUpperCase() || "?");
+const when = (iso) => {  // "Oct 31 · 18:23"
+  const d = new Date(iso);
+  return isNaN(d) ? "" : `${d.toLocaleDateString(undefined, {month: "short", day: "numeric"})} · ${iso.slice(11, 16)}`;
+};
+const pill = (status, text) => `<span class="badge s-${esc(status)}">${label(text || status)}</span>`;
+
+// -- light or dark, remembered per browser --------------------------------------------------------------------
+
+function theme(set) {
+  const now = set || remember("nts.theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  if (set) remember("nts.theme", set);
+  document.documentElement.dataset.theme = now;
+  if ($("themeBtn")) $("themeBtn").innerHTML = icon(now === "dark" ? "moon" : "sun", 20);
+  return now;
+}
+
 async function enter() {
   dep = await api("/api/department");
+  $("who").innerHTML = `
+    <button class="iconbtn" id="themeBtn" title="Light or dark" aria-label="Light or dark"></button>
+    ${me.role === "club" ? "" : `<span class="bellbox"><button class="iconbtn bell" id="bell" title="Notifications" aria-label="Notifications">${icon("bell", 20)}
+      <span class="dot" id="bellDot" hidden></span></button><div class="panel bell-panel" id="bellPanel" hidden></div></span>`}
+    <span class="userbox"><button class="user" id="userBtn" aria-haspopup="true"><span class="avatar">${initial(me.name)}</span>
+      <span class="user-text"><b>${esc(me.name)}</b><span class="small">${esc(me.role)} · ${esc(me.dept)}</span></span>${icon("down", 16)}</button>
+      <div class="panel menu" id="userMenu" hidden><div class="small" id="meta"></div>
+        <button class="menu-item" id="logout">${icon("out", 16)} Sign out</button></div></span>`;
+  theme();
   meta();
-  $("who").innerHTML = `<span>${esc(me.name)} <span class="small">· ${esc(me.role)} · ${esc(me.dept)}</span></span><span id="inboxDot"></span>
-    ${me.role === "club" ? "" : `<span class="bellbox"><button class="link bell" id="bell" title="Notifications" aria-label="Notifications">🔔<span class="dot" id="bellDot" hidden></span></button>
-      <div class="panel bell-panel" id="bellPanel" hidden></div></span>`}
-    <button class="link" id="logout">Sign out</button>`;
-  if ($("bell")) { $("bell").onclick = toggleBell; refreshBell(); }
+  $("themeBtn").onclick = () => theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  $("userBtn").onclick = (e) => { e.stopPropagation(); $("userMenu").hidden = !$("userMenu").hidden; };
+  document.onclick = (e) => {
+    if ($("userMenu") && !e.target.closest(".userbox")) $("userMenu").hidden = true;
+    if ($("bellPanel") && !e.target.closest(".bellbox")) $("bellPanel").hidden = true;
+  };
+  if ($("bell")) { $("bell").onclick = (e) => { e.stopPropagation(); toggleBell(); }; refreshBell(); }
   $("logout").onclick = async () => { await api("/api/logout", {method: "POST"}); tabToken(""); me = null; chat = null; showLogin(); };
   show(view);
   clearInterval(timer); timer = setInterval(() => {
@@ -222,18 +372,25 @@ async function enter() {
   }, 4000);
 }
 
-function meta() { $("meta").textContent = `${dep.model} · ${dep.agent} · version ${dep.version.slice(0, 8)}`; }
+function railDot(tab, n) {  // a count on a section of the rail: what waits for you there
+  const d = document.querySelector(`[data-dot="${tab}"]`);
+  if (d) { d.textContent = n ? String(n) : ""; d.hidden = !n; }
+}
+
+function meta() { if ($("meta")) $("meta").textContent = `${dep.model} · ${dep.agent} · version ${dep.version.slice(0, 8)}`; }
 
 function show(which) {
   view = which;
   if (me.role === "club" && which === "requests") which = view = "bookings";
-  const tabs = [...(me.role === "club" ? [] : [["requests", "Requests"]]), ...(me.role === "office" ? [["chat", "Agent chat"]] : []),
-    ["timetable", "Timetable"], ["bookings", "Bookings"],
-    ["fairness", "Fairness"], ["rules", "Rules"], ...(me.role === "office" ? [["semester", "Semester"], ["obs", "Observability"]] : [])];
-  const bar = `<div class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${k === which ? "on" : ""}">${l}</button>`).join("")}</div>`;
-  if (which === "requests" && me.role === "office") officeView(bar);
-  else if (which === chatTab()) requestsView(bar);
-  else { $("app").innerHTML = `<main class="wide"><section>${bar}<div id="pane" class="panel stack"></div></section></main>`;
+  const tabs = [...(me.role === "club" ? [] : [["requests", me.role === "office" ? "Inbox" : "Requests", me.role === "office" ? "inbox" : "chat"]]),
+    ...(me.role === "office" ? [["chat", "Agent chat", "chat"]] : []),
+    ["timetable", "Timetable", "calendar"], ["bookings", "Bookings", "booking"], ["fairness", "Fairness", "chart"], ["rules", "Rules", "file"],
+    ...(me.role === "office" ? [["semester", "Semester", "layers"], ["obs", "Observability", "activity"]] : [])];
+  $("nav").innerHTML = tabs.map(([k, l, i]) => `<button data-tab="${k}" class="${k === which ? "on" : ""}" title="${l}">${icon(i)}<span>${l}</span>
+    <span class="dot rail-dot" data-dot="${k}" hidden></span></button>`).join("");
+  if (which === "requests" && me.role === "office") officeView();
+  else if (which === chatTab()) requestsView();
+  else { $("app").innerHTML = `<main class="wide"><div id="pane" class="panel stack"></div></main>`;
     ({timetable: timetableView, bookings: bookingsView, fairness: fairnessView, rules: rulesView, semester: semesterView,
       obs: obsView})[which](); }
   for (const b of document.querySelectorAll("[data-tab]")) b.onclick = () => show(b.dataset.tab);
@@ -254,6 +411,7 @@ const STEP = {
   decline: "Declined", escalate: "Passed it to the office",
 };
 let chat = null;  // the open conversation: {id, mine, episodes: [...]}, or null for a new one
+let threadList = [];  // the sidebar's conversations, for the search box
 const chatTab = () => (me.role === "office" ? "chat" : "requests");
 
 async function freshen() {  // the office may decide or write while a chat is open: fetch it again when idle
@@ -264,39 +422,46 @@ async function freshen() {  // the office may decide or write while a chat is op
   } catch { /* gone, or the server is restarting */ }
 }
 
-// the side bar folds away, as in a chat app; the choice is remembered
-const sideBar = (bar) => `<div class="row topbar"><button class="link side-btn" id="sideBtn" title="Show or hide the side bar"
-  aria-label="Show or hide the side bar">☰</button>${bar}</div>`;
-
-function sideToggle() {
+function sideToggle() {  // the side bar folds away, as in a chat app; the choice is remembered
   const main = document.querySelector("main.chat");
   main.classList.toggle("closed", remember("nts.side") === "closed");
-  $("sideBtn").onclick = () => remember("nts.side", main.classList.toggle("closed") ? "closed" : "open");
+  for (const b of document.querySelectorAll(".side-btn")) b.onclick = () => remember("nts.side", main.classList.toggle("closed") ? "closed" : "open");
 }
 
-function requestsView(bar) {
-  $("app").innerHTML = `<main class="chat"><aside class="side stack">
-      <button class="primary" id="newChat">+ New chat</button>
+function requestsView() {
+  $("app").innerHTML = `<main class="chat">
+    <aside class="side">
+      <button class="primary new" id="newChat">${icon("plus")} New chat</button>
+      <label class="search">${icon("search", 16)}<input id="find" placeholder="Search conversations…" aria-label="Search conversations"><kbd>Ctrl K</kbd></label>
       <section id="inboxBox" hidden><h2>Waiting for you</h2><ul class="list" id="inbox"></ul></section>
-      <section><h2>${me.role === "office" ? "All chats" : "Your chats"}</h2><ul class="list" id="threads"></ul></section>
-    </aside><section class="convo">${sideBar(bar)}
+      <h2>Recent</h2><ul class="list" id="threads"></ul>
+    </aside>
+    <section class="convo card">
+      <div class="convo-head"><button class="iconbtn side-btn" title="Show or hide the side bar" aria-label="Show or hide the side bar">${icon("panel")}</button>
+        <span class="itile">${icon("calendar", 20)}</span><div class="grow"><div class="title" id="chatTitle">New chat</div><div class="small" id="chatSub"></div></div></div>
       <div id="msgs" class="msgs"></div>
-      <div class="composer panel">
+      <div class="composer">
         <textarea id="text" rows="2"></textarea>
-        <div class="row"><label class="small" for="week">Week</label><select id="week">${Array.from({length: dep.weeks}, (_, i) => `<option>${i + 1}</option>`).join("")}</select>
-          <label class="small"><input type="checkbox" id="simulate"> stand-ins answer</label>
-          <span class="small" id="sendErr"></span><button class="primary" id="send" style="margin-left:auto">Send</button></div>
-      </div></section></main>`;
+        <div class="row"><label class="chip" title="The week the request is about">Week <select id="week" aria-label="Week">${Array.from({length: dep.weeks}, (_, i) => `<option>${i + 1}</option>`).join("")}</select></label>
+          <label class="chip" title="Simple stand-ins answer the agent's questions to other teachers"><input type="checkbox" id="simulate"> Stand-ins answer</label>
+          <span class="small" id="sendErr"></span><button class="send" id="send" title="Send" aria-label="Send">${icon("send", 20)}</button></div>
+      </div>
+    </section>
+    <aside class="details" id="details"></aside></main>`;
   $("week").value = remember("nts.week") || 5;
   $("week").onchange = () => remember("nts.week", $("week").value);
   $("simulate").checked = dep.simulate;
   $("send").onclick = send;
   sideToggle();
-  $("newChat").onclick = () => { chat = null; if (source) source.close(); draw(); refreshLists(); $("text").focus(); };
+  $("newChat").onclick = newChat;
+  $("find").oninput = drawThreads;
+  document.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && $("find")) { e.preventDefault(); $("find").focus(); } };
   $("text").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
   refreshLists();
   if (chat) openThread(chat.id); else draw();
 }
+
+function newChat() { chat = null; if (source) source.close(); draw(); drawThreads(); $("text").focus(); }
 
 async function send() {
   const text = $("text").value.trim();
@@ -314,15 +479,25 @@ async function refreshLists() {
   if (!$("threads")) return;
   try {
     const [ts, inbox] = await Promise.all([api("/api/threads"), api("/api/inbox")]);
-    $("threads").innerHTML = ts.length ? ts.map((t) => `<li data-thread="${esc(t.id)}" class="${chat?.id === t.id ? "sel" : ""}">
-        <div class="req">${esc(t.title)}</div><div class="row small"><span class="badge s-${esc(t.status)}">${label(t.status)}</span>
-        ${t.messages > 1 ? `${t.messages} messages` : ""}${t.mine ? "" : ` · ${esc(t.actor)}`}</div></li>`).join("") : `<li class="small">No chats yet.</li>`;
+    threadList = ts;
+    drawThreads();
     $("inboxBox").hidden = !inbox.length;
-    $("inbox").innerHTML = inbox.map((e) => `<li data-thread="${esc(e.thread)}"><div class="req">${esc(e.pending?.text || e.request)}</div>
-        <div class="small">from ${esc(e.actor)}</div></li>`).join("");
-    if ($("inboxDot")) $("inboxDot").innerHTML = inbox.length ? `<span class="dot">${inbox.length}</span>` : "";
-    for (const li of document.querySelectorAll("li[data-thread]")) li.onclick = () => openThread(li.dataset.thread);
+    $("inbox").innerHTML = inbox.map((e) => `<li data-thread="${esc(e.thread)}"><span class="li-icon">${icon("mail")}</span>
+      <div class="grow"><div class="req">${esc(e.pending?.text || e.request)}</div><div class="small">from ${esc(e.actor)}</div></div></li>`).join("");
+    railDot(chatTab(), inbox.length);
+    for (const li of document.querySelectorAll("#inbox li[data-thread]")) li.onclick = () => openThread(li.dataset.thread);
   } catch { /* the server may be restarting */ }
+}
+
+function drawThreads() {
+  if (!$("threads")) return;
+  const q = ($("find")?.value || "").trim().toLowerCase();
+  const shown = threadList.filter((t) => !q || t.title.toLowerCase().includes(q) || (t.actor || "").toLowerCase().includes(q));
+  $("threads").innerHTML = shown.length ? shown.map((t) => `<li data-thread="${esc(t.id)}" class="${chat?.id === t.id ? "sel" : ""}">
+      <span class="li-icon">${icon("chat")}</span><div class="grow"><div class="req">${esc(t.title)}</div>
+      <div class="small">${t.week ? `Week ${t.week} · ` : ""}${esc(when(t.updated).split(" · ")[1] || "")}${t.messages > 1 ? ` · ${t.messages} messages` : ""}${t.mine ? "" : ` · ${esc(t.actor)}`}</div></div>
+      ${pill(t.status)}</li>`).join("") : `<li class="small none">${q ? "No conversation matches." : "No chats yet."}</li>`;
+  for (const li of document.querySelectorAll("#threads li[data-thread]")) li.onclick = () => openThread(li.dataset.thread);
 }
 
 async function openThread(id) {
@@ -366,17 +541,35 @@ function stepHtml(e) {  // one step of the agent's work, in words; the raw call 
   return "";
 }
 
+// what happened to a change, said as a card: [icon, kind, title, line]
+function outcome(c) {
+  const d = c.decision;
+  if (d?.undone) return ["undo", "muted", "Undone by the office", "This change is no longer in the timetable."];
+  if (d?.approved) return ["check", "ok", "Request approved", "The office approved it: it is in the timetable now."];
+  if (d) return ["x", "bad", "Not approved", d.note || "The office did not approve it."];
+  if (c.status === "replaced") return ["undo", "muted", "Replaced", "A later message replaced this draft."];
+  if (c.status === "submitted") return ["clock", "warn", "Sent to the office", c.stale ? "The timetable changed since this was drafted: send it again." : "Waiting for the office to approve it."];
+  return null;
+}
+
+function changesHtml(lines) {
+  return `<div class="changes"><div class="small">Proposed changes (${lines.length})</div>${lines.map((l) =>
+    `<div class="change"><span class="li-icon">${icon("calendar", 16)}</span><span>${esc(l)}</span></div>`).join("")}</div>`;
+}
+
 function episodeHtml(c) {
   const steps = c.events.map(stepHtml).filter(Boolean), working = c.busy || c.status === "running";
   const ms = c.events.reduce((t, e) => t + (e.ms || 0), 0), p = c.pending, can = c.can || {};
-  let html = `<div class="msg user"><div class="bubble">${esc(c.request)}</div><div class="small">week ${c.week ?? "–"} · ${esc(c.started.slice(11, 16))}</div></div>
-    <div class="msg agent">`;
+  let html = `<div class="msg user"><div class="col"><div class="bubble">${esc(c.request)}</div><div class="small stamp">${esc(c.started.slice(11, 16))}</div></div>
+    <span class="avatar">${initial(me.name)}</span></div>
+    <div class="msg agent"><span class="avatar bot">${icon("bot", 20)}</span><div class="col">`;
   if (steps.length || working) html += `<details class="thinking" ${working ? "open" : ""}><summary>${working ? "Thinking…" : "Thought"} · ${steps.length} step${steps.length === 1 ? "" : "s"}${ms ? ` · ${(ms / 1000).toFixed(1)} s` : ""}</summary>
       <ol>${steps.join("")}${working ? `<li class="small">working…</li>` : ""}</ol></details>`;
   const end = c.events.findLast((e) => e.type === "end");
   if (!working && !p) {
     const text = c.text || end?.text || c.detail || end?.detail || "";
-    html += `<div class="bubble">${c.status === "answered" ? "" : `<span class="badge s-${esc(c.status)}">${label(c.status)}</span> `}${esc(text)}</div>`;
+    const quiet = ["answered", "submitted", "approved", "rejected", "replaced", "undone", "not_committed"].includes(c.status);
+    html += `<div class="bubble">${quiet ? "" : `${pill(c.status)} `}${esc(text)}</div>`;
   }
   if (p && !c.busy) {
     if (p.to_requester && c.can?.answer) html += `<div class="bubble ask">${esc(p.text)}
@@ -389,29 +582,72 @@ function episodeHtml(c) {
         `<button class="primary" data-a="said" data-ep="${esc(c.id)}">Answer</button>`}<button data-a="no_reply" data-ep="${esc(c.id)}">Don't answer</button></div>` :
         `<div class="small">Waiting for ${esc(p.to)} to answer.</div>`}</div>`;
   }
-  if (c.status === "submitted" || c.status === "replaced" || c.decision) {
-    const head = c.decision ? (c.decision.undone ? "Approved, then undone by the office" : c.decision.approved ? "Approved by the office" : "Not approved" + (c.decision.note ? `: ${esc(c.decision.note)}` : ""))
-      : c.status === "replaced" ? "Replaced by a later message" : "Sent to the office for approval";
-    html += `<div class="callout ok stack"><div class="small">${head}</div>
-      ${c.draft.length ? `<ul>${c.draft.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}
-      ${c.stale && c.status === "submitted" ? `<div class="small">The timetable changed since this draft was made; send the request again.</div>` : ""}
+  const o = outcome(c);
+  if (o) {
+    html += `<div class="result ${o[1]}"><div class="result-head"><span class="result-icon">${icon(o[0], 22)}</span><div><b>${o[2]}</b><div>${esc(o[3])}</div></div></div>
+      ${c.draft.length ? changesHtml(c.draft) : ""}
       ${can.decide && !c.stale ? `<div class="row"><button class="primary" data-decide="approve" data-ep="${esc(c.id)}">Approve and commit</button>
         <input data-note="${esc(c.id)}" placeholder="Note (for a rejection)"><button class="danger" data-decide="reject" data-ep="${esc(c.id)}">Reject</button></div>` : ""}</div>`;
   }
-  html += c.notes.map((n) => `<div class="bubble office">${esc(n.text)}<div class="small">the office · ${esc((n.at || "").slice(11, 16))}</div></div>`).join("");
-  return html + "</div>";
+  html += c.notes.map((n) => `<div class="bubble office"><div class="small">${icon("mail", 14)} The office · ${esc((n.at || "").slice(11, 16))}</div>${esc(n.text)}</div>`).join("");
+  return html + "</div></div>";
+}
+
+const KIND = {question: "Question", policy_question: "Question about the rules", preference: "Preference", unavailability: "Absence",
+  unavailable_relative: "Absence", move: "Move a class", swap: "Swap classes", cancel: "Class cancellation", extra_class: "Extra class",
+  club_booking: "Room booking", room_issue: "Room problem", load_limit: "Load limit", avoid_between: "Gap between classes",
+  withdraw: "Take back a request", clash_report: "Clash report"};
+
+function detailsHtml() {  // the right-hand panel: the latest request of the open chat, and quick actions
+  const c = chat?.episodes?.at(-1);
+  const changed = [...(chat?.episodes || [])].reverse().find((e) => e.draft.length);
+  const row = (k, v) => `<div class="kv"><span class="small">${k}</span><span>${v}</span></div>`;
+  return `${c ? `<div class="card"><div class="card-head"><span class="itile">${icon("calendar", 18)}</span><b>Request details</b></div>
+      ${row("Status", pill(c.status))}${row("Week", esc(c.week ?? "–"))}${row("Asked", esc(when(c.started)))}
+      ${row("Messages", chat.episodes.length)}${KIND[c.kind] ? row("Type", KIND[c.kind]) : ""}</div>` : ""}
+    ${changed ? `<div class="card"><div class="card-head"><span class="itile">${icon("file", 18)}</span><b>${changed.status === "approved" ? "Changes made" : "Proposed changes"}</b>
+      <span class="count">${changed.draft.length}</span></div>${changed.draft.map((l) => `<div class="change"><span class="li-icon">${icon("calendar", 16)}</span><span>${esc(l)}</span></div>`).join("")}
+      <div>${pill(changed.status)}</div></div>` : ""}
+    <div class="card"><div class="card-head"><span class="itile">${icon("zap", 18)}</span><b>Quick actions</b></div>
+      ${me.role === "office" ? `<button class="action" data-act="inbox">${icon("inbox")} Open the inbox</button>
+      <button class="action" data-act="timetable">${icon("calendar")} View the timetable</button>
+      <button class="action" data-act="rooms">${icon("search")} Find a free room</button>` :
+      `<button class="action" data-act="timetable">${icon("calendar")} View my timetable</button>
+      <button class="action" data-act="free">${icon("search")} Find free slots</button>`}
+      <button class="action" data-act="new">${icon("plus")} Make another request</button></div>`;
 }
 
 function draw() {
   if (!$("msgs")) return;
   for (const li of document.querySelectorAll("#threads li")) li.classList.toggle("sel", li.dataset.thread === chat?.id);
-  const last = chat?.episodes?.at(-1), p = last?.pending;
+  const first = chat?.episodes?.[0], last = chat?.episodes?.at(-1), p = last?.pending;
+  $("chatTitle").textContent = first ? first.request : "New chat";
+  $("chatSub").textContent = first ? `Week ${last.week ?? "–"} · ${when(first.started)}${chat.mine ? "" : ` · ${first.actor}`}` :
+    me.role === "office" ? "Ask about rooms and people, or make a change" : "Ask about your timetable, or ask for a change";
   $("text").placeholder = !chat ? (me.role === "office" ? "e.g. Lab 2 is closed on Thursday next week for maintenance." :
-      "e.g. When am I free on Monday?  ·  I have a conference next Tuesday, please move my classes that day.")
+      "Ask about your timetable, request a change, or check availability…")
     : p?.to_requester ? "Answer the agent's question…" : "Ask a follow-up, or change what you asked…";
-  const locked = !!chat && (!chat.mine || last.busy || last.status === "running" || (!!p && !p.to_requester));
+  const locked = !!chat && (!chat.mine || last?.busy || last?.status === "running" || (!!p && !p.to_requester));
   $("text").disabled = $("send").disabled = locked;
-  if (!chat?.episodes) { $("msgs").innerHTML = `<div class="empty">Ask about your timetable, or ask for a change.<br>Each chat remembers what was said in it.</div>`; return; }
+  $("details").innerHTML = detailsHtml();
+  for (const b of document.querySelectorAll("[data-act]")) b.onclick = () => {
+    if (b.dataset.act === "timetable") show("timetable");
+    else if (b.dataset.act === "inbox") show("requests");
+    else if (b.dataset.act === "new") newChat();
+    else if (b.dataset.act === "rooms") { newChat(); $("text").value = `Which rooms are free on Monday in week ${$("week").value}?`; $("text").focus(); }
+    else { newChat(); $("text").value = `When am I free in week ${$("week").value}?`; send(); }
+  };
+  if (!chat?.episodes) {
+    $("msgs").innerHTML = `<div class="welcome"><span class="avatar bot big">${icon("bot", 28)}</span><h3>${me.role === "office" ? "How can I help the office?" : "How can I help with your timetable?"}</h3>
+      <div class="small">${me.role === "office" ? "Ask about rooms, people and the rules, or make a change for the department." :
+      "Each chat remembers what was said in it. Changes go to the office for approval."}</div>
+      <div class="picks">${(me.role === "office" ? ["Which rooms are free on Thursday at 2 pm?", "Who is free on Monday at 10 am?",
+        "Lab 2 is closed on Friday in week 7 for maintenance"] : ["When am I free on Monday?", "What do I teach this week?",
+        "I'm away next Tuesday, cancel my classes that day"]).map((x) =>
+        `<button class="pick" data-try="${esc(x)}">${esc(x)}</button>`).join("")}</div></div>`;
+    for (const b of document.querySelectorAll("[data-try]")) b.onclick = () => { $("text").value = b.dataset.try; $("text").focus(); };
+    return;
+  }
   const box = $("msgs"), atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   const open = new Set([...box.querySelectorAll("details.thinking[open]")].map((d) => d.closest("[data-ep-box]").dataset.epBox));
   box.innerHTML = chat.episodes.map((c) => `<div data-ep-box="${esc(c.id)}">${episodeHtml(c)}</div>`).join("");
@@ -445,11 +681,18 @@ async function decide(eid, what) {
 
 let officeOpen = null;  // the id of the request open in the office's inbox
 
-function officeView(bar) {
-  $("app").innerHTML = `<main class="chat"><aside class="side stack">
-      <section><h2>Needs you</h2><ul class="list" id="oNeeds"></ul></section>
-      <section><h2>Done</h2><ul class="list" id="oDone"></ul></section>
-    </aside><section class="convo">${sideBar(bar)}<div id="oItem" class="msgs"></div></section></main>`;
+function officeView() {
+  $("app").innerHTML = `<main class="chat two">
+    <aside class="side">
+      <h2>Needs you</h2><ul class="list" id="oNeeds"></ul>
+      <h2>Done</h2><ul class="list" id="oDone"></ul>
+    </aside>
+    <section class="convo card">
+      <div class="convo-head"><button class="iconbtn side-btn" title="Show or hide the side bar" aria-label="Show or hide the side bar">${icon("panel")}</button>
+        <span class="itile">${icon("inbox", 20)}</span><div class="grow"><div class="title">Office inbox</div>
+        <div class="small">Changes sent for approval, and requests the agent passed on</div></div></div>
+      <div id="oItem" class="msgs"></div>
+    </section></main>`;
   sideToggle();
   refreshOffice();
 }
@@ -458,12 +701,13 @@ async function refreshOffice() {
   if (!$("oNeeds")) return;
   let items;
   try { items = await api("/api/office/requests"); } catch { return; }
-  const li = (c) => `<li data-oid="${esc(c.id)}" class="${officeOpen === c.id ? "sel" : ""}"><div class="req">${esc(c.request)}</div>
-    <div class="row small"><span class="badge s-${esc(c.status)}">${label(c.status === "submitted" ? "to approve" : c.status)}</span>${esc(c.actor)} · ${esc(c.started.slice(5, 16).replace("T", " "))}</div></li>`;
+  const li = (c) => `<li data-oid="${esc(c.id)}" class="${officeOpen === c.id ? "sel" : ""}"><span class="avatar sm">${initial(c.actor)}</span>
+    <div class="grow"><div class="req">${esc(c.request)}</div><div class="small">${esc(c.actor)} · ${esc(when(c.started))}</div></div>
+    ${pill(c.status, c.status === "submitted" ? "to approve" : c.status)}</li>`;
   const needs = items.filter((c) => c.needs_office), done = items.filter((c) => !c.needs_office);
-  $("oNeeds").innerHTML = needs.map(li).join("") || `<li class="small">Nothing waits for the office.</li>`;
-  $("oDone").innerHTML = done.map(li).join("") || `<li class="small">None yet.</li>`;
-  if ($("inboxDot")) $("inboxDot").innerHTML = needs.length ? `<span class="dot">${needs.length}</span>` : "";
+  $("oNeeds").innerHTML = needs.map(li).join("") || `<li class="small none">Nothing waits for the office.</li>`;
+  $("oDone").innerHTML = done.map(li).join("") || `<li class="small none">None yet.</li>`;
+  railDot("requests", needs.length);
   for (const x of document.querySelectorAll("li[data-oid]")) x.onclick = () => { officeOpen = x.dataset.oid; drawOffice(items); refreshOffice(); };
   if (!officeOpen && needs.length) officeOpen = needs[0].id;
   drawOffice(items);
@@ -779,6 +1023,7 @@ async function evals() {
       <td class="n">${x.n ? `${x.passed}/${x.n}` : "–"}</td><td class="small">${Object.entries(x.families).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(" · ")}</td></tr>`).join("")}</table>`;
 }
 
+theme();
 start().catch((e) => { $("app").innerHTML = `<div class="empty">Could not reach the API: ${esc(e.message)}</div>`; });
 </script>
 </body>

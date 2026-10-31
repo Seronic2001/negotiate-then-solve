@@ -141,8 +141,11 @@ def constrain(ctx: Context, args: Constrain) -> dict:
     have classes, when classes must be, or what room they need."""
     d = Directory(ctx.state.instance)
     named = [x for x in (args.teacher, args.section, args.room, args.course) if x]
-    if len(named) != 1:
-        raise Refusal("bad_arguments", "name exactly one of teacher, section, room or course")
+    if len(named) != 1:  # the agent repeated this call word for word when it said no more ("schedule a class ...")
+        both = args.teacher and args.course and not (args.section or args.room)
+        raise Refusal("bad_arguments", "name exactly one of teacher, section, room or course" + (
+            f"; for a rule on the course's classes give course={args.course!r} alone (they are the teacher's), and to "
+            "hold a new or extra class use add_class(course, week, day, hour) instead" if both else ""))
     scope = (Who(faculty=d.teacher(args.teacher, ctx.actor).id) if args.teacher else
              Who(group=d.section(args.section).id) if args.section else
              Who(room=d.room(args.room).id) if args.room else Who(course=d.course(args.course)))

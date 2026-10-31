@@ -247,3 +247,33 @@ traced in the telemetry before fixing it.
 In the demo department, Dr. Khan's every-Friday and every-Thursday rules are still in the timetable, because the undo was only
 tried on a copy. As the office, open those two requests in the inbox (under *Done*) and press **Undo this change**: Friday first,
 then Thursday.
+
+---
+
+## A new look, and fixes from round 4 (done, 2026-10-31)
+
+**The redesign** (from the design you shared; only what the app has behind it):
+
+- A dark navy theme, with a light one: the moon/sun button switches, and the choice is remembered.
+- **Sections in a rail down the left edge** (icon and label each), instead of tabs across the top that didn't fit; a count
+  sits on the section it belongs to (the office's Inbox, a teacher's Requests), instead of a loose red number by the bell.
+- The person's avatar and name at top right, with sign-out (and the model's version) in its menu; the bell next to it.
+- The chat: *New chat*, **search conversations** (Ctrl K), and *Recent* with a status pill on each; a header card with the
+  chat's title, week and date; bubbles with avatars; the result of a change as a card (approved, sent to the office, not
+  approved, undone) with its changes listed.
+- A **right-hand panel**: the request's details (status, week, when, messages, and its type when the classifier is at least
+  70% sure), the proposed or made changes, and quick actions.
+- Left out on purpose: the paperclip and calendar buttons in the message box, since nothing is behind them.
+
+**The office is not a teacher:** its *Agent chat* now suggests office questions ("Which rooms are free on Thursday at 2 pm?",
+"Lab 2 is closed on Friday in week 7") and offers *Open the inbox*, *View the timetable* and *Find a free room*, not "When am
+I free?" (which the agent can't answer for someone who doesn't teach, so it went round in circles).
+
+**"schedule a class Wednesday … computer graphics" got stuck:** the agent called `constrain` with both the teacher and the
+course, was refused ("name exactly one"), and repeated the same call. The refusal now says: for the course's classes give the
+course alone, and to hold a new or extra class use `add_class`.
+
+**"No free slots on Thursday / Friday" for Dr. Khan** is correct for the timetable as it is: the two wrong approvals (every
+Thursday and every Friday from week 5) are still in it. Undoing them in the office inbox brings those days back.
+
+Tests: +1 in `test_nts_draft.py`; all `nts` tests pass. Checked with screenshots of the teacher and office views, dark and light.
