@@ -269,8 +269,9 @@ class Service:
         self.episodes[ep.id] = ep
         people = Cast() if (self.simulate if simulate is None else simulate) else None
         history = [(e.request, self.remembered(e)) for e in earlier[-MEMORY:]]
+        changes = [f for e in earlier if (f := self.fate(e))]  # every change of the conversation, not only the last few
         self._spawn(ep, lambda: self.harness.run(self.agent, request, self.store, actor, week, episode_id=ep.id,
-                                                 people=people, history=history, thread=ep.thread))
+                                                 people=people, history=history, thread=ep.thread, changes=changes))
         return ep
 
     def _options(self, ep: Episode) -> list[str]:
@@ -305,8 +306,19 @@ class Service:
     def remembered(self, ep: Episode) -> str:
         """What the agent remembers of an earlier message: its answer, and the change it led to, if any."""
         said = ep.text or ep.detail or "(no answer)"
-        drafted = "; ".join(self.draft(ep.id)) if ep.outcome is not None else ""
-        what = f"Drafted: {drafted}. " if drafted else ""
+        tail = " ".join(x for x in (self._what_came(ep), " ".join(f"The office wrote: {n['text']}" for n in ep.notes)) if x)
+        return (said[:MEMORY_CHARS] + (f" [{tail}]" if tail else ""))[:MEMORY_CHARS + 300]
+
+    def fate(self, ep: Episode) -> str:
+        """The change an earlier message drafted and whether it is in the timetable; "" when it drafted nothing."""
+        # after a restart the draft is gone (it lived in memory), but the office's decision was kept with the request
+        if not self.draft(ep.id) and ep.decision is None:
+            return ""
+        return f"\"{ep.request}\": {self._what_came(ep)}"
+
+    def _what_came(self, ep: Episode) -> str:
+        drafted = "; ".join(self.draft(ep.id))
+        what = f"Drafted: {drafted}. " if drafted else f"It asked: {ep.request}. " if ep.decision is not None else ""
         fate = {  # whether the change is in the timetable is what a follow-up needs, said plainly
             "approved": "The office approved it: it is in the timetable now.",
             "submitted": "Sent to the office, not decided yet: not in the timetable.",
@@ -317,9 +329,7 @@ class Service:
             "escalated": "Passed to the office: nothing was changed yet.",
             "undone": "Approved, then the office undid it: not in the timetable now.",
         }.get(ep.status, "" if ep.status == "answered" else "Nothing was changed.")
-        office = " ".join(f"The office wrote: {n['text']}" for n in ep.notes)
-        tail = " ".join(x for x in (what + fate, office) if x)
-        return (said[:MEMORY_CHARS] + (f" [{tail}]" if tail else ""))[:MEMORY_CHARS + 300]
+        return what + fate
 
     def reply(self, eid: str, reply: Reply) -> Episode:
         ep = self.get(eid)

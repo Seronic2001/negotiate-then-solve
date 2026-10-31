@@ -107,8 +107,8 @@ def main(argv: list[str] | None = None) -> int:
                                                        "none for a local model)")
         q.add_argument("--handbook", type=Path, default=DEFAULT_HANDBOOK, help="the regulations, for the rules tool")
         q.add_argument("--temperature", type=float, help="sampling (default 0, or 0.7 with --best-of)")
-        q.add_argument("--pick-tools", action="store_true", help="offer a question only the tools that read "
-                       "(System One decides; nts.harness.pick)")
+        q.add_argument("--pick-tools", action=argparse.BooleanOptionalAction, default=True, help="offer a question "
+                       "only the tools that read (System One decides; nts.harness.pick); on by default, --no-pick-tools for all")
         q.add_argument("--max-seconds", type=float, help="time budget of an episode (default: the agent's); the model "
                                                           "never sees it, so a slow server need not cut episodes short")
     for q in (a, e):

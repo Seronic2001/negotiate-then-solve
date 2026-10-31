@@ -50,7 +50,11 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
     removed = [c for cid, c in base.constraints.items() if cid not in after.constraints]
     cancels = cancellations(base, after)
     if not added and not removed and not cancels:
-        raise Refusal("empty_draft", "the draft has no changes yet")
+        # a question about an earlier change ("was it approved?") drafts nothing: the refusal says how to answer it
+        earlier = "; ".join(ctx.scratch.get("earlier", []))
+        raise Refusal("empty_draft", "the draft has no changes yet. If the person only asked something, such as whether "
+                      "an earlier change was approved, answer them in plain words with no tool"
+                      + (f". What came of the earlier changes: {earlier}" if earlier else "") + ". Do not decline")
     ours = {c.id: n for n, ids in ctx.scratch.get("changes", {}).items() for c in added if c.id in ids}
     # removing or waiving a rule never breaks a timetable
     weeks = set().union(*(touched(after, c) for c in added if not waived(c.id))) | set(cancels)

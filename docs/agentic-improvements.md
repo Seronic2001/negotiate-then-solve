@@ -342,3 +342,38 @@ You liked its look but not the small chat window, so it was taken back out.
 - **Empty chat:** no sparkle, and the welcome is left-aligned like a page. The suggestions and cards are still there.
 
 Checked with screenshots in light and dark (the empty chat and an open chat), with no script errors.
+
+---
+
+## "Is my request accepted?" was answered wrongly, and tool picking is on by default (done, 2026-10-31)
+
+**What you saw:** the office approved a change (19:49:42). Fourteen seconds later you asked "is my req accepted" in
+the same chat, and the agent *declined*: "could not be accepted because the draft is empty".
+
+**Why (three causes):**
+
+1. "I **want** a timeslot" earlier in the chat made the tool picker hand over the change tools too. The agent ran
+   `check_draft` on an empty draft, the tool only said "the draft has no changes yet", and the agent took that as
+   a failure.
+2. The agent remembers only the **last 4 messages**. After a few "is it accepted?" messages, the approved change had
+   dropped out of memory, and only the earlier wrong answers were left.
+3. After a **server restart**, old requests come back without their drafts, so the agent couldn't tell that one of
+   them had led to an approved change.
+
+It was not caching.
+
+**Fix:**
+
+- The agent's instructions now list **every change in the chat** and what came of it ("The office approved it: it is
+  in the timetable now"), however old, including requests rebuilt after a restart.
+- `check_draft` on an empty draft now says: if the person only asked something, answer in plain words; here is
+  what came of the earlier changes; do not decline.
+
+**Checked on the real model**, in the same chat (which by then had three wrong answers in its memory). "is my req
+accepted", "did the office accept it?" and "is my request approved or not" all came back: *Yes, … approved and is now
+in the timetable.* Before the fix, it was 1 right out of 3.
+
+**Also:** `--pick-tools` is now **on by default**. It gave the same eval score with 40% fewer tokens on questions;
+`--no-pick-tools` turns it off.
+
+Tests: 187 agent tests pass (1 new).

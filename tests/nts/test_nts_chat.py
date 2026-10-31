@@ -217,6 +217,25 @@ def test_a_follow_up_is_told_to_answer_the_latest_message_and_what_is_in_the_tim
     assert "Withdrawn by a later message: not in the timetable." in sent[2].content
 
 
+def test_asking_whether_a_change_was_approved_is_answered_not_declined(store):
+    """ "is my req accepted" after an approved change: the agent checked an empty draft and declined. The prompt and
+    the refusal now both say what came of the earlier change."""
+    inst = store.world.instance
+    t = inst.faculty[1]
+    a, service = app(store, [*away(inst.calendar.days[0]), call("check_draft"), say("Yes, it was approved.")])
+    me, office = signed_in(a, t.name), signed_in(a, "office")
+    first = me.post("/api/episodes", json={"request": "away week 6", "week": 5}).json()
+    service.wait(first["id"])
+    office.post(f"/api/episodes/{first['id']}/approve")
+    second = me.post("/api/episodes", json={"request": "is my req accepted", "week": 5, "thread": first["thread"]}).json()
+    service.wait(second["id"])
+    system = service.harness.model.seen[-1][0].content
+    assert "What came of the earlier changes" in system and "The office approved it: it is in the timetable now." in system
+    refused = next(e for e in service.get(second["id"]).events if e["type"] == "tool")
+    assert "The office approved it" in refused["result"]["message"] and "Do not decline" in refused["result"]["message"]
+    assert service.get(second["id"]).status == "answered"
+
+
 def test_the_office_can_undo_an_approved_change(store, tmp_path):
     """ "absent on Friday" was approved as every Friday: the office takes it back out, and the week is as before."""
     from nts.telemetry import JsonlSink

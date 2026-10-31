@@ -105,9 +105,10 @@ class Harness:
 
     def run(self, agent: AgentConfig, request: str, store: Store, actor: str, week: int | None = None,
             *, episode_id: str | None = None, people: People | None = None,
-            history: Sequence[tuple[str, str]] = (), thread: str | None = None) -> Outcome:
+            history: Sequence[tuple[str, str]] = (), thread: str | None = None, changes: Sequence[str] = ()) -> Outcome:
         """``history``: the earlier requests of the same conversation (``thread``) and what came of each, oldest first;
-        the model sees them as earlier turns, so "and on Tuesday?" or "move that one instead" can be read."""
+        the model sees them as earlier turns, so "and on Tuesday?" or "move that one instead" can be read.
+        ``changes``: every change the conversation drafted and whether it is in the timetable, however long ago."""
         eid = episode_id or new_id("ep-")
         draft = store.draft(actor, eid)
         screened = screen(request)  # instructions to the system are never read
@@ -119,7 +120,12 @@ class Harness:
         tools = self.registry.specs(agent.scopes & pick.scopes if pick and pick.scopes else agent.scopes)
         earlier = [Message(role=role, content=text) for asked, said in history
                    for role, text in (("user", asked), ("assistant", said))]
-        system = agent.system(ctx) + (f"\n\n{CONVERSATION}" if history else "")
+        # what came of each earlier change, said once more where it can't be lost: it may be older than the messages
+        # remembered, and an earlier wrong answer ("not accepted yet") would otherwise outweigh it
+        ctx.scratch["earlier"] = list(changes)
+        system = agent.system(ctx) + (f"\n\n{CONVERSATION}" if history else "") + (
+            "\n\nWhat came of the earlier changes in this conversation, oldest first:\n" + "\n".join(f"- {f}" for f in changes)
+            if changes else "")
         transcript = [Message(role="system", content=system), *earlier, Message(role="user", content=read)]
         run = _Run(eid, agent, ctx, transcript, tools, people)
         run.screened = screened.flagged
