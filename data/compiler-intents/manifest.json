@@ -1,8 +1,8 @@
 {
  "schema": 6,
- "recipe": "intents-v11",
- "recipe_sha": "af68afec7a46ee60",
- "code": "d84fe36+dirty",
+ "recipe": "intents-v12",
+ "recipe_sha": "bd44c8a2555bb923",
+ "code": "765a14b+dirty",
  "sources": {
   "base": {
    "test": 417,
@@ -17,17 +17,21 @@
    "difficulty": 40,
    "exceptions": 40,
    "firmness": 80,
+   "limit_firmness": 40,
    "limits": 40,
+   "move_pairs": 40,
    "moves": 40,
    "multi": 40,
    "only_times": 40,
+   "out_for_me": 40,
    "periods": 40,
    "reasons": 40,
+   "relation_pairs": 40,
    "relations": 40,
    "terms": 40,
-   "train": 1476,
+   "train": 1806,
    "vague": 40,
-   "val": 144,
+   "val": 174,
    "week_patterns": 40
   },
   "mined": {
@@ -38,18 +42,18 @@
   },
   "human": {},
   "balance": {
-   "train": 352,
-   "val": 46
+   "train": 249,
+   "val": 37
   },
   "augment": {
-   "train": 927,
-   "changed meaning": 5,
-   "unchanged": 46
+   "train": 1001,
+   "changed meaning": 6,
+   "unchanged": 51
   }
  },
  "fingerprints": {
-  "train": "d790ff95998fe3de",
-  "val": "f6765cef6f43f541",
+  "train": "f2fac01167260f4b",
+  "val": "cf26023c1192f982",
   "test": "0fb72ff322ff89a9",
   "firmness": "4e2251768d1f7a3a",
   "moves": "b314e127d2d7ace4",
@@ -68,6 +72,10 @@
   "limits": "8e6dd8462280be12",
   "relations": "1cb117ca96ea08ea",
   "choices": "cfe9e9d1989d26fb",
+  "move_pairs": "88c251874259bf67",
+  "limit_firmness": "470a62b70f1d32ad",
+  "relation_pairs": "bbfd25742d331337",
+  "out_for_me": "030d372d0b8b324f",
   "test-typo": "710c97ca9762bc39",
   "test-noisy": "c7fdcc1547db8aa9"
  },
@@ -89,13 +97,13 @@
  },
  "report": {
   "train": {
-   "rows": 4062,
+   "rows": 4363,
    "origin": {
-    "augment": 927,
+    "augment": 1001,
     "authored": 100,
-    "balance": 352,
+    "balance": 249,
     "base": 1087,
-    "generators": 1476,
+    "generators": 1806,
     "mined": 120
    },
    "kind": {
@@ -104,7 +112,7 @@
     "avoid_at": 1,
     "avoid_at_days": 1,
     "avoid_between": 197,
-    "cancel": 211,
+    "cancel": 215,
     "cancel_all": 1,
     "cancel_extra": 2,
     "cancel_relative": 1,
@@ -124,15 +132,17 @@
     "from_week": 2,
     "gap": 3,
     "limit_days_per_week": 2,
+    "limit_firmness": 99,
     "limit_hours_per_day": 1,
     "limit_hours_per_week": 2,
     "limit_per_day": 4,
     "limits": 114,
-    "load_limit": 83,
+    "load_limit": 65,
     "mixed_unsupported": 2,
-    "move": 401,
+    "move": 296,
     "move_at": 2,
     "move_other_day": 1,
+    "move_pairs": 111,
     "multi": 114,
     "multi_firmness": 1,
     "multi_weeks": 2,
@@ -146,6 +156,7 @@
     "only_times": 107,
     "only_weeks": 2,
     "or_over_windows": 3,
+    "out_for_me": 104,
     "out_of_scope": 58,
     "paired_weeks": 4,
     "policy_question": 61,
@@ -157,6 +168,7 @@
     "relation_conditional_day": 1,
     "relation_cross_course": 1,
     "relation_different_day": 2,
+    "relation_pairs": 106,
     "relation_same_day": 1,
     "relation_same_time": 1,
     "relation_spread": 2,
@@ -181,31 +193,31 @@
    "action": {
     "answer": 61,
     "clarify": 181,
-    "compile": 3536,
+    "compile": 3837,
     "investigate": 139,
     "out_of_scope": 80,
     "withdraw": 65
    },
    "firmness": {
-    "hard": 599,
+    "hard": 680,
     "mixed": 4,
-    "none": 1845,
-    "soft": 1614
+    "none": 1936,
+    "soft": 1743
    },
    "augment": {
-    "casual": 233,
-    "noisy": 248,
-    "none": 3135,
-    "shorthand": 197,
-    "typo": 249
+    "casual": 260,
+    "noisy": 262,
+    "none": 3362,
+    "shorthand": 213,
+    "typo": 266
    }
   },
   "val": {
-   "rows": 337,
+   "rows": 358,
    "origin": {
-    "balance": 46,
+    "balance": 37,
     "base": 147,
-    "generators": 144
+    "generators": 174
    },
    "kind": {
     "avoid_between": 9,
@@ -220,16 +232,20 @@
     "exception": 6,
     "extra_class": 2,
     "firmness": 8,
+    "limit_firmness": 10,
     "limits": 3,
     "load_limit": 6,
-    "move": 36,
+    "move": 27,
+    "move_pairs": 4,
     "multi": 9,
     "only_firmness": 11,
     "only_times": 6,
+    "out_for_me": 7,
     "out_of_scope": 2,
     "policy_question": 3,
     "preference": 28,
     "reason_firmness": 9,
+    "relation_pairs": 9,
     "relations": 5,
     "relative_span": 5,
     "room_issue": 14,
@@ -245,18 +261,18 @@
    "action": {
     "answer": 3,
     "clarify": 12,
-    "compile": 301,
+    "compile": 322,
     "investigate": 11,
     "out_of_scope": 2,
     "withdraw": 8
    },
    "firmness": {
-    "hard": 39,
-    "none": 166,
-    "soft": 132
+    "hard": 43,
+    "none": 174,
+    "soft": 141
    },
    "augment": {
-    "none": 337
+    "none": 358
    }
   },
   "test": {
@@ -613,6 +629,82 @@
     "none": 40
    }
   },
+  "move_pairs": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "move_pairs": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "limit_firmness": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "limit_firmness": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "relation_pairs": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "relation_pairs": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "hard": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
+  "out_for_me": {
+   "rows": 40,
+   "origin": {
+    "generators": 40
+   },
+   "kind": {
+    "out_for_me": 40
+   },
+   "action": {
+    "compile": 40
+   },
+   "firmness": {
+    "none": 20,
+    "soft": 20
+   },
+   "augment": {
+    "none": 40
+   }
+  },
   "test-typo": {
    "rows": 417,
    "origin": {
@@ -695,38 +787,37 @@
  "balance": {
   "short": {
    "cancel": 111,
-   "load_limit": 15,
-   "move": 223
+   "move": 137
   },
   "kinds": {
-   "move": {
-    "alone": 577,
-    "part": 296,
-    "parts_per_alone": 0.51,
-    "top": {
-     "move": 0.46,
-     "choices": 0.22,
-     "which_to": 0.11
-    }
-   },
    "avoid": {
-    "alone": 613,
+    "alone": 646,
     "part": 245,
-    "parts_per_alone": 0.4,
+    "parts_per_alone": 0.38,
     "top": {
-     "avoid_between": 0.23,
+     "avoid_between": 0.22,
      "multi": 0.13,
      "difficulty": 0.13
     }
    },
-   "unavailable": {
-    "alone": 523,
-    "part": 124,
-    "parts_per_alone": 0.24,
+   "move": {
+    "alone": 583,
+    "part": 296,
+    "parts_per_alone": 0.51,
     "top": {
-     "unavailability": 0.16,
-     "dated": 0.16,
-     "relative_span": 0.14
+     "move": 0.34,
+     "choices": 0.22,
+     "move_pairs": 0.13
+    }
+   },
+   "unavailable": {
+    "alone": 594,
+    "part": 124,
+    "parts_per_alone": 0.21,
+    "top": {
+     "unavailability": 0.14,
+     "dated": 0.14,
+     "relative_span": 0.13
     }
    },
    "only": {
@@ -735,18 +826,28 @@
     "parts_per_alone": 0.0,
     "top": {
      "only_times": 0.26,
-     "reason_firmness": 0.26,
-     "only_firmness": 0.26
+     "only_firmness": 0.26,
+     "reason_firmness": 0.26
     }
    },
    "cancel": {
-    "alone": 213,
+    "alone": 217,
     "part": 106,
-    "parts_per_alone": 0.5,
+    "parts_per_alone": 0.49,
     "top": {
-     "cancel": 0.66,
-     "compound": 0.26,
+     "cancel": 0.67,
+     "compound": 0.25,
      "choices": 0.06
+    }
+   },
+   "relate": {
+    "alone": 225,
+    "part": 24,
+    "parts_per_alone": 0.11,
+    "top": {
+     "relations": 0.45,
+     "relation_pairs": 0.43,
+     "choices": 0.08
     }
    },
    "club_booking": {
@@ -759,23 +860,23 @@
     }
    },
    "load_limit": {
-    "alone": 102,
+    "alone": 118,
     "part": 60,
-    "parts_per_alone": 0.59,
+    "parts_per_alone": 0.51,
     "top": {
-     "load_limit": 0.51,
-     "multi": 0.37,
-     "limits": 0.12
+     "load_limit": 0.37,
+     "multi": 0.34,
+     "limit_firmness": 0.19
     }
    },
-   "relate": {
-    "alone": 119,
-    "part": 24,
-    "parts_per_alone": 0.2,
+   "limit": {
+    "alone": 148,
+    "part": 0,
+    "parts_per_alone": 0.0,
     "top": {
-     "relations": 0.78,
-     "choices": 0.13,
-     "relation_different_day": 0.02
+     "limits": 0.51,
+     "limit_firmness": 0.44,
+     "limit_per_day": 0.02
     }
    },
    "clash_report": {
@@ -794,16 +895,6 @@
      "extra_class": 0.97,
      "cancel_extra": 0.02,
      "multi": 0.01
-    }
-   },
-   "limit": {
-    "alone": 83,
-    "part": 0,
-    "parts_per_alone": 0.0,
-    "top": {
-     "limits": 0.9,
-     "limit_per_day": 0.04,
-     "limit_days_per_week": 0.02
     }
    },
    "swap": {

@@ -688,6 +688,116 @@ def choices(ctx: _Ctx, t: int):
     return text, IntentOutput(action="compile", intents=found), {}, False
 
 
+def move_pairs(ctx: _Ctx, t: int):
+    """One move said the way ``choices`` says a choice ("could you move it to A?" beside "... to A or B?",
+    "ideally it would move to A." beside "... A; if not, B"): a plain move has one destination and no labels.
+    v11 read plain moves as choices with a made-up second option (45 of its 785 move rows were choices)."""
+    mine = ctx.mine()
+    if not mine:
+        return None
+    s = ctx.rng.choice(mine)
+    d, _, h = ctx.at(s)
+    k = ctx.kind_word(s)
+    w, to = ctx.to_time(s, ctx.other_day(d))
+    my = f"my {FULL_DAY[d]} {h} {k}"
+    texts = [f"Could you move {my} to {w}?",
+             f"Ideally {my} would move to {w}.",
+             f"{my[0].upper() + my[1:]} could go to {w}.",
+             f"Please move {my} to {w}; it can't stay where it is.",
+             f"{w[0].upper() + w[1:]} would work for {my}.",
+             f"My choice for {my} is {w}.",
+             f"Try to move {my} to {w}.",
+             f"{my[0].upper() + my[1:]} has to move to {w}; where it is now clashes with a meeting."]
+    text = texts[t]
+    gold = Move(which=_ref(s, ctx, k, course=False), to=to, hard=placement_is_hard(text))
+    return text, IntentOutput(action="compile", intents=[gold]), {"move": s.id}, False
+
+
+def limit_firmness(ctx: _Ctx, t: int):
+    """Each limit on a week said as a must and as a wish, so how firm it is comes from what the message says,
+    not from which limit it is (v11 saw one firm limit wording in six); and hours in a row in more words
+    ("keep my runs to 3", "without a break"), which v11-read-100 read as a limit a day."""
+    rng = ctx.rng
+    n, h, d = rng.choice([1, 2, 3]), rng.choice([2, 3, 4]), rng.choice([2, 3, 4])
+    measure, k, said = rng.choice([
+        ("classes_per_day", n, f"no more than {_WORDS[n]} classes on any day"),
+        ("hours_per_day", h, f"at most {_WORDS[h]} hours of teaching a day"),
+        ("days_per_week", d, f"my teaching on {_WORDS[d]} days a week at most"),
+        ("gap", 1, "at least an hour free between any two of my classes")])
+    texts = [f"I need {said}.",
+             f"If possible, I'd like {said}.",
+             f"Please give me {said}; this is a must.",
+             f"Ideally, {said}.",
+             f"Please keep my runs of teaching to {_WORDS[h]} hours.",
+             f"I can't teach more than {_WORDS[h]} hours without a break.",
+             f"{said[0].upper() + said[1:]} is something I have to have.",
+             f"Where possible, {said}, please."]
+    text = texts[t]
+    gold = (LoadLimit(max_consecutive=h, hard=necessary(text)) if t in (4, 5)
+            else Limit(measure=measure, n=k, hard=necessary(text)))
+    return text, IntentOutput(action="compile", intents=[gold]), {}, False
+
+
+def relation_pairs(ctx: _Ctx, t: int):
+    """A practical placed against its course's lectures (``other``, one of them or each), and lectures
+    against each other, each as a must and as a wish: v11 saw ``other`` only with right_after and never a firm
+    relation, and split "the practical on the same day as one of the lectures" into two relations."""
+    from core.instance import SessionKind
+
+    lectures: dict[str, int] = {}
+    for s in ctx.mine(SessionKind.LECTURE):
+        lectures[s.course] = lectures.get(s.course, 0) + 1
+    both = sorted({s.course for s in ctx.mine(SessionKind.PRACTICAL)} & {c for c, m in lectures.items() if m >= 2})
+    if not both:
+        return None
+    course = ctx.rng.choice(both)
+    T = ctx.instance.course_title(course)
+    lec, lab = ClassRef(course=course, kind="lecture"), ClassRef(course=course, kind="practical")
+    texts = [(f"The {T} practical has to be on the same day as one of its lectures.",
+              Relate(which=lab, relation="same_day", other=lec, any=True)),
+             (f"If possible, put the {T} practical on a day with a {T} lecture.",
+              Relate(which=lab, relation="same_day", other=lec, any=True)),
+             (f"Keep the {T} practical off the days of the {T} lectures.",
+              Relate(which=lab, relation="different_day", other=lec)),
+             (f"The {T} practical must come after the {T} lectures each week.",
+              Relate(which=lab, relation="after", other=lec)),
+             (f"I'd like the {T} practical straight after a {T} lecture.",
+              Relate(which=lab, relation="right_after", other=lec, any=True)),
+             (f"Two {T} lectures on one day won't work for me; they must be on different days.",
+              Relate(which=lec, relation="different_day")),
+             (f"Ideally the {T} practical would fall on the same day as a {T} lecture.",
+              Relate(which=lab, relation="same_day", other=lec, any=True)),
+             (f"My {T} lectures need to be on separate days.", Relate(which=lec, relation="different_day"))]
+    text, gold = texts[t]
+    gold = gold.model_copy(update={"hard": necessary(text)})
+    return text, IntentOutput(action="compile", intents=[gold]), {}, False
+
+
+def out_for_me(ctx: _Ctx, t: int):
+    """Times someone cannot teach said without "can't" or "unavailable" ("Wednesdays are out for me", "count
+    me out on Fridays"), beside wishes said as plainly ("I'd rather not teach on Fridays"). v11 read "out for
+    me" as a wish: no training row said it."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    if ctx.week >= cal.weeks:
+        return None
+    day = rng.choice(cal.days)
+    D = FULL_DAY[day]
+    part, parts = rng.choice([("morning", "mornings"), ("afternoon", "afternoons")])
+    w = rng.randint(ctx.week + 1, cal.weeks)
+    days, half = TimeSpec(days=[day]), TimeSpec(days=[day], part=part)
+    texts = [(f"{D}s are out for me.", Unavailable(time=days)),
+             (f"{D} {parts} are out for me in week {w}.", Unavailable(time=half, period=Period(weeks=[w]))),
+             (f"I'd rather not teach on {D}s.", Avoid(time=days)),
+             (f"{D} {parts} don't work for me at all.", Unavailable(time=half)),
+             (f"Count me out on {D}s from week {w}.", Unavailable(time=days, period=Period(from_week=w))),
+             (f"{D}s aren't ideal for me.", Avoid(time=days)),
+             (f"I'm tied up on {D} {parts} for the rest of the term.",
+              Unavailable(time=half, period=Period(relative="rest_of_semester"))),
+             (f"If you can, leave my {D}s free.", Avoid(time=days))]
+    text, gold = texts[t]
+    return text, IntentOutput(action="compile", intents=[gold]), {}, False
+
+
 REGISTRY: list[Generator] = [
     Generator("firmness", firmness, 6, (4, 5), "firmness"),
     Generator("only_firmness", only_firmness, 6, (4, 5), "firmness"),
@@ -715,6 +825,12 @@ REGISTRY: list[Generator] = [
     Generator("limits", limits, 8, (6, 7), "limits", since=6),
     Generator("relations", relations, 8, (6, 7), "relations", since=6),
     Generator("choices", choices, 8, (6, 7), "choices", since=6),
+    # intents-v12: what v11 got wrong beside them: plain moves read as choices, limits and relations never
+    # read as musts, a practical against its lectures split in two, and "X are out for me" read as a wish
+    Generator("move_pairs", move_pairs, 8, (6, 7), "move_pairs"),
+    Generator("limit_firmness", limit_firmness, 8, (6, 7), "limit_firmness", since=6),
+    Generator("relation_pairs", relation_pairs, 8, (6, 7), "relation_pairs", since=6),
+    Generator("out_for_me", out_for_me, 8, (6, 7), "out_for_me"),
 ]
 SENDERS = {"club_more": "student_or_teacher"}
 
