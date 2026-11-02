@@ -17,6 +17,7 @@ from core.schemas import Request
 
 from . import intents
 from .corpus import INJECTIONS
+from .lexicon import mentions, normalise
 from .intents import (
     Avoid,
     ClassRef,
@@ -61,6 +62,15 @@ EXTRA = re.compile(r"\b(extra|additional|revision|remedial|doubt.clearing)\s+(cl
 OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.IGNORECASE)
 VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.IGNORECASE)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
+PLACE_WORD = re.compile(r"\b(schedule|move|put|shift|stack)\b", re.IGNORECASE)  # robust=False
+# moving a class ("could my Wednesday class go to Tuesday", "please shift", "reschedule")
+MOVE = re.compile(r"\b(schedule|reschedule|move|moved|put|shift|shifted|stack|push|bring)\b|"
+                  r"\b(go|went|be moved) to\b", re.IGNORECASE)
+# what the patterns below cannot read, so a robust reading asks instead of acting on part of the message:
+# weeks counted from now, a second request, a club's booking
+BEYOND = re.compile(r"\b((coming|next|following) (\w+ )?weeks|for (\w+ )?weeks|end of (the )?(term|semester)|"
+                    r"rest of (the )?(term|semester)|this week and next|separately|two things|another thing|"
+                    r"club|society|\bcell\b)\b|\. also\b|; (also|plus)\b", re.IGNORECASE)
 SWAP = re.compile(r"\b(swap|swapp\w*|exchange|trade|switch)\b|"
                   r"\btake my\b.*\b(and )?I (take|teach|cover) (their|his|her)\b", re.IGNORECASE)
 _TITLE_WORD = re.compile(r"^(dr|prof|professor|mr|ms|mrs)\.?$", re.IGNORECASE)
@@ -81,8 +91,13 @@ def _clock(hour: int, ampm: str) -> str:
 
 
 class RuleParser:
-    def __init__(self, instance: Instance) -> None:
+    """``robust``: read everyday English (typos, shorthand, acronyms, "from ... to ...") and check the reading
+    (``language.checks``). ``robust=False`` is the reading the corpus labels were made with
+    (``compiler.deny_targets``), kept as it was so that regenerating the data leaves the gold unchanged."""
+
+    def __init__(self, instance: Instance, robust: bool = True) -> None:
         self.instance = instance
+        self.robust = robust
         cal = instance.calendar
         lunch = cal.lunch_slot if cal.lunch_slot is not None else cal.slots_per_day // 2
         self.morning = list(range(lunch))
@@ -131,9 +146,14 @@ class RuleParser:
         return Period(weeks=self.weeks(text))
 
     def sessions_named(self, text: str, faculty: str | None) -> list[str]:
+        """The sessions whose course title the text names: allowing a typo, and by acronym ("CA") among one
+        teacher's own classes, where an acronym is unlikely to mean two of them."""
         low = text.lower()
         mine = [s for s in self.instance.sessions if faculty is None or s.faculty == faculty]
         named = [s for s in mine if self.instance.course_title(s.course).lower() in low]
+        if not named and self.robust:
+            named = [s for s in mine if mentions(text, self.instance.course_title(s.course),
+                                                 acronyms=faculty is not None)]
         if re.search(r"\b(practical|lab session|lab)\b", low):
             named = [s for s in (named or mine) if s.kind == SessionKind.PRACTICAL]
         return [s.id for s in named]
@@ -164,7 +184,13 @@ class RuleParser:
     # -- parsing -----------------------------------------------------------------------
 
     def parse(self, request: Request) -> ParseResult:
-        return compile_intents(self.instance, request, self.read_intents(request)).result
+        from .checks import checked_compile
+
+        out = self.read_intents(request)
+        if not self.robust:
+            return compile_intents(self.instance, request, out).result
+        # a reading by patterns makes a requirement only where the message says one (``strict``)
+        return checked_compile(self.instance, request, out, strict=True).result
 
     def read(self, request: Request) -> ParseOutput:
         """The ``ParseOutput`` a model would return for ``request`` (before post-processing)."""
@@ -174,12 +200,17 @@ class RuleParser:
         text = _INJECTION.sub("", request.raw_text)
         for inj in INJECTIONS:
             text = text.replace(inj, "")
+        if self.robust:
+            text = normalise(text)  # one spelling for the regular expressions: "thrusday", "b4", "aftrnoon"
         low = text.lower()
         sender = request.sender_id
         role = request.role.value
 
         if OUT_OF_SCOPE.search(low):
             return IntentOutput(action="out_of_scope")
+        if self.robust and BEYOND.search(low) and not SWAP.search(low):
+            return self._clarify("avoid", ["days", "weeks"], "I can only read part of that right now. Could you "
+                                 "send one request at a time, with its days, times and weeks?")
         if role == "student" and re.search(r"\bclash|overlap|same time\b", low):
             return IntentOutput(action="investigate")
         if "?" in text and QUESTION.search(low) and not re.search(r"\b(could you|can you|please)\b", low):
@@ -223,7 +254,7 @@ class RuleParser:
             which = ClassRef(session=sessions[0])
             found = [NeedsRoom(which=which, equipment=needs, justification="stated")]
             if days or slots:
-                found.append(Move(which=which, to=when(), period=period))
+                found.append(Move(which=which, to=when(), period=period, hard=True))
             return self._compile(*found)
 
         if (VAGUE.search(low) and not days and not weeks) or (UNAVAILABLE.search(low) and not days and not weeks):
@@ -231,7 +262,10 @@ class RuleParser:
             return self._clarify("unavailable" if UNAVAILABLE.search(low) else "avoid", missing or ["days"],
                                  "Could you tell me which " + " and ".join(missing or ["days"]) + " you mean?")
 
-        if UNAVAILABLE.search(low):
+        # "I want my Tuesday lecture moved to Thursday; it can't stay there": a move, whatever else it says
+        moving = self.robust and MOVE.search(low) and (days or slots) and (
+            self.sessions_named(text, other or sender) or re.search(r"\b(lecture|class|lab|tutorial|practical)\b", low))
+        if UNAVAILABLE.search(low) and not moving:
             # "can't on Mon, Wed or Fri; I am only on campus on Tue and Thu": the days they *can* come are not
             # unavailable ones. Take the days from the clauses that say when they cannot, when those name days.
             clauses = re.split(r"[;.]|\bbut\b", text)
@@ -243,14 +277,27 @@ class RuleParser:
                                              justification="stated" if stated else "none"))
 
         # a specific placement ("schedule my lecture at 1 pm on Friday", "4 lectures back-to-back")
-        if re.search(r"\b(schedule|move|put|shift|stack)\b", low) and (days or slots):
+        if (MOVE if self.robust else PLACE_WORD).search(low) and (days or slots):
             sessions = self.sessions_named(text, other or sender)
             if re.search(r"back.to.back|in a row|straight|consecutive|without (any )?breaks?", low):
                 t = times if slots else TimeSpec(part="morning")
                 return self._compile(Only(who=who, time=when(t=t), hard=True))
+            if not self.robust:
+                if sessions:
+                    return self._compile(Move(which=ClassRef(session=sessions[0]), to=when(), period=period,
+                                              hard=True))
+                return self._compile(Only(who=who, time=when(), period=period, hard=True))
+            # "from Wednesday 3 pm to Friday morning": the destination is what follows "to"
+            to = when()
+            if (m := re.search(r"\bfrom\b(.+?)\b(?:to|until|till|into)\b(.+)", low)) and \
+                    (self.days(m[2]) or self.times(m[2]).has_times):
+                to = self.times(m[2]).model_copy(update={"days": self.days(m[2])})
+            hard = not WISH.search(low)
             if sessions:
-                return self._compile(Move(which=ClassRef(session=sessions[0]), to=when(), period=period))
-            return self._compile(Only(who=who, time=when(), period=period, hard=True))
+                return self._compile(Move(which=ClassRef(session=sessions[0]), to=to, period=period, hard=hard))
+            if other is None:  # "move my lecture to Friday": which one is for resolution, or a question
+                return self._compile(Move(which=self._class(text, sender), to=to, period=period, hard=hard))
+            return self._compile(Only(who=who, time=to, period=period, hard=True))
 
         if days or slots:
             hard = not WISH.search(low) and bool(re.search(r"\b(must|need|has to|have to|cannot)\b", low))
@@ -261,7 +308,15 @@ class RuleParser:
                                               hard=hard))
                 return self._compile(Only(who=who, time=when(), period=period, hard=hard))
             if (ONLY.search(low) or WANT.search(low)) and days and not AVOID.search(low):
+                if self.robust and WANT.search(low) and (sessions := self.sessions_named(text, other or sender)):
+                    # "I need my Computer Architecture lecture on Thursday at 2 pm": that class, not all of them
+                    return self._compile(Move(which=ClassRef(session=sessions[0]), to=when(), period=period,
+                                              hard=hard))
                 return self._compile(Only(who=who, time=when(), period=period, hard=hard))
+            if self.robust and not AVOID.search(low):
+                # times with no word for what to do with them: free, or filled? A guess could be the opposite
+                return self._clarify("avoid", ["slots"], "Would you like those times kept free, or your classes "
+                                     "put there?")
             return self._compile(Avoid(who=who, time=when(), period=period, hard=hard))
 
         return self._clarify("avoid", ["days", "slots"], "Could you tell me which days and times you mean?")
