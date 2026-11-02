@@ -10,7 +10,7 @@ import type { Role, View } from "./lib/types";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Chat = lazy(() => import("./pages/Chat"));
+const Home = lazy(() => import("./pages/Home"));
 const Requests = lazy(() => import("./pages/Requests"));
 const RequestChat = lazy(() => import("./pages/RequestChat"));
 const RequestsTable = lazy(() => import("./pages/RequestsTable"));
@@ -56,7 +56,7 @@ function Guard({ view, children }: { view: View; children: ReactNode }) {
 
 function HomePage() {
   const { user } = useAuth();
-  return TIMETABLE_HOME.includes(user?.role as Role) ? <Chat /> : <Dashboard />;
+  return TIMETABLE_HOME.includes(user?.role as Role) ? <Home /> : <Dashboard />;
 }
 
 /** For faculty and class representatives, requests are conversations (their own screen, read as a chat);
@@ -92,7 +92,7 @@ function Routed() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<Guard view="new"><Chat /></Guard>} /> {/* the chat: questions and requests, for every role */}
+          <Route path="/new" element={<Guard view="new"><Home /></Guard>} /> {/* the timetable and the chat beside it, for every role */}
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/:id" element={<RequestsPage one />} />
           <Route path="/inbox" element={<Guard view="inbox"><Inbox /></Guard>} />
