@@ -27,7 +27,8 @@ from language.local import LocalClient
 
 from .lookup import TITLES, Directory
 from .more_lookups import MORE_TOOLS
-from .questions import NOT_IN_DATA_NOTE, PRIVATE_NOTE, ToolCall, from_now, role_name, week_and_day
+from .questions import (MONTHS, NOT_IN_DATA_NOTE, PRIVATE_NOTE, WEEK_DAYS, ToolCall, dates_in, from_now, no_classes,
+                        role_name, spell_days, this_week, week_and_day)
 
 MAX_TRIES = 3
 
@@ -41,6 +42,12 @@ ROLE_WORDS = {"hod": "head of department, HoD, the head", "coordinator": "timeta
               "guest_faculty": "guest or visiting faculty", "lab_incharge": "lab in-charge, lab assistant",
               "exam_cell": "exam cell, examination office", "student": "class representatives, CRs"}
 COULD_NOT = "I couldn't work out that question. Could you ask it another way?"  # after MAX_TRIES failed checks
+# words a model may put in "unknown" that are not names: the reply would be "I don't know any"
+NOT_NAMES = {"any", "some", "all", "every", "free", "slot", "slots", "hour", "hours", "time", "times", "today",
+             "tomorrow", "tonight", "week", "weeks", "next", "this", "morning", "afternoon", "evening", "available",
+             "anyone", "anybody", "someone", "somebody", "everyone", "me", "my", "i", "we", "us", "our", "the", "a",
+             "class", "classes", "lecture", "lectures", "on", "at", "in", "and", "or", "of",
+             *WEEK_DAYS, *(d[:3] for d in WEEK_DAYS), "tue", "tues", "thur", "thurs", *MONTHS}
 
 SYSTEM = """You turn a question about a university department's weekly timetable into one lookup.
 Tools (the fields to fill; leave the others empty):
@@ -342,6 +349,7 @@ class ToolAgent:
         self.sender = sender
         self.current_week = current_week
         self.today = today or date.today()
+        self.this_week = this_week(instance, current_week, self.today)  # on a weekend, the coming week
         self.now = now  # for "my next class"; the clock when not given
         self.semester_start = semester_start  # for dates; None: a date can't be placed in a week
         self.directory = Directory(instance)
@@ -355,12 +363,13 @@ class ToolAgent:
         if self.multi:
             return self._read_all(text)
         self.trace = []
+        text = spell_days(text)
         self.question = text  # the checks compare the model's names with what the question says
         prompt = self._prompt(text)
         for _ in range(MAX_TRIES):
             choice = self.client.generate(self.system, prompt, self.schema)
             if choice.week is None:  # a local model may leave the week out: this week
-                choice = choice.model_copy(update={"week": self.current_week})
+                choice = choice.model_copy(update={"week": self.this_week})
             try:
                 call = self._check(choice)
             except Problem as p:
@@ -370,18 +379,20 @@ class ToolAgent:
                 continue
             self.trace.append({"choice": choice.model_dump(exclude_defaults=True), "problem": None})
             return call
-        return ToolCall("unclear", week=self.current_week, confident=False, note=COULD_NOT)
+        return ToolCall("unclear", week=self.this_week, confident=False, note=COULD_NOT)
 
     def _read_all(self, text: str) -> ToolCall | None:
         """v3: every lookup the message asks for. Each is checked; a problem in any sends the whole answer back
         ("lookup 2: …"). None when no part is a timetable question; one part: its ToolCall; several: a ToolCall
         "multi" with the parts (``Answerer`` answers each, in order)."""
         self.trace = []
+        text = spell_days(text)  # as read(): misspelt day names put right first
         self.question = text
         prompt = self._prompt(text)
         for _ in range(MAX_TRIES):
             got = self.client.generate(self.system, prompt, self.schema)
-            choices = [c if c.week is not None else c.model_copy(update={"week": self.current_week}) for c in got.lookups]
+            # a week left out is this week: on a weekend, the coming one (as read())
+            choices = [c if c.week is not None else c.model_copy(update={"week": self.this_week}) for c in got.lookups]
             calls, problem = [], None
             for k, c in enumerate(choices, 1):
                 for piece in self._split(c):
@@ -403,7 +414,7 @@ class ToolAgent:
             if not parts:
                 return None
             return parts[0] if len(parts) == 1 else ToolCall("multi", {"parts": parts}, parts[0].week)
-        return ToolCall("unclear", week=self.current_week, confident=False, note=COULD_NOT)
+        return ToolCall("unclear", week=self.this_week, confident=False, note=COULD_NOT)
 
     def _prompt(self, text: str) -> str:
         i, cal = self.instance, self.instance.calendar
@@ -416,7 +427,7 @@ class ToolAgent:
                           for r in i.rooms)
         now = self.now or datetime.now()
         head = (f"Asking: {asking}. Today: {self.today:%A %d %B %Y}, {now:%H:%M}; this is week "
-                f"{self.current_week} of {cal.weeks}.\n"
+                f"{self.this_week} of {cal.weeks}.\n"
                 f"Days: {', '.join(cal.days)}.\nHours (slots): {slots}.\n")
         if not self.names_listed:  # v3: names as the message writes them, found by the code (SYSTEM_V3)
             return head + f"\nQuestion:\n<question>{text}</question>"
@@ -436,6 +447,14 @@ class ToolAgent:
         if c.tool == "unanswerable":
             note = PRIVATE_NOTE if c.reason == "private" else NOT_IN_DATA_NOTE
             return ToolCall("unclear", week=self.current_week, confident=False, note=note)
+        if note := no_classes(self.question, self.today):  # a weekend's "today": whatever the model chose
+            return ToolCall("unclear", week=self.this_week, confident=False, note=note)
+        if weekend := next((d for d in [*c.days, *c.unknown] if d.strip().lower() in ("sat", "sun", "saturday", "sunday")),
+                           None):  # the model wrote the day: there is nothing to look up
+            day = "Saturday" if weekend.strip().lower().startswith("sat") else "Sunday"
+            return ToolCall("unclear", week=self.this_week, confident=False, note=f"There are no classes on {day}.")
+        if c.unknown:
+            c = self._not_names(c)
         if c.dates:  # the week and day of a date come from the calendar, not from the model
             c = c.model_copy()
             try:
@@ -503,6 +522,8 @@ class ToolAgent:
                            [f for f in extra if f != self.sender or not me]
         else:
             course = self._one(c.course, str) if c.course else None
+        if c.tool == "classes_of" and not (teachers or sections or rooms or course or everyone):
+            teachers, sections = self._people(c.model_copy(update={"teachers": ["me"]}))  # nobody named: the asker
         days, slots = sorted(c.days, key=cal.days.index), sorted(set(c.hours))
         part = None if slots else c.part  # a time asked about is more exact than "afternoon"
         room_needed = {"kind": c.kind, "equipment": sorted(c.equipment), "min_capacity": c.min_capacity}
@@ -741,6 +762,17 @@ class ToolAgent:
         elif me and not rep and self.sender not in teachers:
             teachers.insert(0, self.sender)
         return teachers, sections
+
+    def _not_names(self, c: Choice) -> Choice:
+        """``unknown`` without what cannot be a name: ordinary words and day names ("any", "some", "Mon") are
+        dropped, and a date ("Aug 19") goes to ``dates``. What is left is a name the department does not have."""
+        unknown, dates = [], list(c.dates)
+        for name in c.unknown:
+            if found := dates_in(name, self.today):
+                dates += [d.isoformat() for d in found if d.isoformat() not in dates]
+            elif any(w not in NOT_NAMES for w in re.findall(r"[a-z]+|\d+", name.lower())):
+                unknown.append(name)
+        return c.model_copy(update={"unknown": unknown, "dates": dates})
 
     @staticmethod
     def _describe(c: Choice, teachers: list[str], sections: list[str], rooms: list[str], course: str | None) -> dict:

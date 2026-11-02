@@ -71,7 +71,7 @@ from language.intents import ClubRef, Compiled, IntentOutput, compile_intents
 from language.intents import ExtraClass as ExtraIntent
 from language.intents import Swap as SwapIntent
 from language.parsing import ParseResult
-from language.rule_parser import RuleParser
+from language.rule_parser import RuleParser, injected
 
 from .store import EXTRA_PREFIX, Store
 
@@ -156,6 +156,7 @@ class Orchestrator:
         fast_parser=None,
         system_one=None,
         tau: float = 0.9,
+        use_fast_path: Callable[[], bool] | None = None,
         policy_agent: PolicyAgent | None = None,
         form_policy=None,
         responders: Mapping[str, Responder] | None = None,
@@ -176,6 +177,10 @@ class Orchestrator:
         swaps, extra classes, cancellations and withdrawals are routed by what it read. ``compile`` may
         return None (a stand-in without intents answers): the request is then parsed as before.
 
+        ``use_fast_path``: whether, right now, a request System One is sure of may go to ``fast_parser``
+        (always when omitted). The web app takes it only while the model is unreachable: the fine-tuned reader
+        reads far better than the fast parser, which System One's confidence does not show.
+
         ``club_desk`` books a club activity from a message (``ClubRef``) and returns the reply and the outcome
         (booked, rejected, or needs_approval: the timetable office decides); without one, club bookings go to
         the coordinator.
@@ -188,6 +193,7 @@ class Orchestrator:
         self.fast_parser = fast_parser
         self.system_one = system_one
         self.tau = tau
+        self.use_fast_path = use_fast_path
         self.policy = policy_agent
         self.form_policy = form_policy
         self.negotiator = negotiator
@@ -237,10 +243,13 @@ class Orchestrator:
         if self.system_one is not None:
             d = self.system_one.decide(r)
             # plain Python values: numpy scalars from System One cannot be sent as JSON
-            fast = bool(d.fast_path(self.tau)) and self.fast_parser is not None
+            sure = bool(d.fast_path(self.tau)) and self.fast_parser is not None
+            fast = sure and (self.use_fast_path is None or self.use_fast_path())
             case.routing = {"request_type": d.request_type.value, "type_p": round(float(d.type_p), 4),
                             "action": d.action.value, "action_p": round(float(d.action_p), 4),
                             "tau": float(self.tau), "fast_path": fast, "latency_ms": round(float(d.latency_ms), 2)}
+            if sure and not fast:
+                case.routing["fast_path_skipped"] = True  # sure, but the model reads it
             if fast:
                 case.route = "fast"
                 result = self._read(case, self.fast_parser)
@@ -252,6 +261,32 @@ class Orchestrator:
                 case.routing["fast_path_deferred"] = True
         case.route = "system_two"
         return self._read(case, self.parser)
+
+    def _room_report(self, case: Case) -> str | None:
+        """The rooms a refused request was only about ("Room 101"), when its sender may not change a room's
+        availability (a teacher, a student): what they wrote is a report for the office. None otherwise."""
+        out = case.parse.output if case.parse else None
+        if out is None or not out.constraints or case.request.role not in (Role.FACULTY, Role.GUEST_FACULTY, Role.STUDENT):
+            return None
+        if any(c.scope_kind != "room" or c.type not in ("unavailable", "avoid") for c in out.constraints):
+            return None
+        rooms = self.instance.room_by_id
+        names = list(dict.fromkeys(rooms[c.scope_id].name if c.scope_id in rooms else c.scope_id
+                                   for c in out.constraints))
+        return " and ".join(names)
+
+    def _reader(self, case: Case) -> str:
+        """Who read the request: "form" (intents given), "rules" (the rule parser: the fast path, or the stand-in
+        while the model is away) or "model". A parser that does not say counts as the model unless it is the
+        rule parser itself (offline)."""
+        if case.form is not None:
+            return "form"
+        if case.route.startswith("fast"):
+            return "rules"
+        said = getattr(self.parser, "reader", None)
+        if callable(said) and (who := said()):
+            return who
+        return "rules" if isinstance(self.parser, RuleParser) else "model"
 
     def _read(self, case: Case, parser) -> ParseResult:
         """Intents resolved against the published timetable when ``parser`` reads them, else the plain parse."""
@@ -282,6 +317,9 @@ class Orchestrator:
         t = time.perf_counter()
         case.parse = self._parse(case)
         case.timings["parse"] = time.perf_counter() - t
+        case.routing["reader"] = self._reader(case)
+        if injected(request.raw_text):
+            case.routing["injection"] = True
         self._advance(case, S.CLASSIFIED, route=case.route, action=case.parse.action.value,
                       routing=case.routing, seconds=round(case.timings["parse"], 3))
         action = case.parse.action
@@ -297,6 +335,12 @@ class Orchestrator:
         if case.intents(CancelIntent) and action != ExpectedAction.REFUSE:
             return self._cancel(case)
         if action == ExpectedAction.REFUSE:
+            if rooms := self._room_report(case):
+                # "the AC in Room 101 is not working": a report about a room, not a change its sender may make
+                case.reply = (f"Thank you. Your report about {rooms} has been passed to the timetable office, "
+                              "which can close the room or move classes out of it.")
+                self._advance(case, S.FORWARDED, to="coordinator", report="room")
+                return case
             case.reply = f"Your request was not processed: {case.parse.refusal}. The timetable coordinator has been informed."
             self._advance(case, S.REFUSED, reason=case.parse.refusal)
             return case

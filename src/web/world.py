@@ -9,6 +9,7 @@ import io
 import os
 import pickle
 import random
+import re
 import threading
 import time
 from datetime import UTC, date, datetime
@@ -100,6 +101,13 @@ VIEWS: dict[str, set[str]] = {
     "study": {"coordinator"},  # running the human study: participant codes, progress, export
 }
 OVERSIGHT = {"coordinator", "hod", "dean"}  # see every request and the whole activity log
+# a chat message the regex can't read while the model is away: a question (not a rule question) is told so,
+# not sent on as a request without a word
+LOOKS_ASKED = re.compile(r"\?\s*$|^\s*(what|when|where|who|whom|whose|which|how|is|are|am|was|were|do|does|did|"
+                         r"any|has|have)\b", re.IGNORECASE)
+ABOUT_RULES = re.compile(r"\b(allowed|allow|permitted|permission|rules?|polic(y|ies)|regulations?|maximum|minimum|"
+                         r"limit)\b", re.IGNORECASE)
+MODEL_AWAY = "I can't answer questions right now; try again in a minute, or send it as a request."
 
 
 def views_for(role: str) -> list[str]:
@@ -244,6 +252,7 @@ class World:
         self.orch = Orchestrator(
             self.instance, self.store, parser=self.parser, negotiator=self._negotiator(),
             negotiator_factory=self._negotiator, system_one=self.system_one, tau=self.tau,
+            use_fast_path=self._fast_path_now,
             fast_parser=RuleParser(self.instance), policy_agent=self.policy,
             form_policy=self.rule_policy,  # a request made with clicks is checked by the rules, no model
             responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER,
@@ -254,6 +263,11 @@ class World:
         self.orch.bootstrap(policy_constraints(self.instance), approved_by=COORDINATOR)
         self.started = datetime.now(UTC)
         self.threads: dict[str, threading.Thread] = {}
+        # requests waiting for the model to read them (``_hold``): id -> (request, held since)
+        self.held: dict[str, tuple[Request, float]] = {}
+        self._released: set[str] = set()  # held long enough: read by the stand-in after all
+        self._held_lock = threading.Lock()
+        self._watching = False
         self.seeding = False
         self.restoring = False
         self.snapshot: dict | None = None  # the demo state: taken once the start-up history has replayed
@@ -353,6 +367,10 @@ class World:
             r.status = RequestStatus.RECEIVED  # from the start, as if just received
             self.store.log(c.id, "restarted", was=c.status.value)
             self.submit(r, form=c.form)
+        for r in self.store.requests():  # held for the model when the last run stopped: held again, or read now
+            events = self.store.events(r.id)
+            if events and events[-1]["kind"] == "held":
+                self.submit(r)
         print(f"[state] {self.world_id}: resumed {len(self.orch.cases)} requests from {self.state_dir}", flush=True)
         return True
 
@@ -385,6 +403,8 @@ class World:
                         pass
             for t in list(self.threads.values()):
                 t.join(timeout=90)
+            with self._held_lock:
+                self.held.clear()  # not in the snapshot: they go with everything else sent since
             self._apply(snap)
         finally:
             self.restoring = False
@@ -755,24 +775,43 @@ class World:
         week = self.current_week() or 1
         start = self.semester.state.semester_start
         start = date.fromisoformat(start) if start else None
+        unreachable = self.lookup_reader == "model"  # until the model has answered
         if self.lookup_reader == "model" and self.model_link is not None and self.model_link.usable():
-            try:
-                agent = ToolAgent(self.instance, _task(self.model_link.client, "lookup"), sender, week,
-                                  semester_start=start,  # roles as the app has them now ("the HOD")
-                                  roles_of={i.person: i.role.value for i in self.directory.by_email.values()},
-                                  # a v3 adapter reads several lookups and the new tools (agents.more_lookups)
-                                  multi="v3" in (self.lookup_adapter or ""))
-                call = agent.read(text)
-                if call is None or call.confident or call.note != COULD_NOT:
-                    return call, "model"
-                # the model could not settle it in three tries: the regex may still read it
-            except Exception as e:  # noqa: BLE001 - the regex answers instead
-                from .fallback import _outage
+            from .fallback import _outage, _reset
 
-                if _outage(e):
-                    self.model_link.failed(e)
-                print(f"[model] lookup: {type(e).__name__}: {str(e)[:160]}; regex used", flush=True)
-        return QuestionReader(self.instance, sender, week, semester_start=start).read(text), "regex"
+            for retry in (True, False):  # a reset connection is usually momentary: once more, straight away
+                try:
+                    agent = ToolAgent(self.instance, _task(self.model_link.client, "lookup"), sender, week,
+                                      semester_start=start,  # roles as the app has them now ("the HOD")
+                                      roles_of={i.person: i.role.value for i in self.directory.by_email.values()},
+                                      # a v3 adapter reads several lookups and the new tools (agents.more_lookups)
+                                      multi="v3" in (self.lookup_adapter or ""))
+                    call = agent.read(text)
+                    unreachable = False
+                    if call is None or call.confident or call.note != COULD_NOT:
+                        return call, "model"
+                    break  # the model could not settle it in three tries: the regex may still read it
+                except Exception as e:  # noqa: BLE001 - the regex answers instead
+                    if retry and _reset(e):
+                        print(f"[model] lookup: {type(e).__name__}: {str(e)[:160]}; trying again", flush=True)
+                        continue
+                    if _outage(e):
+                        self.model_link.failed(e)
+                    else:
+                        unreachable = False  # it answered, badly: not an outage
+                    print(f"[model] lookup: {type(e).__name__}: {str(e)[:160]}; regex used", flush=True)
+                    break
+        call = QuestionReader(self.instance, sender, week, semester_start=start).read(text)
+        if call is None and unreachable and LOOKS_ASKED.search(text) and not ABOUT_RULES.search(text):
+            # the model would have read it; without it, saying so beats sending a question on as a request
+            return ToolCall("unclear", week=week, confident=False, note=MODEL_AWAY), "regex"
+        return call, "regex"
+
+    def _fast_path_now(self) -> bool:
+        """System One's fast path (the rule parser) only while there is no model to read the request: offline, or
+        the model unreachable. With the fine-tuned reader up it reads everything: on the test split it is right on
+        99.8% of requests where the rule parser is right on 52% (and silently wrong on 20%)."""
+        return self.model_link is None or not self.model_link.usable()
 
     def _model_changed(self, up: bool, error: str | None) -> None:
         self.store.log(None, "model_reachable" if up else "model_unreachable", error=error)
@@ -797,6 +836,8 @@ class World:
 
     def submit(self, request: Request, wait: bool = False, form=None) -> None:
         """``form``: the intents of a request made with clicks (``Orchestrator.submit``)."""
+        if form is None and self._hold(request):
+            return
 
         def run() -> None:
             _local.case = request.id
@@ -810,6 +851,60 @@ class World:
         t.start()
         if wait:
             t.join()
+
+    def _hold(self, request: Request) -> bool:
+        """While the model that reads requests cannot be reached, a request that may change the timetable waits
+        for it instead of being acted on as the rule parser reads it (right on 52% of the test split and silently
+        wrong on 20%, where the fine-tuned reader is right on 99.8%). Questions about the rules and messages for
+        another office go ahead: the stand-ins handle them well. A request held ``NTS_HOLD_MINUTES`` (10) goes
+        ahead on the stand-in after all, so nothing waits for ever."""
+        if (self.parser_mode not in ("gemini", "local") or self.model_link is None or request.id in self._released
+                or self.seeding or self.restoring or self.test_data):
+            return False
+        if request.id not in self.held:
+            if self.model_link.usable():
+                return False
+            if self._rule_reading(request) in ("answer", "out_of_scope"):
+                return False
+        with self._held_lock:
+            first = request.id not in self.held
+            self.held.setdefault(request.id, (request, time.time()))
+            if not self._watching:
+                self._watching = True
+                threading.Thread(target=self._watch_held, daemon=True).start()
+        if self.store.request(request.id) is None:
+            self.store.add_request(request)
+        if first:
+            self.store.log(request.id, "held", reason=self.model_link.error or "the model is not reachable")
+        return True
+
+    def _rule_reading(self, request: Request) -> str:
+        try:
+            return RuleParser(self.instance).read(request).action
+        except Exception:  # noqa: BLE001 - when in doubt, hold
+            return "compile"
+
+    def _watch_held(self) -> None:
+        """Release held requests: all of them once the model answers again; each one after the longest wait."""
+        longest = float(os.environ.get("NTS_HOLD_MINUTES", "10")) * 60
+        while True:
+            time.sleep(float(os.environ.get("NTS_HOLD_CHECK_SECONDS", "10")))
+            up = self.model_link is not None and self.model_link.usable()
+            now = time.time()
+            with self._held_lock:
+                due = [(r, since) for r, since in self.held.values() if up or now - since >= longest]
+                for r, _ in due:
+                    del self.held[r.id]
+                done = not self.held
+                if done:
+                    self._watching = False  # a request held from now on starts a new watcher
+            for r, since in due:
+                if not up:
+                    self._released.add(r.id)
+                self.store.log(r.id, "released", reader="model" if up else "rules", waited=round(now - since))
+                self.submit(r)
+            if done:
+                return
 
     def clarify(self, case_id: str, person: str, answer: str, wait: bool = False) -> None:
         """The sender answers the question their request was sent back with: the same case goes through
