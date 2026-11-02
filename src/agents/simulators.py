@@ -73,6 +73,9 @@ class Profile(BaseModel):
     needs: list[str] = Field(default_factory=list)  # equipment they really need
     room_flexible: bool = False  # would accept a room without that equipment
     reveal: bool = True  # volunteers a window when no offer fits
+    # turns down the first message it gets whatever it offers (a demo's two-round negotiation); without
+    # ``reveal`` it suggests nothing and then takes the next fitting option, whatever the time
+    holds_out: bool = False
     responsive: bool = True
     family: Family | None = None
     refuse_p: float = 0.0
@@ -121,6 +124,7 @@ class Simulator:
     structured: bool = True  # hand the negotiator the decision, not just text
     rng: random.Random | None = None  # draws refusals and silences; None means no noise
     revealed: bool = False
+    held_out: bool = False  # has turned down a first message already (``Profile.holds_out``)
     log: list[Reply] = field(default_factory=list)
 
     def _chance(self, p: float) -> bool:
@@ -144,6 +148,10 @@ class Simulator:
             self.acceptable(s, p) for s, p in o.placements.items())]
         if fits and self._chance(self.profile.refuse_p):
             fits = []
+        if self.profile.holds_out and not self.held_out:
+            self.held_out, fits = True, []
+            if not (self.profile.reveal and self.profile.windows and not self.revealed):
+                self.profile.windows = [Window()]  # said no, suggested nothing: takes what comes next
         if fits:
             reply = Reply(decision="accept", choice=fits[0].key)
             say = f"You accept option {fits[0].key}."

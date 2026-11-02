@@ -4,7 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } 
 import { Shell } from "./components/Shell";
 import { EmptyState, Mark, Skeleton } from "./components/ui";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { TIMETABLE_HOME } from "./lib/meta";
+import { TIMETABLE_HOME, WORKSPACE_HOME } from "./lib/meta";
 import { ThemeProvider } from "./lib/theme";
 import type { Role, View } from "./lib/types";
 
@@ -19,7 +19,6 @@ const Timetable = lazy(() => import("./pages/Timetable"));
 const Fairness = lazy(() => import("./pages/Fairness"));
 const Graph = lazy(() => import("./pages/Graph"));
 const Policy = lazy(() => import("./pages/Policy"));
-const PolicyDocuments = lazy(() => import("./pages/PolicyDocuments"));
 const SemesterBuild = lazy(() => import("./pages/SemesterBuild"));
 const SemesterPreferences = lazy(() => import("./pages/SemesterPreferences"));
 const Clubs = lazy(() => import("./pages/Clubs"));
@@ -54,7 +53,7 @@ function Guard({ view, children }: { view: View; children: ReactNode }) {
 
 function HomePage() {
   const { user } = useAuth();
-  return TIMETABLE_HOME.includes(user?.role as Role) ? <Home /> : <Dashboard />;
+  return WORKSPACE_HOME.includes(user?.role as Role) ? <Home /> : <Dashboard />;
 }
 
 /** For faculty and class representatives, requests are conversations (their own screen, read as a chat);
@@ -65,6 +64,13 @@ function RequestsPage({ one = false }: { one?: boolean }) {
   const [params] = useSearchParams();
   if (TIMETABLE_HOME.includes(user?.role as Role) && !params.has("details")) return <RequestChat />;
   return one ? <CaseDetail /> : <Requests />;
+}
+
+/** Teachers and class representatives send their own semester preferences here; the timetable office
+ * sees everyone's, in the semester plan's Preferences tab. */
+function PreferencesPage() {
+  const { user } = useAuth();
+  return user?.role === "coordinator" ? <Navigate to="/semester?tab=preferences" replace /> : <SemesterPreferences />;
 }
 
 function Routed() {
@@ -97,9 +103,9 @@ function Routed() {
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/fairness" element={<Guard view="fairness"><Fairness /></Guard>} />
           <Route path="/policy" element={<Policy />} />
-          <Route path="/documents" element={<Guard view="documents"><PolicyDocuments /></Guard>} />
+          <Route path="/documents" element={<Navigate to="/policy?tab=documents" replace />} /> {/* documents are a tab of the handbook */}
           <Route path="/semester" element={<Guard view="semester"><SemesterBuild /></Guard>} />
-          <Route path="/preferences" element={<Guard view="prefs"><SemesterPreferences /></Guard>} />
+          <Route path="/preferences" element={<Guard view="prefs"><PreferencesPage /></Guard>} />
           <Route path="/clubs" element={<Guard view="clubs"><Clubs /></Guard>} />
           <Route path="/transparency" element={<Transparency />} />
           <Route path="/graph" element={<Guard view="graph"><Graph /></Guard>} />

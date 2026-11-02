@@ -68,9 +68,9 @@ def world(tmp_path_factory):
     return w
 
 
-def submit(world, sender, text, out):
+def submit(world, sender, text, out, makeup=False):
     world.orch.parser.known[text] = out
-    return world.orch.submit(world.intake.from_portal(sender, text))
+    return world.orch.submit(world.intake.from_portal(sender, text, makeup=makeup))
 
 
 def where(s, tt):
@@ -122,12 +122,32 @@ def test_an_extra_class_without_a_week_asks_for_it(world):
     assert case.status.value == "clarification_requested" and "Which week" in case.reply
 
 
-def test_a_cancellation_goes_to_the_coordinator_with_the_class_resolved(world):
+def test_a_declined_swap_offers_hours_the_class_could_move_to_alone(world):
+    """"Dr. Sharma did not agree" was the end of it; the sender is now shown free hours that need nobody."""
+    a, b, tt = _pair(world)
+    world.orch.responders[b.faculty] = Fixed("reject")
+    case = submit(world, a.faculty, "Could we swap our classes in week 11?", IntentOutput(action="compile", intents=[
+        Swap(mine=ClassRef(**where(a, tt)), theirs=ClassRef(owner=b.faculty, **where(b, tt)), period=Period(weeks=[11]))]))
+    assert case.status.value == "denied" and "did not agree" in case.reply
+    assert "could move on its own in week 11" in case.reply, case.reply
+
+
+def test_a_cancellation_without_make_up_is_made_in_that_week(world):
+    """Done like an absence without make-up classes: the class is left out of week 9, for approval."""
     a, _, tt = _pair(world)
     case = submit(world, a.faculty, "Please call off that class in week 9.", IntentOutput(action="compile", intents=[
         Cancel(which=ClassRef(**where(a, tt)), period=Period(weeks=[9]))]))
-    assert case.status.value == "forwarded" and "+cancel" in case.route
+    assert "+cancel" in case.route and case.status.value in ("awaiting_approval", "published"), case.reply
+    assert a.id in (case.proposal.cancelled or []) and case.proposal.week == 9
     assert world.instance.course_title(a.course) in case.reply and "week 9" in case.reply
+
+
+def test_a_cancellation_with_make_up_goes_to_the_coordinator_with_the_class_resolved(world):
+    a, _, tt = _pair(world)
+    case = submit(world, a.faculty, "Please call off that class in week 10 and hold a make-up.", IntentOutput(
+        action="compile", intents=[Cancel(which=ClassRef(**where(a, tt)), period=Period(weeks=[10]))]), makeup=True)
+    assert case.status.value == "forwarded" and "+cancel" in case.route
+    assert world.instance.course_title(a.course) in case.reply and "week 10" in case.reply
     assert FULL_DAY[tt[a.id].day] in case.reply and hour(tt[a.id].slot) in case.reply
 
 

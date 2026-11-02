@@ -56,6 +56,36 @@ export const ROLE_LABEL: Record<Role, string> = {
  * sidebar keeps only the essentials. Everyone else opens on the dashboard. */
 export const TIMETABLE_HOME: Role[] = ["faculty", "guest_faculty", "student"];
 
+/** Roles whose home page is the request workspace (pages/Home): the timetable people live in plus their
+ * conversations. The head of department teaches, so they get it too, with their department on top; the lab
+ * in-charge and the exam cell look after rooms, so theirs opens on a room's week. The office and the Dean
+ * open on the dashboard, a queue of what waits on them. */
+export const WORKSPACE_HOME: Role[] = [...TIMETABLE_HOME, "hod", "lab_incharge", "exam_cell"];
+
+/** Roles that look after rooms, whose timetable opens by room. */
+export const ROOM_KEEPERS: Role[] = ["lab_incharge", "exam_cell"];
+
+/** A request's status in the sender's words: where it stands for them, not which pipeline step ran.
+ * Everyone but the timetable office sees these; the pipeline's own names stay in Technical details. */
+export const PLAIN_STATUS: Record<Status, { label: string; tone: Tone }> = {
+  received: { label: "In progress", tone: "info" },
+  classified: { label: "In progress", tone: "info" },
+  policy_checked: { label: "In progress", tone: "info" },
+  compiled: { label: "In progress", tone: "info" },
+  solved: { label: "In progress", tone: "info" },
+  fairness_audited: { label: "In progress", tone: "info" },
+  negotiating: { label: "Waiting for a colleague", tone: "warn" },
+  awaiting_approval: { label: "Waiting for approval", tone: "brand" },
+  escalated: { label: "Waiting for a decision", tone: "warn" },
+  forwarded: { label: "With the timetable office", tone: "muted" },
+  clarification_requested: { label: "Needs your answer", tone: "warn" },
+  published: { label: "Done", tone: "ok" },
+  answered: { label: "Done", tone: "ok" },
+  refused: { label: "Couldn't be done", tone: "bad" },
+  denied: { label: "Couldn't be done", tone: "bad" },
+  withdrawn: { label: "Withdrawn", tone: "muted" },
+};
+
 /** Tiers in the words of the person using the service; the number and who may change it stay in the tooltip. */
 export const TIER: Record<number, { name: string; who: string; tone: Tone }> = {
   0: { name: "Can't be changed", who: "Nobody, it is physically impossible otherwise", tone: "bad" },

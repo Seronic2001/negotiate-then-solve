@@ -22,6 +22,8 @@
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   --color-info: var(--info);
+  --color-violet: var(--violet);
+  --color-teal: var(--teal);
 }
 
 /* "Paper and ink": a printed timetable on warm paper, one blue accent. */
@@ -38,6 +40,9 @@
   --warn: #a8660f;
   --bad: #b3443a;
   --info: #56708f;
+  /* inbox message types beyond the status tones */
+  --violet: #6b4c9a;
+  --teal: #2f7a78;
   color-scheme: light;
 }
 
@@ -54,6 +59,8 @@
   --warn: #d9a54a;
   --bad: #e0857a;
   --info: #9aaecb;
+  --violet: #b9a3e0;
+  --teal: #7cc4c0;
   color-scheme: dark;
 }
 
@@ -103,6 +110,16 @@ select:focus-visible {
     135deg,
     color-mix(in oklab, var(--ink-3) 14%, transparent) 0 5px,
     transparent 5px 10px
+  );
+}
+
+/* A room closed in that hour (maintenance, exams): red stripes. */
+.hatch-bad {
+  background-color: color-mix(in oklab, var(--bad) 10%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--bad) 45%, transparent) 0 4px,
+    transparent 4px 8px
   );
 }
 

@@ -38,8 +38,27 @@ export function TimetableGrid({
     const k = `${e.day}:${e.slot}`;
     cell.set(k, [...(cell.get(k) ?? []), e]);
   }
+  /** What every class shown has in common (one teacher's week, one room's) is not repeated on each card. */
+  const same = (f: (e: TimetableEntry) => string) => entries.length > 1 && new Set(entries.map(f)).size === 1;
+  const hide = { teacher: same((e) => e.faculty), room: same((e) => e.room), groups: same((e) => e.group_names.join(", ")) };
   const covered = new Set<string>();
   for (const e of entries) for (let q = e.slot + 1; q < e.slot + e.duration; q++) covered.add(`${e.day}:${q}`);
+  /** A class longer than one slot is drawn as one card over all its rows, when the rows it runs into hold
+   * nothing else (no class, no proposed move, no slot to pick): "day:slot" of the first row -> rows spanned. */
+  const span = new Map<string, number>();
+  const hidden = new Set<string>();
+  for (const [k, list] of cell) {
+    if (list.length !== 1 || list[0].duration < 2) continue;
+    const e = list[0];
+    const rest = Array.from({ length: e.duration - 1 }, (_, i) => e.slot + 1 + i);
+    const clear = rest.every(
+      (q) => q < slots_per_day && q !== lunch_slot && !cell.has(`${e.day}:${q}`)
+        && !ghosts.some((g) => g.day === e.day && g.slot === q) && !slotState?.(e.day, q),
+    );
+    if (!clear) continue;
+    span.set(k, e.duration);
+    for (const q of rest) hidden.add(`${e.day}:${q}`);
+  }
 
   return (
     <div className={fill ? "h-full" : "overflow-x-auto"}>
@@ -61,6 +80,8 @@ export function TimetableGrid({
           <Row key={s}>
             <div className="pr-3 pt-2 text-right font-mono text-[11px] text-ink-3">{instance.slots[s]?.label}</div>
             {days.map((d) => {
+              if (hidden.has(`${d}:${s}`)) return null; // drawn by the card above it
+              const rows = span.get(`${d}:${s}`) ?? 1;
               const list = cell.get(`${d}:${s}`) ?? [];
               const ghost = ghosts.filter((g) => g.day === d && g.slot === s);
               const lunch = s === lunch_slot;
@@ -72,6 +93,7 @@ export function TimetableGrid({
                   onClick={pickable ? () => onSlot!(d, s) : undefined}
                   role={pickable ? "button" : undefined}
                   title={pickable ? `${instance.day_names[d] ?? d} ${instance.slots[s]?.label}` : undefined}
+                  style={rows > 1 ? { gridRow: `span ${rows}` } : undefined}
                   className={clsx(
                     "relative border-l border-t border-line p-1",
                     fill ? "min-h-0 overflow-hidden" : "min-h-[64px]",
@@ -82,9 +104,9 @@ export function TimetableGrid({
                   )}
                 >
                   {lunch && !list.length && !ghost.length && <span className="absolute inset-0 grid place-items-center text-[11px] text-ink-3">Lunch</span>}
-                  <div className="space-y-1">
+                  <div className={clsx("space-y-1", rows > 1 && "h-full")}>
                       {list.map((e, i) => (
-                        <Entry key={e.session} e={e} changed={changed.has(e.session)} index={i} onPick={onPick} faded={dim?.has(e.session)} />
+                        <Entry key={e.session} e={e} changed={changed.has(e.session)} index={i} onPick={onPick} faded={dim?.has(e.session)} tall={rows > 1} hide={hide} />
                       ))}
                       {ghost.map((g) => (
                         <div key={g.session} className="rounded border border-dashed border-brand/70 bg-brand/5 px-2 py-1.5" title={`${g.title}: ${g.note}`}>
@@ -107,9 +129,14 @@ function Row({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function Entry({ e, changed, index, onPick, faded }: { e: TimetableEntry; changed: boolean; index: number; onPick?: (e: TimetableEntry, ev: MouseEvent) => void; faded?: boolean }) {
+type Hide = { teacher: boolean; room: boolean; groups: boolean };
+
+function Entry({ e, changed, index, onPick, faded, tall, hide }: { e: TimetableEntry; changed: boolean; index: number; onPick?: (e: TimetableEntry, ev: MouseEvent) => void; faded?: boolean; tall?: boolean; hide: Hide }) {
   const c = colorFor(e.course);
   const Icon = e.kind === "practical" ? FlaskConical : GraduationCap;
+  // one line under the title: who, where and for whom, less what every card on the grid shares
+  const detail = [!hide.teacher && e.faculty_name, !hide.room && e.room_name, !hide.groups && e.group_names.join(", ")]
+    .filter(Boolean).join(" · ");
   return (
     <button
       data-index={index}
@@ -119,7 +146,8 @@ function Entry({ e, changed, index, onPick, faded }: { e: TimetableEntry; change
       }}
       disabled={faded}
       className={clsx(
-        "relative w-full overflow-hidden rounded border-l-[3px] px-2 py-1.5 text-left transition-[colors,opacity]",
+        "relative block w-full overflow-hidden rounded border-l-[3px] px-2 py-1.5 text-left align-top transition-[colors,opacity]",
+        tall && "flex h-full flex-col justify-start",
         changed && "outline-2 outline-offset-1 outline-brand",
         faded && "opacity-30",
       )}
@@ -132,11 +160,12 @@ function Entry({ e, changed, index, onPick, faded }: { e: TimetableEntry; change
         {e.extra && <span className="rounded bg-brand/15 px-1 text-[9.5px] font-medium text-brand">extra</span>}
         {e.duration > 1 && <span className="ml-auto text-[10px] font-normal text-ink-3">{e.duration}h</span>}
       </p>
-      <p className="truncate text-[10.5px] text-ink-2">{e.faculty_name}</p>
-      <p className="flex items-center gap-1 truncate text-[10px] text-ink-3">
-        <MapPin size={9} />
-        {e.room_name} · {e.group_names.join(", ")}
-      </p>
+      {detail && (
+        <p className="mt-0.5 flex items-center gap-1 truncate text-[10.5px] text-ink-3">
+          {!hide.room && <MapPin size={9} className="shrink-0" />}
+          <span className="truncate">{detail}</span>
+        </p>
+      )}
     </button>
   );
 }

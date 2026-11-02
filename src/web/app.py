@@ -44,12 +44,13 @@ from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
 from agents.questions import Answerer
 from core.graph import add_conflict, build_graph
 from core.instance import Session
-from core.schemas import DAYS, Placement, Request, RequestStatus, Tier
+from core.schemas import DAYS, ConstraintType, Placement, Request, RequestStatus, Role, Tier
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour
 from language.intents import IntentOutput, Unresolved
 from language.intents import weeks as period_weeks
 from language.llm import FREE_TIER, LLMError
+from language.parsing import STUDENTS_REPORT
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 from pipeline.store import EXTRA_PREFIX
@@ -82,8 +83,9 @@ TIER_EXAMPLES = {0: "No double-booking; room capacity; lab equipment", 1: "Max 3
 def _placement(w: World, p: Placement | None) -> dict | None:
     if p is None:
         return None
+    room = w.instance.room_by_id.get(p.room)
     return {"day": p.day, "slot": p.slot, "room": p.room, "text": placement_text(w.instance, p),
-            "time": hour(p.slot)}
+            "time": hour(p.slot), "room_name": room.name if room else p.room}
 
 
 def _constraint(w: World, c) -> dict:
@@ -184,6 +186,8 @@ def _case_detail(w: World, case: Case) -> dict:
             "escalation": None if o.escalation is None else {"to": o.escalation.to, "to_name": w.name_of(
                 o.escalation.to) if o.escalation.to in inst.faculty_by_id else o.escalation.to,
                 "reason": plain(o.escalation.reason), "text": plain(o.escalation.text),
+                "rule": next((_rule_view(r) for r in w.rules if r.id == o.escalation.rule), None),
+                "asked": plain(o.escalation.asked), "grant": plain(o.escalation.grant),
                 # what granting would set aside, and why it cannot be granted (None: it can)
                 "set_aside": [_constraint(w, c) for c in w.orch.overrides(case)],
                 "cannot_grant": w.orch.cannot_grant(case)},
@@ -265,6 +269,59 @@ _REQUEST_TITLE = {
 }
 
 
+def _mine(w: World, me: str, row: dict) -> bool:
+    """A changed class that is this person's: theirs to teach, or their section's (class representatives)."""
+    return row["faculty"] == me or (me.startswith("ST-") and me.removeprefix("ST-") in row["groups"])
+
+
+def _class_name(row: dict) -> str:
+    """The class without its code: "Information Security practical"."""
+    name = re.sub(r" \([A-Z]-[\w-]+\)$", "", row["session_name"]).removeprefix("the ").removeprefix("extra ")
+    return name[:1].upper() + name[1:]
+
+
+def _my_change(w: World, me: str, case: Case, version: int | None) -> dict | None:
+    """What a published change did to this person's classes, week by week: each class before and after
+    (after None: cancelled that week; before None: an extra class), the reason anyone may see, and a short
+    title ("Information Security practical cancelled", "2 classes moved")."""
+    v = w.store.version(version) if version is not None else None
+    if v is None:
+        return None
+    weeks = []
+    for x in [v] + [w.store.version(m.version) for m in case.more]:
+        if x is None:
+            continue
+        parent = w.store.version(x.parent) if x.parent else None
+        rows = [r | {"name": _class_name(r)} for r in _diff(w, parent.assignment if parent else {}, x.assignment)
+                if _mine(w, me, r)]
+        if rows:
+            weeks.append({"week": x.week, "rows": rows})
+    if not weeks:
+        return None
+    rows = [r for wk in weeks for r in wk["rows"]]
+    cancelled = sum(r["after"] is None for r in rows)
+    added = sum(r["before"] is None for r in rows)
+    if len(rows) == 1:
+        r = rows[0]
+        title = f"Extra {r['name']}" if added else f"{r['name']} {'cancelled' if cancelled else 'moved'}"
+    elif cancelled == len(rows):
+        title = f"{len(rows)} classes cancelled"
+    elif added == len(rows):
+        title = f"{len(rows)} extra classes"
+    elif not cancelled and not added:
+        title = f"{len(rows)} classes moved"
+    else:
+        title = f"{len(rows)} classes changed"
+    why = re.search(r"because ([^.;]+)", case.notices.get(me, ""))
+    return {"title": title, "weeks": weeks, "reason": plain(why.group(1)) if why else None}
+
+
+def _first_sentence(text: str) -> str:
+    """The first sentence of a notice, without class codes: "Week 12: the Information Security practical is cancelled"."""
+    head = re.split(r"(?<=[a-z0-9)])\.\s", text.strip(), maxsplit=1)[0].rstrip(".")
+    return re.sub(r" \([A-Z]-[\w-]+\)", "", head)
+
+
 def _event_time(at: str) -> str:
     """Events are logged in local time; inbox items are compared in UTC."""
     return datetime.fromisoformat(at).astimezone(UTC).isoformat()
@@ -292,20 +349,18 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
                     "status": case.status.value if case else None, "request": case.request.raw_text if case else None,
                     "needs_you": needs_you, "unread": needs_you or seen.get(key, 0) < n, **more})
 
+    # only messages addressed to ``u``; the office follows other people's negotiations under All requests
     for i in w.inbox.items.values():
-        if i.to != me and me != COORDINATOR:
+        if i.to != me:
             continue
-        mine, n = i.to == me, 2 if i.reply else 1
+        n = 2 if i.reply else 1
         case = w.orch.cases.get(i.case_id) if i.case_id else None
         item = _inbox_item(w, i)
         choice = i.message.explanation_mode == "choice"
         add(f"msg:{i.id}", n, "negotiation", case,
-            ("Choose a time for your request" if choice else "A clash with your timetable") if mine else
-            (f"A time for {w.name_of(i.to)} to choose" if choice else f"Negotiation with {w.name_of(i.to)}"),
-            i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=mine and i.reply is None,
+            "Choose a time for your request" if choice else "A clash with your timetable",
+            i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=i.reply is None,
             message=item)
-        if not mine:
-            out[-1]["unread"] = False  # the office follows these; they are not addressed to it
 
     for case in w.orch.cases.values():
         ev = last.get(case.id)
@@ -317,11 +372,14 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         # someone else's request changed my timetable (or what I gave way for was withdrawn)
         if not own and me in case.notices and done is not None:
             withdrawn = done["kind"] == S.WITHDRAWN.value
-            add(f"change:{case.id}", done["n"], "change", case,
-                "A change you agreed to no longer applies" if withdrawn else "Your timetable has changed",
-                case.notices[me], _event_time(done["at"]),
-                sender=case.request.sender_id if withdrawn else done.get("approver") or COORDINATOR,
-                version=done.get("version"))
+            # students are told what changed for their section, not what a teacher asked for or why
+            student = u["role"] == Role.STUDENT.value
+            change = None if withdrawn else _my_change(w, me, case, done.get("version"))
+            title = ("A change you agreed to no longer applies" if withdrawn else change["title"] if change else
+                     _first_sentence(plain(case.notices[me])) if student else "Your timetable has changed")
+            add(f"change:{case.id}", done["n"], "change", case, title, case.notices[me], _event_time(done["at"]),
+                sender=case.request.sender_id if withdrawn and not student else done.get("approver") or COORDINATOR,
+                version=done.get("version"), change=change, **({"request": None} if student else {}))
         if own:
             status = case.status
             if status == S.PUBLISHED:
@@ -346,12 +404,8 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
             elif status in _REQUEST_TITLE and case.reply:
                 add(f"req:{case.id}", n, "request", case, _REQUEST_TITLE[status], case.reply, at,
                     sender=(case.decision or {}).get("by") or COORDINATOR, needs_you=status == S.CLARIFICATION)
-        # a refused request's reply says the coordinator has been informed: this is that notice
-        if me == COORDINATOR and not own and case.status == S.REFUSED:
-            add(f"refused:{case.id}", n, "alert", case, "A request was refused",
-                f"Stopped before it reached the timetable: {case.parse.refusal}." if case.parse and case.parse.refusal
-                else "Stopped before it reached the timetable.", at, sender=case.request.sender_id,
-                **({"action": "reply"} if case.handled is None else {}))  # the office may still answer it
+        report = case.request.role == Role.STUDENT and case.status in (S.FORWARDED, S.REFUSED) and (
+            case.status == S.FORWARDED or (case.parse is not None and case.parse.refusal == STUDENTS_REPORT))
         # waiting on me
         if me == COORDINATOR and case.status == S.AWAITING_APPROVAL:
             add(f"approve:{case.id}", n, "action", case, "A change is waiting for your approval", case.request.raw_text,
@@ -359,9 +413,15 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         if case.status == S.ESCALATED and decides(u, case):
             add(f"decide:{case.id}", n, "action", case, "Escalated to you for a decision", case.request.raw_text, at,
                 sender=case.request.sender_id, needs_you=True, action="decide")
-        if handles(u, case):
-            add(f"forward:{case.id}", n, "action", case, "A message passed to you for a reply", case.request.raw_text,
-                at, sender=case.request.sender_id, needs_you=True, action="reply")
+        # a message for the office to answer or act on (forwarded to it, or refused): one item, the same before
+        # and after it is answered, so the office keeps it open while it answers and sees the answer after
+        if me == COORDINATOR and w.orch.office_answers(case) and (handles(u, case) or (not own and case.handled)):
+            waiting = handles(u, case)
+            title = ("A report from a class representative" if report else
+                     "A request was refused" if case.status == S.REFUSED else "A message passed to you for a reply")
+            add(f"forward:{case.id}", n, "alert" if case.status == S.REFUSED and not report and not waiting else "action",
+                case, title, case.request.raw_text, at, sender=case.request.sender_id, needs_you=waiting,
+                **({"action": "reply"} if waiting else {"answered": True}))
     return sorted(out, key=lambda x: x["at"], reverse=True)
 
 
@@ -813,9 +873,10 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                          "cancelled_days": sorted({semester.assignment[s].day for s in cancelled
                                                    if semester and s in semester.assignment},
                                                   key=inst.calendar.days.index)})
-        today = (date.today() - start).days // 7 + 1
+        today = w.today()
         return {"days": inst.calendar.days, "day_names": {d: FULL_DAY[d] for d in inst.calendar.days},
-                "current_week": min(max(today, 1), n_weeks), "weeks": rows}
+                "current_week": min(max((today - start).days // 7 + 1, 1), n_weeks), "weeks": rows,
+                "today": today.isoformat()}
 
     @app.post("/api/ask")
     def ask(body: AskBody, u: dict = Depends(user)) -> dict:
@@ -1152,9 +1213,19 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         cancelled = [{"session": sid, "session_name": session_name(w.instance, sid),
                       "faculty_name": w.name_of(w.instance.session_by_id[sid].faculty),
                       "groups": w.instance.session_by_id[sid].groups} for sid in v.cancelled]
+        # rooms closed in the week shown (a lab under maintenance, a room taken for exams), for the room views
+        shown = week if week is not None else v.week
+        closed = [{"room": c.scope.room, "room_name": w.instance.room_by_id[c.scope.room].name
+                   if c.scope.room in w.instance.room_by_id else c.scope.room,
+                   "days": c.when.days or None, "slots": c.when.slots or None, "request": c.source.request,
+                   "text": w.orch.cases[c.source.request].request.raw_text.strip()
+                   if c.source.request in w.orch.cases else None}
+                  for c in w.store.constraints() if shown is not None and c.hard and c.scope.room
+                  and c.type == ConstraintType.UNAVAILABLE and c.active_in(shown)
+                  and (c.when.weeks is None or shown in c.when.weeks)]
         return {"version": v.version, "week": v.week, "approved_by": v.approved_by, "parent": v.parent,
                 "entries": _timetable(w, v.assignment), "changed": sorted(changed), "weeks": weeks,
-                "cancelled": cancelled}
+                "cancelled": cancelled, "closed": closed}
 
     @app.get("/api/versions/diff")
     def diff(a: int, b: int, u: dict = Depends(view("history"))) -> list[dict]:

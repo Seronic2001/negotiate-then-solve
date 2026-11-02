@@ -161,7 +161,8 @@ function Change({ c, me }: { c: CaseDetail; me?: string }) {
   );
 }
 
-function Withdraw({ id, onDone }: { id: string; onDone: () => void }) {
+/** Take a request back (with a confirm): offered to its sender wherever the request is shown. */
+export function Withdraw({ id, onDone }: { id: string; onDone: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

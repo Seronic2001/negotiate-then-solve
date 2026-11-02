@@ -13,11 +13,18 @@ Safety properties enforced here, not by any model:
 * nothing is published except by ``approve`` from a listed approver;
 * message text never reaches a state-changing call: models return data,
   and only this code decides what happens with it;
-* replies and notices are built from constraints, never from private reasons.
+* replies and notices are built from constraints, never from private reasons;
+* requests are compiled and solved one at a time (``_solving``): each builds on the change before it,
+  and the solver reads every constraint in the store, so two requests solved together would each
+  carry the other's change (two absences in one week, each cancelling both teachers' classes).
 """
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import re
+import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -36,7 +43,7 @@ from agents.extra import (
     when_text,
 )
 from agents.ledger import ConcessionLedger
-from agents.negotiation import Message, Negotiator, Offer, Outcome, Responder
+from agents.negotiation import EscalationBrief, Message, Negotiator, Offer, Outcome, Responder
 from agents.policy import PolicyAgent, PolicyDecision, Verdict
 from agents.swap import (
     RuleSwapReader,
@@ -50,6 +57,7 @@ from agents.swap import (
 from core.graph import add_change, affected_stakeholders, build_graph, moved_sessions
 from core.instance import ExtraClass, Instance
 from core.schemas import (
+    DAYS,
     Constraint,
     ConstraintType,
     Placement,
@@ -57,6 +65,7 @@ from core.schemas import (
     RequestStatus,
     Role,
     Scope,
+    Source,
     Tier,
     TimetableVersion,
     When,
@@ -64,6 +73,7 @@ from core.schemas import (
 from core.semantics import PLACEMENT_TYPES, room_compatible, sessions_in_scope, violates
 from core.solver import TimetableSolver
 from core.validator import validate_constraint, verify_timetable
+from language.shorthand import expand as expand_shorthand
 from language.corpus import FULL_DAY, ExpectedAction, RequestType, hour
 from language.intents import (
     AnyOf,
@@ -89,8 +99,8 @@ from language.intents import ClubBooking as ClubIntent
 from language.intents import ExtraClass as ExtraIntent
 from language.intents import Fallback as FallbackIntent
 from language.intents import Swap as SwapIntent
-from language.parsing import ParseResult
-from language.rule_parser import RuleParser, injected, request_part
+from language.parsing import STUDENTS_REPORT, ParseResult
+from language.rule_parser import RuleParser, injected, request_part, surname
 
 from .store import EXTRA_PREFIX, Store
 
@@ -176,6 +186,20 @@ def closures(instance: Instance, constraints: Iterable[Constraint], week: int | 
     return out, sorted(instance.room_by_id[r].name for r in closed)
 
 
+# a teacher telling the system to change a named colleague's class: "move Dr. Iyer's ...", "cancel Dr. Rao's ..."
+ORDERS_COLLEAGUE = re.compile(r"\b(?:move|moving|cancel|cancelling|shift|reschedule|postpone|drop|put|give)\b"
+                              r"\s+(?:(?:the|please|kindly|also|just)\s+)*(?:dr|prof)\.?\s+([a-z]+)'s\b", re.IGNORECASE)
+
+
+def _one_at_a_time(method):
+    """Run ``method`` holding the orchestrator's ``_solving`` lock (see the module docstring)."""
+    @functools.wraps(method)
+    def run(self, *args, **kwargs):
+        with self._solving:
+            return method(self, *args, **kwargs)
+    return run
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -232,6 +256,9 @@ class Orchestrator:
         self.today = today or date.today
         self.club_desk = club_desk
         self.cases: dict[str, Case] = {}
+        # held from adding a request's constraints until its proposal is made (a negotiation included): the
+        # next request then builds on that proposal. Reading, the policy check and approval go on meanwhile.
+        self._solving = threading.RLock()
 
     # -- setup -------------------------------------------------------------------
 
@@ -247,6 +274,22 @@ class Orchestrator:
         v = self.store.propose_version(assignment, case_id="bootstrap")
         self.store.publish_version(v.version, approved_by)
         self.store.log(None, "bootstrap", version=v.version)
+
+    @contextlib.contextmanager
+    def released(self):
+        """While waiting for a person (a choice of times, a colleague's answer in a negotiation): let other
+        requests solve meanwhile instead of holding them up for the reply deadline. What this request then
+        proposes was built on the timetable as it stood, and is rebased onto the newer one when approved
+        (``approve``), as any proposal is."""
+        lock = self._solving
+        if not lock._is_owned():
+            yield
+            return
+        state = lock._release_save()
+        try:
+            yield
+        finally:
+            lock._acquire_restore(state)
 
     # -- the lifecycle ---------------------------------------------------------------
 
@@ -285,6 +328,65 @@ class Orchestrator:
                 case.routing["fast_path_deferred"] = True
         case.route = "system_two"
         return self._read(case, self.parser)
+
+    def _outside_hours(self, case: Case) -> str | None:
+        """A class asked for outside teaching hours or at the weekend ("Thursday at 6 pm", "Saturday
+        morning"): not a time the timetable has, but one the head of department may approve (P-HOURS). From
+        the message itself, so a reader that drops the time it cannot place ("6 pm") does not hide it; or from
+        the reader's own question about it ("No class starts at 6 pm"). Returned: what was asked for."""
+        if case.request.role not in (Role.FACULTY, Role.HOD, Role.GUEST_FACULTY):
+            return None
+        text = (case.read_as or case.request).raw_text
+        if said := _asks_outside_hours(text, self.instance):
+            return said
+        q = case.compiled.question if case.compiled is not None else None
+        out = case.compiled.output if case.compiled is not None else None
+        if not q or out is None or not (q.startswith("No class starts") or q.startswith("There are no classes on")):
+            return None
+        return q if any(i.kind in ("move", "extra_class", "only") for i in out.intents) else None
+
+    def _to_head(self, case: Case, asked: str) -> Case:
+        """Sent to the head of department, who may approve a class outside hours (P-HOURS): granted, the
+        timetable office arranges the room and tells the students (``decide``)."""
+        heads = [f.name for f in self.instance.faculty if f.role == Role.HOD]
+        brief = (f"{self._name(case.request.sender_id)} asks for a class outside teaching hours or at the weekend: "
+                 f"\"{case.request.raw_text.strip()}\". The timetable has no such time ({asked.split(';')[0]}), so it "
+                 "is held outside it if approved; the timetable office then books a room and tells the students.")
+        case.outcome = Outcome(status="escalated", step=0, escalation=EscalationBrief(
+            to="hod", reason="outside teaching hours", text=brief, rule="P-HOURS", asked=asked.split(";")[0],
+            grant=("The class is held at the time asked for, outside the weekly timetable: the timetable office books "
+                   "a room for it and tells the students. Nothing else in the timetable is re-solved.")))
+        case.routing["outside_hours"] = True
+        if case.status == S.CLASSIFIED:
+            self._advance(case, S.POLICY_CHECKED, verdict="needs_approval", cited=["P-HOURS"])
+        case.reply = ("Classes outside 9 am to 5 pm, or at the weekend, need the prior approval of the Head of "
+                      f"Department (\u00a72.1 Working hours). Your request has been sent to "
+                      f"{heads[0] if heads else 'the Head of Department'}; you will hear back here.")
+        self._advance(case, S.ESCALATED, to="hod", reason="outside teaching hours", cited=["P-HOURS"], brief=brief)
+        return case
+
+    def _name(self, person: str) -> str:
+        f = self.instance.faculty_by_id.get(person)
+        return f.name if f else person
+
+    def _closes_own_rooms(self, case: Case) -> bool:
+        """A room closure ("Lab 2 is unavailable in week 11", "Room 103 is needed for exams") from the exam cell
+        or the lab in-charge, the people the rules make responsible for room availability."""
+        cons = case.parse.constraints if case.parse else []
+        return (case.request.role in (Role.EXAM_CELL, Role.LAB_INCHARGE) and bool(cons)
+                and all(c.scope.room and c.type in (ConstraintType.UNAVAILABLE, ConstraintType.AVOID) for c in cons))
+
+    def _where_now(self, case: Case) -> list[tuple[str, int]]:
+        """(day, clock hour) of each class the reading's constraints pick out, in the published timetable."""
+        base = self.store.current_version()
+        if base is None or case.parse is None:
+            return []
+        out = []
+        for c in case.parse.constraints or []:
+            for sid in [c.scope.session, *(c.sessions or [])]:
+                if sid and (p := base.assignment.get(sid)) is not None:
+                    out.append((p.day, int(hour(p.slot).split()[0]) % 12 + (12 if hour(p.slot).endswith("pm") else 0)))
+        return out
 
     def _room_report(self, case: Case) -> str | None:
         """The rooms a refused request was only about ("Room 101"), when its sender may not change a room's
@@ -350,6 +452,10 @@ class Orchestrator:
             if rest is None:
                 return self._refuse_unread(case)
             case.read_as = request.model_copy(update={"raw_text": rest})
+        if form is None and (spelled := expand_shorthand(self.instance, (case.read_as or request).raw_text)):
+            # "pls shift my DBMS lec": read as "please shift my Database Systems lecture"
+            case.read_as = (case.read_as or request).model_copy(update={"raw_text": spelled})
+            self.store.log(case.id, "spelled_out", text=spelled)
         t = time.perf_counter()
         case.parse = self._parse(case)
         case.timings["parse"] = time.perf_counter() - t
@@ -357,7 +463,7 @@ class Orchestrator:
         if out is not None and out.action == "compile":
             case.understood = [say(self.instance, i, request.sender_id) for i in out.intents]
             if form is None:
-                case.unused = unaccounted((case.read_as or request).raw_text, out)
+                case.unused = unaccounted((case.read_as or request).raw_text, out, self._where_now(case))
                 if case.unused:
                     self.store.log(case.id, "unused", notes=case.unused)
         case.routing["reader"] = self._reader(case)
@@ -365,10 +471,18 @@ class Orchestrator:
             case.routing["injection"] = True
         self._advance(case, S.CLASSIFIED, route=case.route, action=case.parse.action.value,
                       routing=case.routing, seconds=round(case.timings["parse"], 3))
+        if self._class_rep_report(case):
+            return self._report(case)
+        if (colleague := self._orders_colleague_class(case)) is not None:
+            return self._refuse_colleague(case, colleague)
+        if (asked := self._outside_hours(case)) is not None:
+            return self._to_head(case, asked)
         if (parts := self._parts(case)) is not None:
             return self._split(case, parts)
         action = case.parse.action
 
+        if case.form is None and (amended := self._amend(case)) is not None:
+            return amended
         if action == ExpectedAction.WITHDRAW:
             return self._withdraw_by_message(case)
         if case.intents(ClubIntent):
@@ -411,6 +525,12 @@ class Orchestrator:
             t = time.perf_counter()
             case.policy = self.policy.review(request.raw_text, case.parse)
             case.timings["policy"] = time.perf_counter() - t
+            if case.policy.verdict == Verdict.FORBIDDEN and self._closes_own_rooms(case):
+                # the exam cell or lab in-charge saying a room is taken: theirs to say (P-AUTHORITY); a reading of
+                # the rules that forbids it ("week 8 is for exams") is the check misreading what is asked
+                case.policy.overruled = (f"room availability is reported by the {request.role.value.replace('_', ' ')}"
+                                         f" (P-AUTHORITY), not decided by the rules: {case.policy.explanation}")
+                case.policy.verdict = Verdict.ALLOWED
         self._advance(case, S.POLICY_CHECKED,
                       verdict=case.policy.verdict.value if case.policy else "not_checked")
         if action == ExpectedAction.COMPILE and (passed := self._passed(case.parse.constraints)):
@@ -433,13 +553,14 @@ class Orchestrator:
             self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
             return case
 
-        case.constraints = (case.parse.constraints if case.compiled is not None else
-                            self._on_named_day(case, case.parse.constraints))
-        case.superseded = self._supersede(case)
-        self.store.add_constraints(case.constraints, request_id=case.id)
-        self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
-                      obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
-        return self._solve(case)
+        with self._solving:
+            case.constraints = (case.parse.constraints if case.compiled is not None else
+                                self._on_named_day(case, case.parse.constraints))
+            case.superseded = self._supersede(case)
+            self.store.add_constraints(case.constraints, request_id=case.id)
+            self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
+                          obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
+            return self._solve(case)
 
     def _passed(self, constraints: Iterable[Constraint]) -> str | None:
         """The question to ask when a request names a week that is over (the form refuses the same)."""
@@ -589,22 +710,46 @@ class Orchestrator:
         if not agreed:
             who = self.instance.faculty_by_id[plan.counterpart].name
             why = "did not reply in time" if reply.decision == "no_reply" else "did not agree"
-            case.reply = f"{who} {why}, so the swap was not made. A swap needs the consent of both of you."
+            case.reply = (f"{who} {why}, so the swap was not made. A swap needs the consent of both of you."
+                          + self._instead_of_swap(plan))
             self._advance(case, S.DENIED, reason=f"swap declined by {plan.counterpart}", cited=["P-SWAP"])
             return case
 
-        case.constraints = pins
-        superseded = self._supersede(case)
-        self.store.add_constraints(case.constraints, request_id=case.id)
-        self._advance(case, S.COMPILED, constraints=[c.id for c in pins], superseded=superseded,
-                      consent=plan.counterpart)
-        return self._solve(case)
+        with self._solving:
+            case.constraints = pins
+            superseded = self._supersede(case)
+            self.store.add_constraints(case.constraints, request_id=case.id)
+            self._advance(case, S.COMPILED, constraints=[c.id for c in pins], superseded=superseded,
+                          consent=plan.counterpart)
+            return self._solve(case)
+
+    def _instead_of_swap(self, plan) -> str:
+        """After a declined swap: the free hours the sender's class could move to on its own in that week, so
+        nobody else has to agree (none listed when the week has none, or the swap was for no week)."""
+        week = plan.weeks[0] if plan.weeks else None
+        if week is None:
+            return ""
+        session = self.instance.session_by_id.get(plan.mine)
+        base = self._tip(week, follow_semester=False)
+        if session is None or base is None:
+            return ""
+        cancelled, _ = self._cancelled(week)
+        free = free_placements(self.instance, session, week, _regular(base.assignment), self.store.constraints(),
+                               self.store.extras(week), skip=cancelled)
+        free = [p for p in free if (p.day, p.slot) != (plan.mine_at.day, plan.mine_at.slot)][:3]
+        if not free:
+            return ""
+        times = "; ".join(placement_text(self.instance, p) for p in free)
+        return (f" Instead, {session_name(self.instance, plan.mine)} could move on its own in week {week}, with "
+                f"nobody else's class changing: {times}. Ask to move it to one of these if that suits you.")
 
     # -- cancellations and withdrawals in a message (intent parsers) -------------------------
 
     def _cancel(self, case: Case) -> Case:
-        """A class not held in some weeks: the coordinator arranges it (and the make-up), so the request
-        goes to them with the class and weeks resolved, or back to the sender when those are unclear."""
+        """A class not held in some weeks. Without make-up classes (the form's box left empty) it is done
+        like an absence: the class is left out of those weeks' timetables, and the change waits for the
+        office's approval like any other. With make-up classes asked for, the coordinator arranges them, so
+        the request goes to them with the class and weeks resolved. Unclear: back to the sender."""
         c = case.compiled
         case.route += "+cancel"
         if c.question is not None:
@@ -614,6 +759,19 @@ class Orchestrator:
             return case
         base = self.store.current_version()
         placed = base.assignment if base else {}
+        if case.request.makeup is False and c.cancels and all(x.weeks and x.session in placed for x in c.cancels):
+            n = case.id.split("-")[-1]
+            cons = [Constraint(id=f"C-{n}-{i}", type=ConstraintType.UNAVAILABLE, hard=True,
+                               tier=Tier.VERIFIED_UNAVAILABILITY, owner=case.request.sender_id,
+                               scope=Scope(session=x.session), when=When(weeks=list(x.weeks)),
+                               source=Source(request=case.id))
+                    for i, x in enumerate(c.cancels, 1)]
+            self._advance(case, S.POLICY_CHECKED, verdict="not_checked")
+            with self._solving:
+                case.constraints = cons
+                self.store.add_constraints(cons, request_id=case.id)
+                self._advance(case, S.COMPILED, constraints=[k.id for k in cons], obligations=[], superseded=[])
+                return self._solve(case)
         what = "; ".join(
             f"{session_name(self.instance, x.session)}"
             + (f" on {placement_text(self.instance, placed[x.session])}" if x.session in placed else "")
@@ -689,6 +847,47 @@ class Orchestrator:
         self._advance(case, S.ANSWERED, clash=[])
         return case
 
+    def _amend(self, case: Case) -> Case | None:
+        """"Actually, Wednesday mornings are fine now; only Monday mornings need to stay free": a change to
+        the sender's earlier wish, not a new one and not a withdrawal of all of it. The days the message lets
+        go of ("Wednesday ... fine", "not Wednesday", "no longer") are taken out of their latest wish that
+        names them, or the days it keeps ("only Monday") are put in their place; the earlier wish is
+        replaced by the narrower one, which is solved like any request. None: not such a message."""
+        text = (case.read_as or case.request).raw_text
+        released, kept = _amended_days(text)
+        if not released or not _AMENDS.search(text):  # "to Thursday, not Wednesday" is a new request
+            return None
+        sender = case.request.sender_id
+        # the wish that holds a day being let go of ("Wednesday ... fine"): not any later constraint of theirs
+        # that merely names a kept day (a placement agreed in a negotiation, "Monday at 2 pm")
+        mine = [c for c in self.store.constraints() if c.owner == sender and c.when.days
+                and set(c.when.days) & released and c.source.rule is None and not c.members
+                and c.type in (ConstraintType.AVOID, ConstraintType.PREFER, ConstraintType.UNAVAILABLE)]
+        if not mine:
+            return None
+        old = max(mine, key=lambda c: c.id)
+        days = sorted(kept & set(DAYS) or set(old.when.days) - released, key=DAYS.index)
+        if not days or days == list(old.when.days):
+            return None  # nothing left (a withdrawal), or nothing changes
+        new = old.model_copy(deep=True, update={"id": f"C-{case.id.split('-')[-1]}-1",
+                                                "source": old.source.model_copy(update={"request": case.id})})
+        new.when = old.when.model_copy(update={"days": days})
+        case.route += "+amend"
+        case.unused = []
+        self._advance(case, S.POLICY_CHECKED, verdict="not_checked", amends=old.source.request)
+        with self._solving:
+            case.constraints = [new]
+            self.store.set_active(old.id, False)
+            case.superseded = [old.id]
+            self.store.add_constraints(case.constraints, request_id=case.id)
+            self._advance(case, S.COMPILED, constraints=[new.id], obligations=[], superseded=case.superseded)
+            case = self._solve(case)
+        was = ", ".join(FULL_DAY.get(d, d) for d in old.when.days)
+        now = ", ".join(FULL_DAY.get(d, d) for d in days)
+        case.reply = (f"Your earlier request {old.source.request} now covers {now} only (it was {was}). "
+                      f"{case.reply}").strip()
+        return case
+
     def _withdraw_by_message(self, case: Case) -> Case:
         """"Please ignore my earlier request": the sender's one open request is taken back. With several
         open, nothing is withdrawn on a guess: they are listed for the sender to choose."""
@@ -758,6 +957,7 @@ class Orchestrator:
             return case
         return self._place_extra(case)
 
+    @_one_at_a_time
     def _place_extra(self, case: Case) -> Case:
         """Find a time in the week when the teacher, the section and a room are free, and propose the
         week's timetable with the extra class in it. Nothing else moves, so there is nothing to negotiate."""
@@ -1023,13 +1223,19 @@ class Orchestrator:
                        "coordinator's approval.")
         others = len(set(moved) - cancelled)
         also = f"; {others} other {'class moves' if others == 1 else 'classes move'}" if others else ""
+        if "+cancel" in case.route and (mine := self._absent(week, only=case.id)):
+            names = " and ".join(session_name(self.instance, sid) for sid in sorted(mine))
+            return (f"Recorded: {names} {'is' if len(mine) == 1 else 'are'} cancelled in {_weeks_text(weeks)}, with "
+                    "no make-up class, as you asked" + also + ". Your sections are told once the timetable office "
+                    "approves the change.")
         if mine := self._absent(week, only=case.id):
             n = len(mine)
             return (f"Recorded: you are away in {_weeks_text(weeks)}. Your {n} {'class' if n == 1 else 'classes'} "
                     f"{'is' if n == 1 else 'are'} cancelled {'that week' if len(weeks) == 1 else 'each of those weeks'}"
                     ", with no make-up class, as you asked"
                     + also + ". Your sections are told once the timetable office approves the change.")
-        if cancelled and closed:
+        closes = any(c.type == ConstraintType.UNAVAILABLE and c.scope.room for c in case.constraints)
+        if cancelled and closed and closes:  # this request is the closure (others in its week are not)
             return (f"Recorded: {' and '.join(closed)} closed in week {week}. "
                     f"{len(cancelled)} {'class has' if len(cancelled) == 1 else 'classes have'} no other room "
                     "that week and will be cancelled, with a make-up owed"
@@ -1147,8 +1353,8 @@ class Orchestrator:
 
     def cannot_grant(self, case: Case) -> str | None:
         """Why granting this escalated request would not help, or None when it can be granted."""
-        if case.extra is not None:
-            return None  # placed when granted
+        if case.extra is not None or case.routing.get("outside_hours"):
+            return None  # placed when granted; or held outside the timetable, arranged by the office
         if case.parse is None or not case.parse.constraints:
             return "this request has nothing to put into the timetable"
         if case.outcome is not None and not self.overrides(case):
@@ -1156,6 +1362,7 @@ class Orchestrator:
                     "decline it, or ask the sender for a narrower request")
         return None
 
+    @_one_at_a_time
     def decide(self, case_id: str, decider: str, grant: bool, note: str = "", name: str | None = None) -> Case:
         """Grant (the request goes back through the solver with its conflicts set aside, and then to
         approval like any change) or decline (the sender is told, with the note)."""
@@ -1167,6 +1374,14 @@ class Orchestrator:
             case.decision = {"by": decider, "granted": False, "note": note}
             case.reply = f"Your request was declined by {name}" + (f": {note}" if note else ".")
             self._advance(case, S.DENIED, decided_by=decider, note=note)
+            return case
+        if case.routing.get("outside_hours"):  # held outside the timetable: the office arranges it
+            case.decision = {"by": decider, "granted": True, "note": note, "set_aside": []}
+            self._advance(case, S.COMPILED, decided_by=decider, granted=True, note=note, set_aside=[])
+            case.reply = (f"Approved by {name}: the class may be held outside regular hours as you asked"
+                          + (f" ({note})" if note else "") + ". It is outside the weekly timetable, so the timetable "
+                          "office books the room and tells your students.")
+            self._advance(case, S.ANSWERED, outside_hours=True, decided_by=decider)
             return case
         if why := self.cannot_grant(case):
             raise ValueError(why)
@@ -1194,6 +1409,54 @@ class Orchestrator:
             for c in set_aside:
                 self.store.set_active(c.id, True)
             case.decision = None
+        return case
+
+    def _orders_colleague_class(self, case: Case) -> str | None:
+        """The colleague whose class a teacher tells the system to change ("Move Dr. Iyer's Friday lecture",
+        "Cancel Dr. Rao's lab"), whatever the reader made of it: a reading that drops the name would change
+        the sender's own class instead, and one that keeps it changes a class the sender has no authority
+        over. A swap is asked of the colleague, and the head of department has the department's classes, so
+        neither is stopped here."""
+        if case.request.role not in (Role.FACULTY, Role.GUEST_FACULTY) or case.intents(SwapIntent):
+            return None
+        for m in ORDERS_COLLEAGUE.finditer(case.request.raw_text):
+            name = m.group(1).lower()
+            for f in self.instance.faculty:
+                if f.id != case.request.sender_id and surname(f.name).lower() == name:
+                    return f.id
+        return None
+
+    def _refuse_colleague(self, case: Case, colleague: str) -> Case:
+        why = "faculty can only change their own classes"
+        case.parse.refusal = why
+        case.route += "+authority"
+        case.reply = (f"Your request was not processed: {why}. To change {self.instance.faculty_by_id[colleague].name}'s "
+                      "class, ask them for a swap, or ask the timetable office. The timetable coordinator has been informed.")
+        self._advance(case, S.REFUSED, reason=why, colleague=colleague)
+        return case
+
+    def _class_rep_report(self, case: Case) -> bool:
+        """A class representative's message about the timetable is a report for the timetable office, not a
+        request: the office looks into it and, if a change is needed, makes it as its own request (which asks
+        the teacher concerned, and goes to the head of department when they disagree). So it is passed on
+        whole, never compiled or refused for want of authority. Questions are still answered, club bookings
+        still go to the club desk, a clash the reader found is still forwarded with the clash (``_clash``),
+        and a refusal for any other reason (an injection) stands."""
+        if case.request.role != Role.STUDENT or case.intents(ClubIntent):
+            return False
+        action = case.parse.action
+        if action in (ExpectedAction.ANSWER, ExpectedAction.OUT_OF_SCOPE):
+            return False
+        if action == ExpectedAction.INVESTIGATE and case.compiled is not None and case.compiled.clashes:
+            return False
+        return case.parse.refusal in (None, STUDENTS_REPORT)
+
+    def _report(self, case: Case) -> Case:
+        case.route += "+report"
+        case.reply = ("Thank you. Your message has been passed to the timetable office, which will look into it "
+                      "and, if a change is needed, work it out with the teacher or the head of department. "
+                      "You will hear back here.")
+        self._advance(case, S.FORWARDED, to="coordinator", report="class_rep")
         return case
 
     def office_answers(self, case: Case) -> bool:
@@ -1329,8 +1592,12 @@ class Orchestrator:
         for c in self.store.constraints():
             case = self.cases.get(c.source.request or "")
             if (case is None or case.request.makeup is not False or (only and case.id != only)
-                    or c.type != ConstraintType.UNAVAILABLE or not c.hard or not c.scope.faculty
+                    or c.type != ConstraintType.UNAVAILABLE or not c.hard or not (c.scope.faculty or c.scope.session)
                     or not c.when.weeks or week not in c.when.weeks):
+                continue
+            if c.scope.session:  # one class cancelled ("cancel my practical in week 12")
+                if c.scope.session in placed:
+                    out.add(c.scope.session)
                 continue
             for s in self.instance.sessions:
                 p = placed.get(s.id)
@@ -1373,7 +1640,7 @@ class Orchestrator:
         case.notices = self._notices(g, f"V{v.version}", regular, v)
         for person, text in self._extra_notices(v, moved).items():
             case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
-        for person, text in self._cancel_notices(v).items():
+        for person, text in self._cancel_notices(v, before).items():
             case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
         for i, w in enumerate(case.more):  # the request's further weeks, each on its week's live timetable
             live = self.store.current_version(w.week) or self.store.current_version()
@@ -1385,7 +1652,7 @@ class Orchestrator:
             gw = build_graph(self.instance)
             add_change(gw, f"V{published.version}", moved_w)
             for part in (self._notices(gw, f"V{published.version}", moved_w, published),
-                         self._cancel_notices(published)):
+                         self._cancel_notices(published, live)):
                 for person, text in part.items():
                     case.notices[person] = f"{case.notices[person]} {text}" if person in case.notices else text
         self._advance(case, S.PUBLISHED, version=v.version, approver=approver, notified=sorted(case.notices),
@@ -1394,6 +1661,7 @@ class Orchestrator:
             self.carry_into_weeks(v, approver)
         return v
 
+    @_one_at_a_time
     def carry_into_weeks(self, v: TimetableVersion, approver: str) -> list[TimetableVersion]:
         """A week with its own repair (an absence in week 7) shows that repair, not the semester
         timetable; a semester change published later must reach it too. Each such week is solved
@@ -1413,6 +1681,7 @@ class Orchestrator:
             self.store.log(None, "carried", version=v.version, week=week, into=w.version)
         return out
 
+    @_one_at_a_time
     def _rebase(self, case: Case, base: TimetableVersion, stale: TimetableVersion | None = None) -> TimetableVersion:
         """Another change was published after this proposal (``stale``, default the case's) was made.
         Publishing it as it is would put back the timetable it was built on and undo that change, so solve
@@ -1454,9 +1723,12 @@ class Orchestrator:
                     out[person] = f"{out[person]} {text}" if person in out else text
         return out
 
-    def _cancel_notices(self, v: TimetableVersion) -> dict[str, str]:
-        """Teachers and sections whose class is not held in ``v``'s week, and why."""
-        if not v.cancelled:
+    def _cancel_notices(self, v: TimetableVersion, before: TimetableVersion | None = None) -> dict[str, str]:
+        """Teachers and sections whose class ``v`` newly cancels in its week, and why: a class cancelled
+        already in ``before`` (the week's timetable ``v`` replaces) was told then, not again."""
+        told = set(before.cancelled or []) if before is not None and before.week == v.week else set()
+        cancelled = [sid for sid in v.cancelled or [] if sid not in told]
+        if not cancelled:
             return {}
         _, closed = self._cancelled(v.week)
         where = " and ".join(closed) or "its room"
@@ -1464,7 +1736,7 @@ class Orchestrator:
         why = {"closed": f"because {where} is closed and no other room has what it needs. A make-up class is owed.",
                "away": "because the teacher is away then. No make-up class was asked for."}
         out: dict[str, dict[str, list[str]]] = {}
-        for sid in v.cancelled:
+        for sid in cancelled:
             s = self.instance.session_by_id[sid]
             for person in [s.faculty, *(f"ST-{g}" for g in s.groups)]:
                 out.setdefault(person, {}).setdefault("away" if sid in away else "closed", []).append(
@@ -1537,6 +1809,55 @@ def _plan_view(plan: SwapPlan) -> dict:
 def explain_constraint(instance: Instance, c: Constraint) -> str:
     """What the coordinator sees for a constraint (no private reasons)."""
     return describe(instance, c)
+
+
+_DAY_WORD = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday)?s?\b", re.IGNORECASE)
+_RELEASE = re.compile(r"\b(?:is|are)\s+(?:now\s+)?(?:fine|ok|okay|alright|free to use)\b|\bno longer\b|\bnot needed\b|"
+                      r"\bdon'?t need\b|\bcan be used\b|\bnot\s+(?:on\s+)?(?=(?:mon|tue|wed|thu|fri))", re.IGNORECASE)
+_AMENDS = re.compile(r"\b(?:actually|earlier|previous|any ?more|now|no longer|change my|update my)\b", re.IGNORECASE)
+_KEEP = re.compile(r"\b(?:only|just|still)\b", re.IGNORECASE)
+_DAY_OF = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat"}
+
+
+_PLACES = re.compile(r"\b(?:move|moved|shift|shifted|reschedule|rescheduled|schedule|scheduled|hold|held|put|have|"
+                     r"take|teach|extra|make-?up|be on|be at)\b", re.IGNORECASE)
+_NOT = re.compile(r"\b(?:no|not|never|can'?t|cannot|avoid|free|unavailable|away|without|don'?t)\b", re.IGNORECASE)
+_AT_CLOCK = re.compile(r"\b(?:at|to|from|for|by)\s+(\d{1,2})(?::(\d\d))?\s*(am|pm)\b", re.IGNORECASE)
+_WEEKEND = re.compile(r"\b(?:to|on|for)\s+(?:a\s+|the\s+)?(saturday|sunday)s?\b", re.IGNORECASE)
+
+
+def _asks_outside_hours(text: str, instance: Instance) -> str | None:
+    """"... moved to Thursday at 6 pm", "... held on Saturday morning": a class placed at a time the timetable
+    does not have. Only in a sentence that places a class and does not rule a time out ("no classes on
+    Saturday" is a wish about the weekend, not a request to teach then)."""
+    cal = instance.calendar
+    for sentence in re.split(r"(?<=[.!?;])\s+", text):
+        if not _PLACES.search(sentence) or _NOT.search(sentence):
+            continue
+        for m in _AT_CLOCK.finditer(sentence):
+            h = int(m[1]) % 12 + (12 if m[3].lower() == "pm" else 0)
+            if h not in {int(hour(q).split()[0]) % 12 + (12 if hour(q).endswith("pm") else 0)
+                         for q in range(cal.slots_per_day)}:
+                return m[0].split(None, 1)[1]
+        if (m := _WEEKEND.search(sentence)) and m[1][:3].title() not in cal.days:
+            return m[1].title()
+    return None
+
+
+def _amended_days(text: str) -> tuple[set[str], set[str]]:
+    """The days a message lets go of and the days it keeps, clause by clause: "Wednesday mornings are fine
+    now" lets go of Wednesday; "only Monday mornings need to stay free" keeps Monday; "not Wednesday" lets go."""
+    released: set[str] = set()
+    kept: set[str] = set()
+    for clause in re.split(r"[;.,!?]|\bbut\b|\band\s+(?=only\b)", text, flags=re.IGNORECASE):
+        for m in re.finditer(r"\bnot\s+(?:on\s+)?" + _DAY_WORD.pattern, clause, flags=re.IGNORECASE):
+            released.add(_DAY_OF[m[1][:3].lower()])
+        days = {_DAY_OF[m[1][:3].lower()] for m in _DAY_WORD.finditer(clause)} - released
+        if _RELEASE.search(clause):
+            released |= days
+        elif _KEEP.search(clause):
+            kept |= days
+    return released, kept - released
 
 
 def _short(text: str, n: int = 60) -> str:

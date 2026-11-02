@@ -1,15 +1,19 @@
-import { Info } from "lucide-react";
+import { Info, PanelBottom, PanelRight } from "lucide-react";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ActionCard, ClassMenu, intent, sentence, type ActionKind, type Draft } from "../components/ClassActions";
 import { ConversationPane, useConversation } from "../components/ConversationPane";
 import { ConversationSwitcher, useConversations } from "../components/Conversations";
+import { DepartmentStrip } from "../components/DepartmentStrip";
 import { DetailsDrawer } from "../components/DetailsDrawer";
+import { RoomsOverview } from "../components/RoomsOverview";
 import { TimetableGrid } from "../components/TimetableGrid";
 import { WeekStepper } from "../components/WeekStepper";
 import { Card, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
+import { ROOM_KEEPERS } from "../lib/meta";
 import type { AskAnswer, TimetableEntry } from "../lib/types";
 
 /** The request workspace, the same for every role: the week's timetable first (click a class to cancel, move
@@ -17,6 +21,13 @@ import type { AskAnswer, TimetableEntry } from "../lib/types";
  * what colleagues' requests asked of them, as conversations; and with none open, the full new-request
  * composer (examples, the week and days on the timetable, Undo). Faculty and class representatives have it
  * as their home (it replaces the Inbox for them); everyone else opens it as New request. */
+/** The day the department is on: the server's (the demo department stays on a fixed day), else the browser's. */
+function dayOf(cal: { today?: string } | null | undefined): Date {
+  const d = cal?.today ? new Date(`${cal.today}T00:00:00`) : new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export default function Home() {
   const { user } = useAuth();
   const teaching = ["faculty", "guest_faculty", "hod"].includes(user?.role ?? "");
@@ -24,32 +35,77 @@ export default function Home() {
 
   const { data: inst } = useApi(() => api.instance(), []);
   const { data: cal } = useApi(() => api.calendar(), []);
-  const [week, setWeek] = useState<number | null>(null); // null until the calendar is in
+  const [params, setParams] = useSearchParams();
+  // the week shown is kept in ?week= so a refresh stays on it; null until the calendar is in
+  const [week, setWeek] = useState<number | null>(() => Number(params.get("week")) || null);
+  useEffect(() => {
+    if (week === null || Number(params.get("week")) === week) return;
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        q.set("week", String(week));
+        return q;
+      },
+      { replace: true },
+    );
+  }, [week]); // eslint-disable-line react-hooks/exhaustive-deps
   // this person's classes, or every teacher's: someone with no classes of their own (the office, the lab
   // in-charge, the exam cell) starts on every class
-  const [scope, setScope] = useState<"mine" | "all">(teaching || group ? "mine" : "all");
+  // the lab in-charge and the exam cell look after rooms, so theirs opens on one room's week
+  const keeper = ROOM_KEEPERS.includes(user?.role as (typeof ROOM_KEEPERS)[number]);
+  // the rooms this person looks after: the lab in-charge the labs, everyone else every room
+  const myRooms = useMemo(() => {
+    const labs = (inst?.rooms ?? []).filter((r) => r.type === "lab");
+    return user?.role === "lab_incharge" && labs.length ? labs : inst?.rooms ?? [];
+  }, [inst, user]);
+  // ... and see all of theirs at once first ("rooms"), each room's week a click away
+  const [scope, setScope] = useState<"mine" | "all" | "room" | "rooms">(teaching || group ? "mine" : keeper ? "rooms" : "all");
+  const [room, setRoom] = useState<string | null>(null);
   useEffect(() => {
     if (!cal || week !== null) return;
     // at the weekend this week's classes are all over, so open on the next one (nothing can move into the past)
     const w = cal.weeks[cal.current_week - 1];
     const friday = w ? new Date(`${w.monday}T00:00:00`) : null;
     friday?.setDate(friday.getDate() + cal.days.length - 1);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = dayOf(cal);
     setWeek(friday && friday < today && cal.current_week < cal.weeks.length ? cal.current_week + 1 : cal.current_week);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cal]);
+  useEffect(() => {
+    if (!inst || room) return;
+    // the lab in-charge starts on the first lab; everyone else on the first room
+    setRoom(myRooms[0]?.id ?? null);
+  }, [inst]); // eslint-disable-line react-hooks/exhaustive-deps
   const { data: tt } = useApi(() => (week === null ? Promise.resolve(null) : api.timetable({ week })), [week], 5000);
   const shownWeek = week;
 
   const { convs, refresh } = useConversations();
-  const s = useConversation(convs, refresh, { autoOpen: false }); // opens on a new request
+  const s = useConversation(convs, refresh, { autoOpen: false, urlKey: "c" }); // opens on a new request, or the one in ?c=
   const [details, setDetails] = useState<string | null>(null); // the request whose details are open
+  // a layout on trial: the chat under the timetable, full width, instead of beside it (remembered per browser)
+  const [chatBelow, setChatBelow] = useState(() => {
+    try {
+      return localStorage.getItem("nts.home.chatBelow") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [composerAt, setComposerAt] = useState<HTMLDivElement | null>(null); // where the box goes when it is below
+  const flipChat = () =>
+    setChatBelow((v) => {
+      try {
+        localStorage.setItem("nts.home.chatBelow", v ? "0" : "1");
+      } catch {
+        /* just not remembered */
+      }
+      return !v;
+    });
 
   const mine = useMemo(
     () => (tt?.entries ?? []).filter((e) => (teaching ? e.faculty === user?.id : group ? e.groups.includes(group) : false)),
     [tt, teaching, group, user],
   );
+  const inRoom = useMemo(() => (tt?.entries ?? []).filter((e) => e.room === room), [tt, room]);
   // classes clicked on the grid: shown as chips in the composer and named in the message when it is sent
   const [picks, setPicks] = useState<TimetableEntry[]>([]);
   // outlined: the classes attached to the message being written, else those the open request moves
@@ -88,8 +144,7 @@ export default function Home() {
     if (!w || !cal) return false;
     const at = new Date(`${w.monday}T00:00:00`);
     at.setDate(at.getDate() + cal.days.indexOf(day));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = dayOf(cal);
     return at < today;
   };
   const weekOver = !!cal && cal.days.every(dayPassed);
@@ -133,7 +188,7 @@ export default function Home() {
   const dates = useMemo(() => {
     const w = shownWeek ? cal?.weeks[shownWeek - 1] : null;
     if (!w || !cal) return undefined;
-    const today = new Date().toDateString();
+    const today = dayOf(cal).toDateString();
     return Object.fromEntries(
       cal.days.map((d, i) => {
         const at = new Date(`${w.monday}T00:00:00`);
@@ -142,6 +197,9 @@ export default function Home() {
       }),
     );
   }, [cal, shownWeek]);
+  // rooms closed this week: all of this person's rooms, or the one room shown
+  const closedNow = (tt?.closed ?? []).filter((c) => (scope === "room" ? c.room === room : myRooms.some((r) => r.id === c.room)));
+  const roomClosed = (tt?.closed ?? []).find((c) => c.room === room && !c.days && !c.slots);
   const cancelled = (tt?.cancelled ?? []).filter((c) => mine.some((e) => e.session === c.session) || (group && c.groups.includes(group)));
 
   const dayName = (d: string) => inst?.day_names[d] ?? d;
@@ -171,6 +229,8 @@ export default function Home() {
     if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return toggle(e, ev);
     setMenu({ x: ev.clientX, y: ev.clientY, cls: e });
   };
+  // they report closures; they do not cancel, move or swap anyone's class, so classes only show their details
+  const pick = keeper ? undefined : pickClass;
   /** Leave a cancel, move or swap being put together: the Cancel button, Esc, or clicking its class again. */
   const stopDraft = () => {
     if (draft?.kind === "swap") setScope("mine");
@@ -216,22 +276,54 @@ export default function Home() {
   return (
     <div className="grid gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(300px,27%)]">
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {user?.role === "hod" && <DepartmentStrip />}
+        <div className="flex flex-wrap items-center gap-3">
           {cal ? (
-            <WeekStepper cal={cal} week={shownWeek} onChange={(w) => w !== null && setWeek(w)} compact />
+            <div className="mr-auto">
+              <WeekStepper cal={cal} week={shownWeek} onChange={(w) => w !== null && setWeek(w)} compact />
+            </div>
           ) : (
-            <Skeleton className="h-8 w-80" />
+            <Skeleton className="mr-auto h-8 w-80" />
           )}
           <select
             value={scope}
-            onChange={(e) => setScope(e.target.value as "mine" | "all")}
-            title="My timetable: your own classes. All classes: every teacher's classes in the department, for the same week."
+            onChange={(e) => setScope(e.target.value as "mine" | "all" | "room" | "rooms")}
+            title="My timetable: your own classes. All classes: every teacher's classes in the department, for the same week. By room: one room's week."
             className="h-8 w-40 rounded-md border border-line bg-panel px-2.5 text-[13px] outline-none hover:bg-panel-2 focus:border-brand/60"
           >
             {(teaching || group) && <option value="mine">My timetable</option>}
+            {keeper && <option value="rooms">{user?.role === "lab_incharge" ? "All labs" : "All rooms"}</option>}
             <option value="all">All classes</option>
+            <option value="room">By room</option>
           </select>
+          {scope === "room" && inst && (
+            <select
+              value={room ?? ""}
+              onChange={(e) => setRoom(e.target.value)}
+              aria-label="Room"
+              className="h-8 w-44 rounded-md border border-line bg-panel px-2.5 text-[13px] outline-none hover:bg-panel-2 focus:border-brand/60"
+            >
+              {myRooms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} · {r.type === "lab" ? "lab" : `${r.capacity} seats`}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
+        {closedNow.length > 0 && (keeper || scope === "room") && (
+          <p className="rounded-lg border border-bad/40 bg-bad/5 px-4 py-2.5 text-[13px]">
+            Closed in week {week}:{" "}
+            {closedNow.map((c, i) => (
+              <span key={`${c.room}-${i}`}>
+                {i > 0 && " · "}
+                <span className="font-medium">{c.room_name}</span>
+                {c.days ? ` (${c.days.join(", ")})` : " (all week)"}
+                {c.text && <span className="text-ink-3"> “{c.text}”</span>}
+              </span>
+            ))}
+          </p>
+        )}
         {cancelled.length > 0 && (
           <p className="rounded-lg border border-bad/40 bg-bad/5 px-4 py-2.5 text-[13px]">
             Not held this week: {cancelled.map((c) => c.session_name.replace(/^the /, "")).join(" · ")}
@@ -240,17 +332,27 @@ export default function Home() {
         <Card className="h-[560px] min-h-0 p-3 lg:h-auto lg:flex-1">
           {!inst || !tt ? (
             <Skeleton className="h-full" />
+          ) : scope === "rooms" ? (
+            <RoomsOverview instance={inst} rooms={myRooms} entries={tt.entries} closed={tt.closed ?? []} dates={dates} onOpen={(r) => { setRoom(r); setScope("room"); }} />
           ) : scope === "all" ? (
             <div className="h-full overflow-auto">
-              <TimetableGrid instance={inst} entries={tt.entries} changed={outlined} onPick={pickClass} dates={dates} ghosts={ghosts} slotState={slotState} onSlot={draft?.kind === "move" ? (day, slot) => setDraft({ ...draft, to: { day, slot } }) : undefined} dim={dim} />
+              <TimetableGrid instance={inst} entries={tt.entries} changed={outlined} onPick={pick} dates={dates} ghosts={ghosts} slotState={slotState} onSlot={draft?.kind === "move" ? (day, slot) => setDraft({ ...draft, to: { day, slot } }) : undefined} dim={dim} />
             </div>
+          ) : scope === "room" ? (
+            !inRoom.length ? (
+              <p className="px-3 py-16 text-center text-[13.5px] text-ink-3">
+                {roomClosed ? `${roomClosed.room_name} is closed in week ${week}, so nothing is booked in it.` : `Nothing is booked in this room in week ${week}.`}
+              </p>
+            ) : (
+              <TimetableGrid instance={inst} entries={inRoom} changed={outlined} onPick={pick} fill dates={dates} ghosts={ghosts} slotState={slotState} onSlot={draft?.kind === "move" ? (day, slot) => setDraft({ ...draft, to: { day, slot } }) : undefined} />
+            )
           ) : !mine.length ? (
             <p className="px-3 py-16 text-center text-[13.5px] text-ink-3">No classes in the published timetable for this week.</p>
           ) : (
-            <TimetableGrid instance={inst} entries={mine} changed={outlined} onPick={pickClass} fill dates={dates} ghosts={ghosts} slotState={slotState} onSlot={draft?.kind === "move" ? (day, slot) => setDraft({ ...draft, to: { day, slot } }) : undefined} />
+            <TimetableGrid instance={inst} entries={mine} changed={outlined} onPick={pick} fill dates={dates} ghosts={ghosts} slotState={slotState} onSlot={draft?.kind === "move" ? (day, slot) => setDraft({ ...draft, to: { day, slot } }) : undefined} />
           )}
         </Card>
-        <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-3">
+        {!(chatBelow && !draft && !shaded) && <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-3">
           {draft?.kind === "move"
             ? weekOver
               ? `Week ${week} is over, so there is no free slot left in it: go to a later week to pick the new time.`
@@ -261,7 +363,9 @@ export default function Home() {
                 ? "Fill in the details on the right."
                 : shaded
                   ? "Green: the free hours from your question."
-                  : "Click a class to cancel, reschedule or swap it."}
+                  : keeper
+                    ? "Report a closure in the box on the right: the classes in that room move to another room or time, and everyone affected is told."
+                    : "Click a class to cancel, reschedule or swap it."}
           {shaded && (
             <button onClick={() => setShade(null)} className="font-medium text-brand hover:underline">
               Clear
@@ -275,12 +379,21 @@ export default function Home() {
               </button>
             </>
           )}
-        </p>
+        </p>}
+        {chatBelow && !draft && <div ref={setComposerAt} />}
       </div>
 
       <Card className="flex h-[560px] min-h-0 flex-col lg:h-full">
         <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
           <ConversationSwitcher items={convs} selected={s.selected} onSelect={s.open} />
+          <button
+            onClick={flipChat}
+            title={chatBelow ? "Message box back in this panel" : "Message box under the timetable"}
+            aria-label={chatBelow ? "Message box back in this panel" : "Message box under the timetable"}
+            className="hidden size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink lg:grid"
+          >
+            {chatBelow ? <PanelRight size={16} /> : <PanelBottom size={16} />}
+          </button>
           {s.caseId && (
             <button
               onClick={() => setDetails(s.caseId)}
@@ -308,6 +421,7 @@ export default function Home() {
         ) : (
           <ConversationPane
             s={s}
+            composerIn={chatBelow ? composerAt : null}
             convs={convs}
             onAnswer={showAnswer}
             when={

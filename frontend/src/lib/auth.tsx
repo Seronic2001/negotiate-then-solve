@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const as = params.get("as");
     if (as) {
       params.delete("as");
+      params.delete("world"); // read by api.ts when it loads
       const rest = params.toString();
       window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
       api

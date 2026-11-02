@@ -1,6 +1,7 @@
 """The request lifecycle end to end, intake, and the portal API. Parsing is
 stubbed with the gold constraints, so these test everything around the LLM."""
 
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -98,10 +99,12 @@ def test_lifecycle_negotiates_and_waits_for_approval(world):
     assert b.notices and all("Timetable change" in t for t in b.notices.values())
 
 
-def test_students_refused_and_nothing_changes(world):
+def test_a_class_reps_change_goes_to_the_office_and_nothing_changes(world):
     sc, orch, store, _ = world
     c = orch.submit(req("R-3", "ST-G-A", "please cancel this class", Role.STUDENT))
-    assert c.status == S.REFUSED and "coordinator" in c.reply
+    assert c.status == S.FORWARDED and c.forwarded_to == "coordinator" and "timetable office" in c.reply
+    assert orch.office_answers(c) and c.route.endswith("+report")
+    assert [e for e in store.events("R-3") if e["kind"] == "forwarded"][0].get("report") == "class_rep"
     assert store.current_version().version == 1 and not store.constraints(active_only=False)[len(sc.base):]
 
 
@@ -326,6 +329,36 @@ def test_an_absence_cancels_the_classes_it_misses_unless_make_up_classes_are_ask
         assert "no make-up" in c.reply
         orch.approve("R-3", "C-TT")
         assert "No make-up class was asked for" in c.notices[who]
+
+
+def test_two_absences_read_at_once_each_cancel_only_their_own_classes(world):
+    """Two teachers away in week 7, their requests read together (a restart picks up both): solved one after
+    the other, each proposal cancels its teacher's classes alone, the second built on the first."""
+    sc, orch, store, owners = world
+    sessions = sc.instance.session_by_id
+    for rid in ("R-A", "R-B"):
+        orch.parser.outputs[f"AWAY-{rid}"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+            DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=owners[rid],
+                            days=[teaching_day(sc, store, owners[rid])], weeks=[7], justification="stated")])
+    both_read = threading.Barrier(2, timeout=30)
+    parse = orch.parser.parse
+
+    def read_together(request):
+        out = parse(request)
+        both_read.wait()
+        return out
+
+    orch.parser.parse = read_together
+    with ThreadPoolExecutor(2) as pool:
+        cases = list(pool.map(orch.submit, [req(f"R-{i}", owners[rid], f"AWAY-{rid}").model_copy(update={"makeup": False})
+                                            for i, rid in enumerate(("R-A", "R-B"), 3)]))
+    for c in cases:
+        assert c.status == S.AWAITING_APPROVAL
+        before = store.version(c.proposal.parent).assignment
+        changed = {s for s in set(before) | set(c.proposal.assignment) if before.get(s) != c.proposal.assignment.get(s)}
+        assert changed and {sessions[s].faculty for s in changed} == {c.request.sender_id}
+    first, second = sorted(cases, key=lambda c: c.proposal.version)
+    assert orch.builds_on(second) is first
 
 
 @pytest.mark.parametrize("makeup", [False, True])
@@ -755,3 +788,35 @@ def test_the_sender_and_the_approver_see_what_was_read_and_what_was_not_used(wor
     c = orch.submit(req("R-9", who, f"I'm at a conference that day in week 7; no classes on {other} either."))
     assert c.understood and c.understood[0].startswith("I am not available")
     assert len(c.unused) == 1 and other in c.unused[0] and "Not used from your message" in c.reply
+
+
+def test_a_teacher_telling_the_system_to_change_a_colleagues_class_is_refused(world):
+    """Whatever the reader made of it: here a reading of the sender's own class (the name dropped)."""
+    sc, orch, store, owners = world
+    me = owners["R-A"]
+    other = next(f for f in sc.instance.faculty if f.id != me)
+    surname = other.name.split()[-1]
+    c = orch.submit(req("R-9", me, f"CHANGE-A: Move Dr. {surname}'s lecture to another day."))
+    assert c.status == S.REFUSED and "own classes" in c.reply and c.route.endswith("+authority")
+    assert orch.office_answers(c)  # the office still sees it
+    assert not store.constraints(active_only=False)[len(sc.base):]
+    # one's own class into a colleague's old slot is not a colleague's class
+    assert orch.submit(req("R-10", me, f"CHANGE-A: Move my lecture to Dr. {surname}'s old slot.")).status != S.REFUSED
+
+
+def test_a_later_change_in_the_week_does_not_announce_earlier_cancellations_again(world):
+    """Two absences in week 7, approved one after the other: the second approval tells the second teacher
+    and their sections, not the first teacher again (their classes were cancelled, and they were told, before)."""
+    sc, orch, store, owners = world
+    first, second = owners["R-A"], owners["R-B"]
+    for rid, who in (("R-A", first), ("R-B", second)):
+        orch.parser.outputs[f"AWAY-{rid}"] = ParseOutput(request_type="unavailability", action="compile", constraints=[
+            DraftConstraint(type="unavailable", hard=True, scope_kind="faculty", scope_id=who,
+                            days=[teaching_day(sc, store, who)], weeks=[7], justification="stated")])
+    a = orch.submit(req("R-3", first, "AWAY-R-A").model_copy(update={"makeup": False}))
+    orch.approve(a.id, "C-TT")
+    assert "cancelled" in a.notices[first]
+    b = orch.submit(req("R-4", second, "AWAY-R-B").model_copy(update={"makeup": False}))
+    orch.approve(b.id, "C-TT")
+    assert "cancelled" in b.notices[second] and first not in b.notices
+    assert "closed" not in b.reply  # an absence is not reported as a room closure

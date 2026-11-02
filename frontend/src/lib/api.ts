@@ -33,21 +33,55 @@ import type {
 const USER_KEY = "nts.user";
 const WORLD_KEY = "nts.world";
 
-/** The world (department) this browser works in; sent with every request as X-World. */
-export function currentWorld(): string {
+/* Who is signed in, and in which world, is kept per tab (sessionStorage), so several tabs can be open
+ * side by side as different people. localStorage keeps the last choice, so a new tab starts there; a
+ * duplicated tab copies its tab's choice. */
+const memory: Record<string, string | null> = {};
+
+function tabGet(key: string): string | null {
+  if (key in memory) return memory[key];
   try {
-    return localStorage.getItem(WORLD_KEY) || "demo";
+    const v = sessionStorage.getItem(key) ?? localStorage.getItem(key);
+    if (v !== null) sessionStorage.setItem(key, v); // fixed for this tab from now on
+    return (memory[key] = v);
   } catch {
-    return "demo";
+    return null;
   }
 }
 
-export function setCurrentWorld(id: string): void {
-  try {
-    localStorage.setItem(WORLD_KEY, id);
-  } catch {
-    /* the choice lasts until reload */
+function tabSet(key: string, v: string | null): void {
+  memory[key] = v;
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      if (v) store().setItem(key, v);
+      else store().removeItem(key);
+    } catch {
+      /* storage unavailable: the choice lasts until reload */
+    }
   }
+}
+
+// ?world=<id> opens this tab in that world (with ?as=, see auth.tsx)
+try {
+  const w = new URLSearchParams(window.location.search).get("world");
+  if (w) tabSet(WORLD_KEY, w);
+} catch {
+  /* no URL to read */
+}
+
+/** The world (department) this tab works in; sent with every request as X-World. */
+export function currentWorld(): string {
+  return tabGet(WORLD_KEY) || "demo";
+}
+
+export function setCurrentWorld(id: string): void {
+  tabSet(WORLD_KEY, id);
+}
+
+/** A link that opens a new tab signed in as ``person``, in this tab's world. */
+export function tabLinkAs(person: string): string {
+  const q = new URLSearchParams({ as: person, world: currentWorld() });
+  return `${window.location.origin}/?${q}`;
 }
 
 export interface WorldRow {
@@ -74,20 +108,11 @@ export class ApiError extends Error {
 }
 
 export function currentUserId(): string | null {
-  try {
-    return localStorage.getItem(USER_KEY);
-  } catch {
-    return null;
-  }
+  return tabGet(USER_KEY);
 }
 
 export function setCurrentUserId(id: string | null): void {
-  try {
-    if (id) localStorage.setItem(USER_KEY, id);
-    else localStorage.removeItem(USER_KEY);
-  } catch {
-    /* storage unavailable: the session lasts until reload */
-  }
+  tabSet(USER_KEY, id);
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {

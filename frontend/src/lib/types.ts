@@ -93,6 +93,7 @@ export interface PlacementView {
   room: string;
   text: string;
   time: string;
+  room_name?: string;
 }
 
 export interface OfferView {
@@ -165,7 +166,20 @@ export interface FeedItem {
   unread: boolean;
   version?: number | null;
   action?: "approve" | "decide" | "reply";
+  /** A message the office has answered or acted on (its item stays, no longer waiting). */
+  answered?: boolean;
   message?: InboxItem;
+  /** A change to this person's timetable, class by class and week by week. */
+  change?: ChangeView | null;
+}
+
+/** What a published change did to one person's classes (the viewer's own, or their section's). */
+export interface ChangeView {
+  /** "Information Security practical cancelled", "2 classes moved". */
+  title: string;
+  weeks: { week: number | null; rows: (DiffRow & { name: string })[] }[];
+  /** Why, where anyone may know it ("Lab 3 is closed"); null when the reason is the sender's own. */
+  reason: string | null;
 }
 
 export interface DiffRow {
@@ -231,6 +245,10 @@ export interface CaseDetail extends CaseSummary {
       to_name: string;
       reason: string;
       text: string;
+      /** An exception to a rule (outside teaching hours): the rule, what was asked for, what granting does. */
+      rule: { id: string; number: string; title: string; text: string } | null;
+      asked: string;
+      grant: string;
       /** What granting would set aside (physical facts never are). */
       set_aside: ConstraintView[];
       /** Why granting would not help; null when it can be granted. */
@@ -334,6 +352,8 @@ export interface Timetable {
   changed: string[];
   weeks: number[]; // weeks with their own changes
   cancelled: { session: string; session_name: string; faculty_name: string; groups: string[] }[]; // not held this week
+  /** Rooms closed in this week (whole week when days/slots are null), with the request that closed them. */
+  closed?: { room: string; room_name: string; days: string[] | null; slots: number[] | null; request: string | null; text: string | null }[];
 }
 
 export interface WeeklyChange {
@@ -352,6 +372,8 @@ export interface CalendarView {
   days: string[];
   day_names: Record<string, string>;
   current_week: number;
+  /** The day the department is on (the demo department: a fixed day), as YYYY-MM-DD. */
+  today?: string;
   weeks: {
     week: number;
     monday: string;

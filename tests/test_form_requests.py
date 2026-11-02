@@ -79,3 +79,28 @@ def test_form_refuses_a_week_that_has_passed(client):
         r = c.post("/api/requests/form", headers=as_("F-101"),
                    json={"text": "x", "intent": {"kind": "cancel", "which": {"session": e["session"]}, "period": {"weeks": [week - 1]}}})
         assert r.status_code == 422 and "has passed" in r.json()["detail"]
+
+
+def test_demo_department_keeps_its_own_day(client, monkeypatch):
+    """The demo does not follow the real date: it stays on the Monday of DEMO_WEEK, so the weeks its
+    history and examples name (6 onwards) are never "passed", whenever the demo is given."""
+    from datetime import date, timedelta
+
+    from web.world import DEMO_WEEK
+
+    c, world = client
+    monkeypatch.delenv("NTS_DEMO_WEEK", raising=False)
+    cal = c.get("/api/calendar", headers=as_("F-101")).json()
+    assert cal["current_week"] == DEMO_WEEK
+    monday = date.fromisoformat(cal["weeks"][DEMO_WEEK - 1]["monday"])
+    assert cal["today"] == monday.isoformat() and world.today() == monday
+    assert world.now().date() == monday and world.now().hour == 8
+    monkeypatch.setenv("NTS_DEMO_WEEK", "9")
+    assert world.current_week() == 9 and world.today() == monday + timedelta(weeks=4)
+    monkeypatch.setenv("NTS_DEMO_WEEK", "5")
+    _, e = own_class(c, "F-101", 7)
+    r = c.post("/api/requests/form", headers=as_("F-101"),
+               json={"text": "x", "intent": {"kind": "cancel", "which": {"session": e["session"]}, "period": {"weeks": [7]}}})
+    assert r.status_code == 200, r.text
+    d = wait_for(c, r.json()["id"], DONE)
+    assert "has passed" not in (d.get("reply") or "")

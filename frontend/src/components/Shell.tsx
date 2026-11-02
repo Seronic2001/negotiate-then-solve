@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  FileUp,
   Hammer,
   FlaskConical,
   Home,
@@ -27,13 +26,14 @@ import {
   Waypoints,
   X,
   type LucideIcon,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, tabLinkAs } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi, useHotkey } from "../lib/hooks";
-import { ROLE_LABEL, STATUS, TIMETABLE_HOME } from "../lib/meta";
+import { PLAIN_STATUS, ROLE_LABEL, STATUS, TIMETABLE_HOME, WORKSPACE_HOME } from "../lib/meta";
 import { useTheme } from "../lib/theme";
 import type { Overview, View } from "../lib/types";
 import { StudyBanner } from "./StudyBanner";
@@ -53,7 +53,6 @@ export const NAV: NavItem[] = [
   { to: "/", label: "Home", icon: Home, group: "main", view: "home" },
   { to: "/inbox", label: "Inbox", icon: Inbox, group: "main", view: "inbox", badge: "inbox" },
   { to: "/requests", label: "Requests", icon: ListChecks, group: "main", view: "requests" },
-  { to: "/documents", label: "Policy documents", icon: FileUp, group: "main", view: "documents" },
   { to: "/semester", label: "Semester plan", icon: Hammer, group: "semester", view: "semester" },
   { to: "/preferences", label: "Semester preferences", icon: SlidersHorizontal, group: "semester", view: "prefs" },
   { to: "/clubs", label: "Club activities", icon: Music, group: "semester", view: "clubs" },
@@ -68,6 +67,7 @@ export const NAV: NavItem[] = [
 ];
 
 const COLLAPSED_KEY = "nts.sidebar.collapsed";
+const RESEARCH_KEY = "nts.sidebar.research";
 
 /** What the timetable-home roles keep in view (their timetable, their requests as chats, the handbook);
  * the rest of their pages sit under "More". */
@@ -86,9 +86,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(COLLAPSED_KEY) === "1";
+      return localStorage.getItem(COLLAPSED_KEY) !== "0"; // collapsed until someone opens it: more room for the chat
     } catch {
-      return false;
+      return true;
     }
   });
   const location = useLocation();
@@ -108,14 +108,20 @@ export function Shell({ children }: { children: ReactNode }) {
     });
 
   // the timetable-home roles read and answer everything in the home panel, so the Inbox is not in their menu
-  const items = NAV.filter((n) => sees(n.view) && !(n.to === "/inbox" && user && TIMETABLE_HOME.includes(user.role)));
+  // the office reads everyone's semester preferences in the semester plan, so not as a page of its own
+  const items = NAV.filter(
+    (n) =>
+      sees(n.view) &&
+      !(n.to === "/inbox" && user && TIMETABLE_HOME.includes(user.role)) &&
+      !(n.to === "/preferences" && user?.role === "coordinator"),
+  );
   // the timetable home, the requests chat and the request workspace (every role's New request) fill the
   // window, so their panels keep their proportions at any zoom
   const fullscreen =
     !!user &&
     (location.pathname === "/new" ||
-      (TIMETABLE_HOME.includes(user.role) &&
-        (location.pathname === "/" || (location.pathname.startsWith("/requests") && !new URLSearchParams(location.search).has("details")))));
+      (WORKSPACE_HOME.includes(user.role) && location.pathname === "/") ||
+      (TIMETABLE_HOME.includes(user.role) && location.pathname.startsWith("/requests") && !new URLSearchParams(location.search).has("details")));
   const onSearch = () => setPalette(true);
 
   return (
@@ -196,6 +202,26 @@ function Sidebar({
   useEffect(() => {
     if (inMore) setMore(true);
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inResearch = items.some((i) => i.group === "research" && location.pathname.startsWith(i.to));
+  const [research, setResearch] = useState(() => {
+    try {
+      return inResearch || localStorage.getItem(RESEARCH_KEY) === "1";
+    } catch {
+      return inResearch;
+    }
+  });
+  useEffect(() => {
+    if (inResearch) setResearch(true);
+  }, [inResearch]);
+  const showResearch = () =>
+    setResearch((r) => {
+      try {
+        localStorage.setItem(RESEARCH_KEY, r ? "0" : "1");
+      } catch {
+        /* the choice just isn't remembered */
+      }
+      return !r;
+    });
   const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "approvals" ? (ov?.pending_approvals ?? 0) + (ov?.my_decisions ?? 0) + (ov?.my_forwarded ?? 0) : 0) ?? 0;
   const navLink = (n: NavItem) => {
     const active = n.to === "/" ? location.pathname === "/" : location.pathname.startsWith(n.to);
@@ -291,6 +317,24 @@ function Sidebar({
           GROUPS.map((g) => {
             const list = items.filter((i) => i.group === g.id);
             if (!list.length) return null;
+            if (g.id === "research")
+              // the project's own tools (graph, health, experiments, study) stay out of the daily menu until asked for
+              return (
+                <div key={g.id}>
+                  {collapsed ? (
+                    <div className="mx-2 mb-2 border-t border-line" />
+                  ) : (
+                    <button
+                      onClick={showResearch}
+                      aria-expanded={research}
+                      className="mb-1 flex w-full items-center gap-1 px-2.5 text-[11px] font-medium text-ink-3 hover:text-ink"
+                    >
+                      <ChevronRight size={12} className={clsx("transition-transform", research && "rotate-90")} /> {g.label}
+                    </button>
+                  )}
+                  {(research || collapsed) && list.map(navLink)}
+                </div>
+              );
             return (
               <div key={g.id}>
                 {g.label && (collapsed ? <div className="mx-2 mb-2 border-t border-line" /> : <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>)}
@@ -378,24 +422,35 @@ function Account({ collapsed = false }: { collapsed?: boolean }) {
               collapsed ? "bottom-0 left-full ml-2" : "bottom-12 left-0",
             )}
           >
-            <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Switch person (demo sign-in)</p>
+            <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Switch person (demo sign-in) · each tab keeps its own</p>
             <div className="max-h-72 overflow-y-auto p-1">
               {data?.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={async () => {
-                    await signIn(p.id);
-                    setOpen(false);
-                    navigate("/");
-                  }}
-                  className={clsx("flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-panel-2", p.id === user.id && "bg-panel-2")}
-                >
-                  <Avatar name={p.name} id={p.id} size={24} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px]">{p.name}</p>
-                    <p className="truncate text-[11px] text-ink-3">{ROLE_LABEL[p.role]}</p>
-                  </div>
-                </button>
+                <div key={p.id} className={clsx("group flex items-center rounded-md hover:bg-panel-2", p.id === user.id && "bg-panel-2")}>
+                  <button
+                    onClick={async () => {
+                      await signIn(p.id);
+                      setOpen(false);
+                      navigate("/");
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left"
+                  >
+                    <Avatar name={p.name} id={p.id} size={24} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px]">{p.name}</p>
+                      <p className="truncate text-[11px] text-ink-3">{ROLE_LABEL[p.role]}</p>
+                    </div>
+                  </button>
+                  <a
+                    href={tabLinkAs(p.id)}
+                    target="_blank"
+                    rel="noopener"
+                    onClick={() => setOpen(false)}
+                    title={`Open a new tab as ${p.name}; this tab stays as ${user.name}`}
+                    className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-ink-3 opacity-0 hover:bg-panel hover:text-ink focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
               ))}
               <button
                 onClick={() => {
@@ -435,9 +490,9 @@ function CommandPalette({ open, onClose, items }: { open: boolean; onClose: () =
     const cs = (cases ?? [])
       .filter((c) => !ql || `${c.id} ${c.text} ${c.sender_name}`.toLowerCase().includes(ql))
       .slice(0, 8)
-      .map((c) => ({ key: c.id, label: c.text, hint: STATUS[c.status].label, icon: STATUS[c.status].icon, go: `/requests/${c.id}` }));
+      .map((c) => ({ key: c.id, label: c.text, hint: (can("approve") ? STATUS : PLAIN_STATUS)[c.status].label, icon: STATUS[c.status].icon, go: `/requests/${c.id}` }));
     return [...pages, ...cs];
-  }, [q, items, cases]);
+  }, [q, items, cases]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setSel(0);

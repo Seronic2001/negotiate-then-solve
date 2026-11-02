@@ -337,6 +337,11 @@ class EscalationBrief:
     to: str
     reason: str
     text: str
+    # an exception to a rule (not a deadlock the solver found): the rule's id, what was asked for in the
+    # sender's words, and what granting does, so the person deciding sees all three
+    rule: str | None = None
+    asked: str = ""
+    grant: str = ""
 
 
 @dataclass
@@ -542,7 +547,9 @@ class Negotiator:
             to = "coordinator"
         else:
             bosses = {self.instance.faculty_by_id[o].reports_to for o in owners} - {None}
-            to = ", ".join(sorted(bosses)) or "hod"
+            # never someone who is in the conflict (the head of department asking for a colleague's room):
+            # then the timetable office decides
+            to = ", ".join(sorted(bosses - set(owners))) or ("coordinator" if bosses else "hod")
         lines = [f"Escalation to {to}: {reason}.", "Conflict:"]
         lines += [f"- {describe(self.instance, cons[i])}" for i in mus]
         if options_text:
@@ -794,6 +801,7 @@ class Negotiator:
         asked: dict[str, int] = {}
         reminded: set[str] = set()  # owners sent the same message again after no reply
         declined: dict[str, set[tuple[str, int]]] = {}  # session -> (day, band) already offered and declined
+        turned_down: dict[str, list[Offer]] = {}  # owner -> the options they declined last, named in the next message
         if self.local and baseline:
             free = neighbourhood(self.instance, cons.values(), baseline, week)
             self.free = frozenset(free) if len(free) < len(baseline) else None
@@ -841,7 +849,8 @@ class Negotiator:
                     continue
             for key, o in zip("ABCDEFG", offers, strict=False):
                 o.key = key
-            message = self._message(out.rounds + 1, target, cons, mus, offers, private, raw_requests or {})
+            message = self._message(out.rounds + 1, target, cons, mus, offers, private, raw_requests or {},
+                                    before=turned_down.pop(target, None))
             self._emit("message", message=message.model_dump())
             reply = self._ask(responders[target], message)
             if reply.decision == "no_reply" and target not in reminded:
@@ -909,6 +918,7 @@ class Negotiator:
                 # Hidden flexibility: ask once more with fresh alternatives before
                 # treating the owner's constraints as absolute.
                 asked[target] = asked.get(target, 0) + 1
+                turned_down[target] = offers
                 for o in offers:
                     for sid, p in o.placements.items():
                         declined.setdefault(sid, set()).add((p.day, self._band(p.slot)))
@@ -995,7 +1005,9 @@ class Negotiator:
             out.concessions.append(entry)
             self.ledger.record(entry)
 
-    def _message(self, rnd: int, target: str, cons, mus, offers: list[Offer], private, raw_requests) -> Message:
+    def _message(self, rnd: int, target: str, cons, mus, offers: list[Offer], private, raw_requests,
+                 before: list[Offer] | None = None) -> Message:
+        """``before``: the options this person turned down last round; the message says these are new ones."""
         views = [OptionView(key=o.key, placements=o.placements, drop=tuple(o.drop), moved=o.moved) for o in offers]
         counts = self.ledger.times() if self.use_ledger else {}
         facts = conflict_facts(self.instance, cons, mus, views, counts, recipient=target)
@@ -1003,7 +1015,10 @@ class Negotiator:
         exp = self.explainer.explain(facts, target, raw_requests=raw, private=private)
         invented, omitted = option_mismatches(exp.text, [o.placements for o in offers], facts, raw)
         options = {f.id: f.reader for f in facts if f.id.startswith("OPT-")}
-        lines = [exp.lead if exp.lead is not None else exp.text, "", "Options:"]
+        lead = exp.lead if exp.lead is not None else exp.text
+        if before:  # a second message to the same person: not the same options again
+            lead = f"{_declined(self.instance, before)} {lead}"
+        lines = [lead, "", "Options:"]
         lines += [f"{o.key}) {options[f'OPT-{o.key}']}" for o in offers]
         lines.append("Reply with a letter, or tell us which days and times would work for you.")
         return Message(round=rnd, to=target, mus=list(mus), offers=offers, text="\n".join(lines),
@@ -1011,3 +1026,14 @@ class Negotiator:
                        claims=[{"text": t, "facts": ids, "supported": ok} for t, ids, ok in exp.claims],
                        explanation_mode=exp.mode, faithfulness=exp.faithfulness, leaks=exp.leaks,
                        rejected_claims=exp.rejected, invented_times=invented, omitted_options=omitted)
+
+
+def _declined(instance: Instance, offers: list[Offer]) -> str:
+    """What the next message says first, from the options turned down last round, e.g. "Monday at 2 pm
+    and Thursday at 10 am don't work for you, so here are other times the solver has checked." """
+    from language.corpus import hour
+
+    days = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday"}
+    times = list(dict.fromkeys(f"{days.get(p.day, p.day)} at {hour(p.slot)}" for o in offers for p in o.placements.values()))
+    said = times[0] if len(times) == 1 else f"{', '.join(times[:-1])} and {times[-1]}"
+    return f"{said} {'does' if len(times) == 1 else 'do'}n't work for you, so here are other times the solver has checked."

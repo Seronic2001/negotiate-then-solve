@@ -676,3 +676,14 @@ def test_a_run_stopped_by_the_daily_quota_resumes_where_it_stopped(monkeypatch, 
                 for r in json.loads((tmp_path / name).read_text(encoding="utf-8"))["configs"]["ours"]["rows"]]
 
     assert rows("part.json") == rows("full.json")
+
+
+@pytest.mark.parametrize(("heads", "to"), [({"F-201": "F-200", "F-202": "F-200"}, "F-200"),  # their head decides
+                                           ({"F-202": "F-201"}, "coordinator")])  # not a head who is in the conflict
+def test_deadlock_goes_to_a_head_outside_the_conflict(heads, to):
+    inst, cons = uc3_lab_contention()
+    for f in inst.faculty:
+        f.reports_to = heads.get(f.id)
+    neg = Negotiator(inst, priority=PriorityModel(inst), explainer=Explainer(inst), time_limit=10)
+    out = neg.resolve(cons, {p: Simulator(inst, Profile(owner=p)) for p in ("F-201", "F-202")})
+    assert out.status == "escalated" and out.escalation.to == to

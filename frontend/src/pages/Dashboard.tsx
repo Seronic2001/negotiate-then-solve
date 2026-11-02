@@ -258,6 +258,7 @@ function GivingWay({ ledger }: { ledger: Ledger | null }) {
 const DECIDED: Status[] = ["published", "awaiting_approval", "escalated", "denied", "refused", "answered"];
 
 function CaseList({ title, cases, loading, showSender, empty }: { title: string; cases: CaseSummary[]; loading: boolean; showSender?: boolean; empty: React.ReactNode }) {
+  const { can } = useAuth();
   return (
     <Card>
       <CardHeader
@@ -279,7 +280,7 @@ function CaseList({ title, cases, loading, showSender, empty }: { title: string;
                   {ago(c.received_at)}
                 </p>
               </div>
-              <StatusBadge status={c.status} live={c.running} />
+              <StatusBadge status={c.status} live={c.running} plain={!can("approve")} />
             </Link>
           </li>
         ))}

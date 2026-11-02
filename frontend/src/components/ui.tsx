@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, Loader2, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { colorFor, initials, STATUS, TIER, TONE_CLASS, type Tone } from "../lib/meta";
+import { colorFor, initials, PLAIN_STATUS, STATUS, TIER, TONE_CLASS, type Tone } from "../lib/meta";
 import type { Status } from "../lib/types";
 
 export function Card({ className, children, hover }: { className?: string; children: ReactNode; hover?: boolean }) {
@@ -80,13 +80,15 @@ export function Badge({ tone = "muted", children, className, dot }: { tone?: Ton
   );
 }
 
-export function StatusBadge({ status, live }: { status: Status; live?: boolean }) {
+/** ``plain``: the status in the sender's words (PLAIN_STATUS) rather than the pipeline step's name. */
+export function StatusBadge({ status, live, plain }: { status: Status; live?: boolean; plain?: boolean }) {
   const s = STATUS[status] ?? STATUS.received;
+  const p = plain ? (PLAIN_STATUS[status] ?? PLAIN_STATUS.received) : s;
   const Icon = s.icon;
   return (
-    <Badge tone={s.tone}>
-      {live ? <LiveDot tone={s.tone} /> : <Icon size={12} />}
-      {s.label}
+    <Badge tone={p.tone}>
+      {live ? <LiveDot tone={p.tone} /> : <Icon size={12} />}
+      {p.label}
     </Badge>
   );
 }

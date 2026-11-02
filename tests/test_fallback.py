@@ -147,6 +147,9 @@ def local_world(monkeypatch):
     w.parser_mode = "local"  # as if served with a model; the parsers stay the offline ones
     w.model_link = _down()
     me = next(f.id for f in w.instance.faculty if f.name == "Dr. Menon")
+    # if the timetable offers the sender a choice of times, their simulator picks one: these tests are about
+    # when a request is read, not about anyone's answer
+    w.autopilot[me], w.autopilot_delay = True, 0
     return w, me
 
 
