@@ -76,16 +76,31 @@ def test_after_the_last_try_it_says_so_and_guesses_nothing(world):
 
 
 @pytest.mark.parametrize("choice, problem", [
-    (Choice(tool="free_rooms", week=WEEK), "needs kind"),
     (Choice(tool="free_rooms", kind="lab", equipment=["laser"], week=WEEK), "equipment ['laser']"),
     (Choice(tool="free_hours", teachers=["me"], hours=[4], week=WEEK), "not lunch"),
     (Choice(tool="classes_of", teachers=["Dr. Iyer", "Dr. Rao"], week=WEEK), "at most one teacher"),
-    (Choice(tool="free_hours", teachers=["me"], week=40), "week 40 does not exist"),
 ])
 def test_what_is_checked(world, choice, problem):
     a = agent(world, *[choice] * MAX_TRIES)
     a.read("question")
     assert problem in a.trace[0]["problem"]
+
+
+def test_a_week_the_semester_does_not_have_is_said_not_retried(world):
+    """ "Free slots in week 18?": the model read it right; sending it back ended in the regex answering this week."""
+    a = agent(world, Choice(tool="free_hours", teachers=["me"], week=18))
+    call = a.read("my free slots in week 18?")
+    weeks = world.instance.calendar.weeks
+    assert not call.confident and call.note == f"The semester has {weeks} weeks (1–{weeks}); week 18 isn't in it."
+    assert len(a.client.prompts) == 1
+
+
+def test_nobody_named_is_the_asker_and_a_room_is_a_lecture_room(world):
+    """The checker's defaults (v2's misses T-020, T-137, T-042): the model leaving these out is not a mistake."""
+    call = agent(world, Choice(tool="free_hours", days=["Wed"], part="morning", week=WEEK)).read("any free time on wednesday morning?")
+    assert call.args["teachers"] == [person(world, "Dr. Menon")]
+    call = agent(world, Choice(tool="free_rooms", days=["Fri"], hours=[7], week=WEEK)).read("which rooms are free on Fri at 4 pm")
+    assert call.args["kind"] == "lecture"
 
 
 def test_something_not_in_the_department_is_not_guessed(world):
@@ -176,6 +191,133 @@ def test_free_rooms_and_classes_of_take_the_regex_shapes(world):
     assert call.args == {"kind": "lab", "equipment": ["gpu"], "days": ["Tue"], "slots": [5, 6]} and call.week == WEEK + 1
     call = agent(world, Choice(tool="classes_of", course="ML", week=WEEK)).read("when's ML?")
     assert call.args == {"course": next(c for c, t in world.instance.course_titles.items() if t == "Machine Learning")}
+
+
+# -- "all", "each", "every": the model writes ["all"], the code puts in every teacher, section or room ---------
+
+
+def test_all_teachers_free_together_is_every_teacher(world):
+    call = agent(world, Choice(tool="free_hours", teachers=["all"], week=WEEK)).read("when are all faculty members free together?")
+    assert call.tool == "free_hours" and call.args["teachers"] == [f.id for f in world.instance.faculty]
+
+
+def test_each_section_is_the_list_of_sections(world):
+    call = agent(world, Choice(tool="describe", sections=["all"], week=WEEK)).read("what courses does each section take?")
+    assert (call.tool, call.args) == ("describe", {"what": "sections"})
+    call = agent(world, Choice(tool="describe", rooms=["All"], kind="lab", week=WEEK)).read("list every lab")
+    assert call.args == {"what": "rooms", "kind": "lab"}
+
+
+def test_every_teacher_is_no_filter_in_classes_and_changes(world):
+    call = agent(world, Choice(tool="classes_of", teachers=["all"], days=["Fri"], week=WEEK)).read("which teachers teach on Friday?")
+    assert (call.tool, call.args) == ("classes_of", {"days": ["Fri"]})
+    call = agent(world, Choice(tool="changes", sections=["all"], week=WEEK)).read("what changed for every section?")
+    assert (call.tool, call.args) == ("changes", {})
+
+
+# -- roles: the model writes the role, the code finds who holds it now ------------------------------------------
+
+
+def hod(world):
+    return next(f for f in world.instance.faculty if f.role.value == "hod")
+
+
+def test_the_hod_is_whoever_holds_the_role(world):
+    call = agent(world, Choice(tool="free_hours", roles=["hod"], days=["Tue"], week=WEEK)).read("is the HOD free on tuesday?")
+    assert call.args == {"teachers": [hod(world).id], "days": ["Tue"], "as_role": {hod(world).id: "hod"}}
+    # the HOD changes: the same reading now means the new one, with no retraining
+    new = next(f for f in world.instance.faculty if f.role.value != "hod")
+    a = ToolAgent(world.instance, FakeModel(Choice(tool="free_hours", roles=["hod"], week=WEEK)), person(world, "Dr. Menon"),
+                  WEEK, today=date(2026, 10, 21), roles_of={new.id: "hod"})
+    assert a.read("when is the HOD free?").args["teachers"] == [new.id]
+
+
+def test_a_role_with_no_timetable_or_nobody_is_said_so(world):
+    office = agent(world, Choice(tool="free_hours", roles=["coordinator"], week=WEEK)).read("when is the timetable office free?")
+    assert not office.confident and "no classes in the timetable" in office.note
+    nobody = agent(world, Choice(tool="free_hours", roles=["dean"], week=WEEK)).read("when is the dean free?")
+    assert not nobody.confident and nobody.note == "There is no dean in the department data."
+
+
+def test_roles_mix_with_names_and_class_reps_are_their_sections(world):
+    call = agent(world, Choice(tool="free_hours", teachers=["me"], roles=["hod", "student"], week=WEEK)).read(
+        "when are the HOD, the CRs and I free?")
+    assert call.args["teachers"] == [person(world, "Dr. Menon"), hod(world).id]
+    assert call.args["sections"] == [g.id for g in world.instance.groups]
+
+
+def test_one_holder_needed_where_the_tool_takes_one(world):
+    call = agent(world, Choice(tool="classes_of", roles=["student"], week=WEEK)).read("what do the class reps have today?")
+    assert not call.confident and "Which one do you mean?" in call.note
+
+
+def test_the_prompt_lists_roles_but_not_who_holds_them(world):
+    a = agent(world, Choice(tool="none", week=WEEK))
+    a.read("when is the HOD free?")
+    line = next(x for x in a.client.prompts[0].splitlines() if x.startswith("Roles:"))
+    assert "hod (head of department" in line and "faculty (" not in line.replace("guest_faculty (", "")
+    assert hod(world).name not in line
+
+
+# -- a course's teachers, the earliest time, changes of one kind ----------------------------------------------
+
+
+def test_a_course_means_its_teachers_in_free_hours(world):
+    s = world.instance.sessions[0]
+    title = world.instance.course_title(s.course)
+    call = agent(world, Choice(tool="free_hours", course=title, week=WEEK)).read(f"when is the {title} teacher free?")
+    assert call.args["teachers"] == [s.faculty] and call.args["via_course"] == s.course
+
+
+def test_earliest_and_changes_of_one_kind_are_kept(world):
+    call = agent(world, Choice(tool="free_hours", teachers=["me"], sections=["Section 1"], first=True, week=WEEK)).read(
+        "the earliest Section 1 and I are both free")
+    assert call.args["first"] is True
+    call = agent(world, Choice(tool="changes", change="cancelled", week=WEEK + 1)).read("any cancelled classes next week?")
+    assert (call.tool, call.args, call.week) == ("changes", {"change": "cancelled"}, WEEK + 1)
+
+
+@pytest.fixture(scope="module")
+def shared(world):
+    """The department with a course as they often are and the generated one never is: two co-teachers (one of
+    its classes taught by a second teacher), the same for every section that takes it."""
+    data = world.instance.model_dump()
+    first = data["sessions"][0]
+    co = next(s for s in data["sessions"] if s["course"] == first["course"] and s["id"] != first["id"])
+    co["faculty"] = next(f["id"] for f in data["faculty"] if f["id"] not in (first["faculty"], "F-102"))
+    from core.instance import Instance
+
+    return Instance.model_validate(data), first, co
+
+
+def test_co_teachers_are_answered_each_on_their_own(shared):
+    from agents.lookup import WeekTimetable
+    from agents.questions import Answerer
+
+    inst, first, co = shared
+    title = inst.course_titles[first["course"]]
+    asker = next(f.id for f in inst.faculty if f.id not in (first["faculty"], co["faculty"]))  # not one of them ("You")
+    a = ToolAgent(inst, FakeModel(Choice(tool="free_hours", course=title, week=WEEK)), asker, WEEK, today=date(2026, 10, 21))
+    call = a.read(f"when is the {title} teacher free?")
+    assert call.confident and call.args["each"] is True
+    assert set(call.args["teachers"]) == {first["faculty"], co["faculty"]}
+    names = [inst.faculty_by_id[f].name for f in (first["faculty"], co["faculty"])]
+    from web.app import World
+
+    week = WeekTimetable(inst, World(parser_mode="offline", seed_history=False, deadline=60).store, WEEK)
+    reply = Answerer(inst, asker).answer(call, week)
+    assert reply.startswith(f"{title} is taught by {names[0]} and {names[1]}. ")
+    assert all(f"{n} is free on" in reply or f"{n} has no free hours" in reply for n in names), reply  # one sentence each
+
+
+def test_both_teachers_of_a_course_together(shared):
+    inst, first, co = shared
+    title = inst.course_titles[first["course"]]
+    a = ToolAgent(inst, FakeModel(Choice(tool="free_hours", course=title, teachers=["all"], week=WEEK)), "F-102", WEEK,
+                  today=date(2026, 10, 21))
+    call = a.read(f"when are both {title} teachers free?")
+    assert call.confident and set(call.args["teachers"]) >= {first["faculty"], co["faculty"]}
+    assert len(call.args["teachers"]) < len(inst.faculty)  # the course's teachers, not every teacher
 
 
 # -- KNOWN_BUGS.md B1-B4 -----------------------------------------------------------------------------------------

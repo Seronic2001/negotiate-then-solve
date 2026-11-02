@@ -29,19 +29,22 @@ import threading
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agents.documents import SUFFIXES, ingest
 from agents.explainer import TIER_NAME, describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
-from agents.lookup import WeekTimetable, part_slots
+from agents.lookup import WeekTimetable
+from agents.memory import turns_of
 from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
 from agents.questions import Answerer
+from agents.views import free_hours_of, view_of
 from core.graph import add_conflict, build_graph
 from core.instance import Session
 from core.schemas import DAYS, Placement, Request, RequestStatus, Tier
@@ -532,17 +535,46 @@ class AskBody(BaseModel):
     text: str
 
 
+class ConfirmBody(BaseModel):
+    """The answer to the chat's "send this as a request?": ``{"n": 12, "as": "request" | "question" | "cancel"}``."""
+
+    model_config = ConfigDict(populate_by_name=True)
+    n: int
+    as_: Literal["request", "question", "cancel"] = Field(alias="as")
+
+
+# a request that has run its course: it can be taken off its sender's list ("Delete from list")
+FINISHED = frozenset({RequestStatus.PUBLISHED, RequestStatus.REFUSED, RequestStatus.DENIED, RequestStatus.ANSWERED,
+                      RequestStatus.FORWARDED, RequestStatus.WITHDRAWN})
+
+# a message that is only a greeting or thanks: the chat says what it can do instead of filing it as a request
+SMALL_TALK = re.compile(r"^\s*(hi+|hello+|hey+|hii+|good (morning|afternoon|evening)|thanks?( you)?|thank u|thx|"
+                        r"ok(ay)?|cool|bye|great)\b[\s!.?,]*$", re.IGNORECASE)
+
+
 class RequestBody(BaseModel):
     text: str
     makeup: bool = False  # "hold make-up classes": off, classes missed in an absence are cancelled
 
 
 class FormRequestBody(BaseModel):
-    """A request made with clicks: the request in words (what people read) and its one intent (what the
-    pipeline acts on), a cancellation, a move or a swap of one of the sender's classes."""
+    """A request made with clicks: the request in words (what people read) and what the pipeline acts on:
+    ``intent``, a cancellation, a move or a swap of one of the sender's classes; or ``intents``, several classes
+    of a range of dates (the range builder): cancellations, or the sender away at their classes' times
+    (``unavailable``, all in one week: one week is repaired per request) so the solver finds new times.
+    ``makeup``: hold make-up classes (a range moved is always made up)."""
 
     text: str
-    intent: dict
+    intent: dict | None = None
+    intents: list[dict] | None = None
+    makeup: bool = False
+
+
+MAX_RANGE_WEEKS = 4  # the longest range of dates a request may cover, until the coordinator sets another
+
+
+class SettingsBody(BaseModel):
+    max_range_weeks: int = Field(ge=1, le=52)
 
 
 class ReplyBody(BaseModel):
@@ -707,6 +739,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             # messages forwarded to the office and not answered yet (listed on the Approvals page)
             "my_forwarded": sum(1 for c in cases.values() if handles(u, c)),
             "my_inbox": sum(1 for i in _feed(w, u, decides, handles) if i["unread"]),
+            # requests that wait on this person's answer (the Requests tab's count): their own asking a question
+            # back, and others' sending them options
+            "my_waiting": len({i.case_id for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None
+                               and i.case_id} | {r.id for r in reqs if r.sender_id == u["id"] and r.id in cases
+                                                  and cases[r.id].status == RequestStatus.CLARIFICATION}),
             "published_version": cur.version if cur else None,
             "gini": ledger.gini(teaching, SEMESTER),
             "negotiations": {"agreed": sum(o.status == "agreed" for o in outcomes),
@@ -817,16 +854,119 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         call, reader = w.read_question(body.text, u["id"])
         if call is None:
             return {"kind": "not_a_question", "reader": reader}
+        return {"kind": "timetable", **_lookup_answer(w, call, u["id"], reader)}
+
+    # -- the chat: one conversation per person, for questions and requests alike (CHAT-PLAN.md) --------------
+
+    @app.get("/api/chat")
+    def chat(after: int = 0, u: dict = Depends(user)) -> list[dict]:
+        """The signed-in person's chat, oldest first (``after``: only messages after that number). A request shows
+        only as a card with its number; what happens to it after (questions back, options, the outcome) is on
+        its page in the Requests tab. Notice cards of earlier versions are left out."""
+        return [m for m in W().store.chat(u["id"], after) if m["kind"] != "notice"]
+
+    @app.post("/api/chat")
+    def chat_send(body: RequestBody, u: dict = Depends(user)) -> list[dict]:
+        """A message to the chat (CHAT-PLAN.md). In order:
+        - a timetable question → answered (``kind: lookup``);
+        - a question about the rules → answered from them, with every rule cited (``kind: rule``; no request);
+        - a greeting or thanks → what the chat can do (``kind: other``);
+        - anything else → "send this as a request?" (``kind: confirm``): nothing is sent until the person
+          confirms (``POST /api/chat/confirm``).
+        First, a follow-up ("and Friday?", "move my DS lecture there") is made to stand on its own from the last
+        messages of today (agents.memory): what it was read as is kept with the person's message (``read_as``);
+        when it leans on something the chat doesn't have, the reply asks what they mean.
+        Returns the new messages: the person's, then the reply."""
+        w = W()
+        text, me = body.text.strip(), u["id"]
+        if not text:
+            raise HTTPException(422, "write a message first")
+        chat = w.store.chat(me)
+        follow = w.followup(text, me, turns_of(chat, today=date.today()))
+        read = follow.text if follow and follow.changed else text
+        mine = {"text": text} | ({"read_as": read} if read != text else {})
+        last = next((m for m in reversed(chat) if m["role"] == "assistant"), None)
+        if (follow and follow.changed and last and last["kind"] == "confirm" and not last.get("answered")
+                and read.strip() == last["text"].strip()):  # "yes" to "send this as a request?": it is sent
+            w.store.update_chat(me, last["n"], {"answered": "request"})
+            return [w.store.add_chat(me, "you", "text", mine), _send_request(w, me, last)]
+        if follow and follow.ask:
+            reply = ("other", {"text": follow.ask})
+        elif (q := w.read_question(read, me)) and q[0] is not None:
+            reply = ("lookup", _lookup_answer(w, q[0], me, q[1]))
+        elif (rule := w.answer_rule(read, me)) is not None:
+            reply = ("rule", rule)
+        elif SMALL_TALK.match(text):
+            reply = ("other", {"text": "I can answer questions about the timetable (“am I free on Friday?”) and "
+                                       "about the rules (“how many online classes are allowed?”), and make "
+                                       "requests (“move my Monday lecture to Tuesday”)."})
+        else:  # a request: sent as it was read ("move my DS lecture there" with "there" filled in)
+            reply = ("confirm", {"text": read, "makeup": body.makeup, "reader": q[1]})
+        return [w.store.add_chat(me, "you", "text", mine), w.store.add_chat(me, "assistant", reply[0], reply[1])]
+
+    @app.post("/api/chat/confirm")
+    def chat_confirm(body: ConfirmBody, u: dict = Depends(user)) -> list[dict]:
+        """The answer to "send this as a request?" (message ``n``): ``request`` sends it (as ``POST /api/requests``)
+        and the chat gets a request card; ``question`` reads it again as a timetable question, without the
+        request-words check; ``cancel`` drops it. A confirm is answered once. Returns the new messages."""
+        w = W()
+        me = u["id"]
+        m = w.store.chat_message(me, body.n)
+        if m is None or m["kind"] != "confirm":
+            raise HTTPException(404, "no such message to confirm")
+        if m.get("answered"):
+            raise HTTPException(409, f"already answered: {m['answered']}")
+        w.store.update_chat(me, body.n, {"answered": body.as_})
+        if body.as_ == "cancel":
+            return []
+        if body.as_ == "question":
+            call, reader = w.read_question(m["text"], me, gate=False)
+            if call is None:
+                return [w.store.add_chat(me, "assistant", "other", {
+                    "text": "I couldn't read that as a question about the timetable. Try asking it another way, "
+                            "or send it as a request."})]
+            return [w.store.add_chat(me, "assistant", "lookup", _lookup_answer(w, call, me, reader))]
+        return [_send_request(w, me, m)]
+
+    def _send_request(w: World, me: str, m: dict) -> dict:
+        """The request a "send this as a request?" message (``m``) asked about, sent; its card."""
+        try:
+            r = w.intake.from_portal(me, m["text"], makeup=m.get("makeup"))
+        except UnknownSender:
+            raise HTTPException(403, "unknown user") from None
+        if r is None:
+            raise HTTPException(409, "duplicate request")
+        # what was asked kept with the card: a follow-up ("has it been approved?") sees which request it was
+        card = w.store.add_chat(me, "assistant", "request", {"case": r.id, "request_text": m["text"]})
+        w.submit(r)
+        return card
+
+    @app.delete("/api/chat")
+    def chat_clear(u: dict = Depends(user)) -> dict:
+        """Empties the person's chat; their requests stay in the Requests list."""
+        return {"cleared": W().store.clear_chat(u["id"])}
+
+    def _lookup_answer(w: World, call, sender: str, reader: str) -> dict:
+        """A timetable question's answer: the reply, the lookup, who read it, the part of the timetable to draw
+        beside it (``view``, agents.views; None when there is nothing to draw), and for free hours the hours
+        themselves (``free``, for the timetable to shade)."""
+        from agents.more_lookups import Records
+
         week = WeekTimetable(w.instance, w.store, call.week)
-        out = {"kind": "timetable", "answer": Answerer(w.instance, u["id"]).answer(call, week), "reader": reader,
-               "call": {"tool": call.tool, "args": call.args, "week": call.week, "confident": call.confident}}
-        if call.tool == "free_hours" and call.confident:  # the hours themselves, for the timetable to shade
-            a = call.args
-            free = week.free_hours(a.get("teachers", ()), a.get("sections", ()), a.get("rooms", ()), a.get("days"),
-                                   length=a.get("length", 1))
-            part = set(part_slots(w.instance, a["part"])) if a.get("part") else None
-            out["free"] = [{"day": d, "slot": s} for d, s in free
-                           if (not a.get("slots") or s in a["slots"]) and (part is None or s in part)]
+        records = Records.from_world(w)  # requests, rules, bookings, other weeks: v3's lookups read them
+        answerer = Answerer(w.instance, sender, records, sees_all=sender == COORDINATOR)
+
+        def shown(c) -> dict:
+            args = ({"parts": [shown(p) for p in c.args["parts"]]} if c.tool == "multi" else c.args)
+            return {"tool": c.tool, "args": args, "week": c.week, "confident": c.confident}
+
+        # several lookups (v3): the timetable beside the answer is the first part's
+        first = call.args["parts"][0] if call.tool == "multi" else call
+        first_week = week if first.week == call.week else WeekTimetable(w.instance, w.store, first.week)
+        out = {"answer": answerer.answer(call, week), "reader": reader, "call": shown(call),
+               "view": view_of(w.instance, first, first_week, sender)}
+        if first.tool == "free_hours" and first.confident:
+            out["free"] = [{"day": d, "slot": s} for d, s in free_hours_of(w.instance, first, first_week)]
         return out
 
     @app.post("/api/requests")
@@ -838,6 +978,9 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(403, "unknown user") from None
         if r is None:
             raise HTTPException(409, "duplicate request")
+        # sent on purpose (the request builder): in the chat too, as what was asked and its request card
+        w.store.add_chat(u["id"], "you", "text", {"text": body.text})
+        w.store.add_chat(u["id"], "assistant", "request", {"case": r.id})
         w.submit(r)
         return {"id": r.id}
 
@@ -846,44 +989,95 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         """A request made with clicks. Its intent is taken as given, so nothing is left to a parser:
         it is checked here (one of the sender's own classes) and resolved like a parsed one."""
         w = W()
+        given = body.intents if body.intents is not None else [body.intent] if body.intent is not None else []
+        if not given:
+            raise HTTPException(422, "nothing to request")
         try:
-            out = IntentOutput(action="compile", intents=[body.intent])
+            out = IntentOutput(action="compile", intents=given)
         except ValidationError as e:
             raise HTTPException(422, f"not a request this form can make: {e.errors()[0]['msg']}") from None
-        intent = out.intents[0]
-        if intent.kind not in ("cancel", "move", "swap"):
-            raise HTTPException(422, "the form makes cancellations, moves and swaps")
+        kinds = {i.kind for i in out.intents}
+        if len(out.intents) == 1 and kinds <= {"cancel", "move", "swap"}:
+            pass
+        elif len(kinds) != 1 or not kinds <= {"cancel", "unavailable"}:
+            raise HTTPException(422, "several classes are cancelled together, or moved together (unavailable)")
         now = w.orch.current_week() if w.orch.current_week else None
+        weeks: set[int] = set()
+        for intent in out.intents:
+            try:
+                asked = period_weeks(w.instance, intent.period, now) or []
+            except Unresolved as e:
+                raise HTTPException(422, e.question) from None
+            if not asked and intent.kind == "unavailable":
+                raise HTTPException(422, "say which week you are away")
+            if now is not None and asked and asked[0] < now:
+                raise HTTPException(422, f"Week {asked[0]} has passed; it is week {now} now.")
+            weeks |= set(asked)
+            if intent.kind == "unavailable":
+                if intent.who is not None:
+                    raise HTTPException(403, "only you can be away in your request")
+                continue
+            mine = intent.mine if intent.kind == "swap" else intent.which
+            session = w.instance.session_by_id.get(mine.session or "")
+            if session is None or session.faculty != u["id"]:
+                raise HTTPException(403, "only your own classes can be cancelled, moved or swapped")
+        if len(out.intents) > 1:
+            longest = w.store.setting("max_range_weeks", MAX_RANGE_WEEKS)
+            if weeks and max(weeks) - min(weeks) + 1 > longest:
+                raise HTTPException(422, f"A request can cover at most {longest} week{'s' if longest != 1 else ''}.")
+            if kinds == {"unavailable"} and len(weeks) > 1:
+                raise HTTPException(422, "classes are moved one week per request")
         try:
-            asked = period_weeks(w.instance, intent.period, now) or []
-        except Unresolved as e:
-            raise HTTPException(422, e.question) from None
-        if now is not None and asked and asked[0] < now:
-            raise HTTPException(422, f"Week {asked[0]} has passed; it is week {now} now.")
-        mine = intent.mine if intent.kind == "swap" else intent.which
-        session = w.instance.session_by_id.get(mine.session or "")
-        if session is None or session.faculty != u["id"]:
-            raise HTTPException(403, "only your own classes can be cancelled, moved or swapped")
-        try:
-            r = w.intake.from_portal(u["id"], body.text)
+            r = w.intake.from_portal(u["id"], body.text, makeup=body.makeup or kinds == {"unavailable"})
         except UnknownSender:
             raise HTTPException(403, "unknown user") from None
         if r is None:
             raise HTTPException(409, "duplicate request")
+        # made from the timetable (the chat's popup): in the chat too, as what was asked and its request card
+        w.store.add_chat(u["id"], "you", "text", {"text": body.text})
+        w.store.add_chat(u["id"], "assistant", "request", {"case": r.id})
         w.submit(r, form=out)
         return {"id": r.id}
 
     @app.get("/api/cases")
     def cases(scope: str = "mine", u: dict = Depends(user)) -> list[dict]:
+        """``mine``: the person's own requests, without those they took off their list, and others' requests that
+        wait on their answer (options sent to them); each with whether they may withdraw it and whether it waits
+        on them (``waits_on_you``: a question back, or options to choose from). ``all``: every request they may
+        see."""
         w = W()
         out = []
+        me = u["id"]
+        hidden = w.store.hidden(me) if scope == "mine" else set()
+        asked = {i.case_id for i in w.inbox.items.values() if i.to == me and i.reply is None and i.case_id}
         for r in reversed(w.store.requests()):
             case = w.orch.cases.get(r.id)
-            if scope == "mine" and r.sender_id != u["id"]:
+            if scope == "mine" and ((r.sender_id != me and r.id not in asked) or r.id in hidden):
                 continue
-            if visible(u, case, r):
-                out.append(_summary(w, r, case))
+            if visible(u, case, r) or r.id in asked:
+                s = _summary(w, r, case)
+                out.append(s | ({"can_withdraw": bool(case and withdraws(w, u, case)),
+                                 "waits_on_you": r.id in asked or (r.sender_id == me
+                                                                    and s["status"] == "clarification_requested")}
+                                if scope == "mine" else {}))
         return out
+
+    @app.post("/api/cases/{case_id}/hide")
+    def hide_case(case_id: str, u: dict = Depends(user)) -> dict:
+        """"Delete from list": takes one of the person's own finished requests off their list. It stays in the
+        records (and on the oversight pages); only their list changes."""
+        w = W()
+        r = w.store.request(case_id)
+        if r is None:
+            raise HTTPException(404)
+        if r.sender_id != u["id"]:
+            raise HTTPException(403, "only your own requests can be taken off your list")
+        case = w.orch.cases.get(case_id)
+        status = case.status if case else r.status
+        if status not in FINISHED:
+            raise HTTPException(409, f"it is not finished yet ({status.value}): withdraw it first")
+        w.store.hide(u["id"], case_id)
+        return {"id": case_id, "hidden": True}
 
     @app.get("/api/cases/{case_id}")
     def case(case_id: str, u: dict = Depends(user)) -> dict:
@@ -1069,6 +1263,16 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         return _inbox_item(w, item)
+
+    @app.get("/api/settings")
+    def settings(u: dict = Depends(user)) -> dict:
+        """What the coordinator set for everyone: the longest range of dates a request may cover."""
+        return {"max_range_weeks": W().store.setting("max_range_weeks", MAX_RANGE_WEEKS)}
+
+    @app.post("/api/settings")
+    def set_settings(body: SettingsBody, u: dict = Depends(view("settings"))) -> dict:
+        W().store.set_setting("max_range_weeks", body.max_range_weeks)
+        return {"max_range_weeks": body.max_range_weeks}
 
     @app.get("/api/autopilot")
     def autopilot(u: dict = Depends(user)) -> dict:

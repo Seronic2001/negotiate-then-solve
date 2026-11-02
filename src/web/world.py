@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from agents.documents import load_corpus, ocr_backend
+from agents.memory import Memory, Rewritten
 from agents.negotiation import Message, Negotiator, Reply
 from agents.policy import RulePolicyAgent, embedder
 from agents.priority import PriorityModel
@@ -89,6 +90,7 @@ VIEWS: dict[str, set[str]] = {
     "approvals": {"coordinator"},
     "history": {"coordinator"},  # timetable versions, proposals and rollback; everyone else sees the latest published
     "documents": {"coordinator"},  # adding and removing policy documents
+    "settings": {"coordinator"},  # what applies to everyone's requests (the longest range of dates)
     "semester": {"coordinator"},  # building the semester timetable from the course offerings
     "prefs": {"coordinator", "hod", "faculty", "guest_faculty", "student"},  # semester preferences
     "clubs": {"coordinator", "student"},  # evening club activities
@@ -252,6 +254,7 @@ class World:
             negotiator_factory=self._negotiator, system_one=self.system_one, tau=self.tau,
             use_fast_path=self._fast_path_now,
             fast_parser=RuleParser(self.instance), policy_agent=self.policy,
+            form_policy=self.rule_policy,  # a request made with clicks is checked by the rules, no model
             responders={f: InboxResponder(self, f) for f in teaching}, approvers={COORDINATOR}, semester=SEMESTER,
             swap_reader=self._swap_reader(),
             # a person picks the time; not while the start-up history replays, nor in a scored test run
@@ -434,7 +437,7 @@ class World:
     def reload_policies(self) -> None:
         """Re-read the policy documents (OCR is cached) and hand the new corpus to the policy agent."""
         self.rules, self.documents = load_corpus(ROOT / "data" / "handbook.md", self.policy_dir, self.ocr)
-        self.policy.set_rules(self.rules)
+        self.policy.set_rules(self.rules)  # with a model, Fallback hands them to the rule-based check too
 
     # -- components ------------------------------------------------------------------
 
@@ -587,6 +590,7 @@ class World:
         rule-based stand-in answers whenever the model cannot (``web.fallback``); offline, the stand-ins."""
         kind = self.retriever_kind = self._retriever_kind()
         rule_parser, rule_policy = RuleParser(self.instance), RulePolicyAgent(self.rules, self.instance, retriever=kind)
+        self.rule_policy = rule_policy
         self.model_link = None
         self.lookup_adapter = None  # the adapter trained on timetable questions, when the local model has one
         if self.parser_mode not in ("gemini", "local"):
@@ -651,12 +655,122 @@ class World:
             return "model" if chosen == "model" and self.parser_mode in ("gemini", "local") else "regex"
         return "model" if self.lookup_adapter else "regex"
 
-    def read_question(self, text: str, sender: str) -> tuple[ToolCall | None, str]:
+    def answer_rule(self, text: str, sender: str) -> dict | None:
+        """A question about the rules answered from them (the policy check, as for a rule question sent as a
+        request), or None when ``text`` is not one. A rule question: the regex's check for what is allowed, or
+        System One's "policy question". Returns the answer and every rule it cites; with no rule cited, an honest
+        "no rule found" instead of whatever the check wrote (KNOWN_BUGS B7)."""
+        from agents.questions import RULE
+        from core.schemas import Channel, Role
+        from language.corpus import ExpectedAction, RequestType
+        from language.parsing import ParseOutput, ParseResult
+
+        role = self.role_of(sender)
+        request = Request(id="R-CHAT", channel=Channel.PORTAL, sender_id=sender,
+                          role=Role(role) if role in Role._value2member_map_ else Role.FACULTY,
+                          raw_text=text, received_at=datetime.now(UTC))
+        rule = bool(RULE.search(text))
+        if not rule and self.system_one is not None:
+            d = self.system_one.decide(request)
+            rule = d.request_type == RequestType.POLICY_QUESTION and d.action == ExpectedAction.ANSWER
+        if not rule:
+            return None
+        # read as a question about the rules (as the request parser marks one), so the check answers it
+        # instead of checking it as a request ("no rule is broken")
+        asked = ParseResult(request=request, output=ParseOutput(request_type="policy_question", action="answer"))
+        decision = self.policy.review(text, asked)
+        by_id = {r.id: r for r in self.rules}
+        cited = [{"id": c, "title": by_id[c].title if c in by_id else c} for c in decision.cited]
+        if not cited:
+            return {"answer": "I couldn't find a rule about that. You can ask the timetable office.", "rules": []}
+        return {"answer": decision.answer or decision.explanation, "rules": cited}
+
+    def what_if(self, text: str, sender: str, week: int) -> str:
+        """A dry run of a change (the lookup ``what_if``): the change read as a request would be (the same parser),
+        the rule checks, and the week solved from its timetable with the change added, so the reply says what would
+        move. Nothing is stored, sent, negotiated or published."""
+        from agents.explainer import placement_text, session_name
+        from core.graph import moved_sessions
+        from core.schemas import Channel, Request, Role
+        from core.solver import TimetableSolver
+        from pipeline.orchestrator import _regular
+
+        role = next((i.role for i in self.directory.by_email.values() if i.person == sender), Role.FACULTY)
+        r = Request(id="WHAT-IF", channel=Channel.PORTAL, sender_id=sender, role=role, raw_text=text,
+                    received_at=datetime.now(UTC), makeup=True)
+        base = self.store.current_version(week) or self.store.current_version()
+        baseline = _regular(base.assignment) if base else {}
+        try:
+            compiled = getattr(self.parser, "compile", lambda *a, **k: None)(r, baseline, week)
+            parsed = compiled.result if compiled is not None else self.parser.parse(r)
+        except Exception:  # noqa: BLE001 - a dry run never fails the chat
+            return "I couldn't read that change. Say which class and where it should go, e.g. \"move my DS lecture to Thursday 10 am\"."
+        out = parsed.output
+        if out is not None and getattr(out, "clarifying_question", None) and not parsed.constraints:
+            return f"To try that out I need to know more: {out.clarifying_question}"
+        if not parsed.constraints:
+            return "That doesn't read as a change to the timetable, so there is nothing to try out."
+        policy = getattr(self, "rule_policy", None)
+        if policy is not None:
+            verdict = policy.review(text, parsed)
+            if verdict.verdict.value == "forbidden":
+                return f"That change would be refused: {verdict.explanation}"
+        cancelled, _ = self.orch._cancelled(week)
+        res = TimetableSolver(self.instance, [*self.store.constraints(), *parsed.constraints], week=week,
+                              baseline=baseline, time_limit=20, skip=cancelled).solve()
+        if not res.ok:
+            return (f"That can't be fitted into week {week} without breaking someone's firm rules. Sent as a request, "
+                    "it would go to negotiation with the people affected.")
+        moved = [s for s in moved_sessions(baseline, res.assignment) if s in baseline and s in res.assignment]
+        if not moved:
+            return f"Nothing would have to move in week {week}: the timetable already fits that."
+        own = [s for s in moved if self.instance.session_by_id[s].faculty == sender]
+        others = [s for s in moved if s not in own]
+        say = lambda s: (f"{session_name(self.instance, s)}: {placement_text(self.instance, baseline[s])} → "  # noqa: E731
+                         f"{placement_text(self.instance, res.assignment[s])}")
+        parts = [f"If you sent it now (week {week}): " + ("; ".join(say(s) for s in own) or "your classes stay")]
+        parts.append(f"{len(others)} other class{'es' if len(others) != 1 else ''} would move: " +
+                     "; ".join(say(s) for s in others[:5]) + ("; …" if len(others) > 5 else "") if others else
+                     "No other class would move")
+        return ". ".join(parts) + ". Nothing has been changed: send it as a request to make it happen."
+
+    @property
+    def memory_on(self) -> bool:
+        """Whether follow-ups are made to stand on their own (agents.memory): with the local model, when the
+        adapters file names a ``memory`` adapter; with Gemini, always. ``NTS_MEMORY=off`` turns it off."""
+        if os.environ.get("NTS_MEMORY") == "off" or self.model_link is None:
+            return False
+        if self.parser_mode == "gemini":
+            return True
+        from language.adapters import registry
+
+        adapters = registry()
+        return self.parser_mode == "local" and adapters is not None and adapters.adapter_for("memory") is not None
+
+    def followup(self, text: str, sender: str, history: list) -> Rewritten | None:
+        """``text`` made to stand on its own from ``history`` (``agents.memory.Turn``s, the chat before it): a
+        rewrite, the same text, or a question back (``ask``). None when memory is off or the model can't be
+        reached: the message is read as written."""
+        if not history or not self.memory_on or not self.model_link.usable():
+            return None
+        try:
+            return Memory(self.instance, _task(self.model_link.client, "memory"), sender,
+                          self.current_week() or 1).rewrite(text, history)
+        except Exception as e:  # noqa: BLE001 - read as written instead
+            from .fallback import _outage
+
+            if _outage(e):
+                self.model_link.failed(e)
+            print(f"[model] memory: {type(e).__name__}: {str(e)[:160]}; read as written", flush=True)
+            return None
+
+    def read_question(self, text: str, sender: str, gate: bool = True) -> tuple[ToolCall | None, str]:
         """What a chat message asks to look up, and who read it. In the order that scored best on the test set
         (PROGRESS.md: 332/362): a message with request words ("can I have", "please move", "cancel") is a request,
         never a lookup; then the model; the regex when the model is off, unreachable or could not read it.
-        None: not a timetable question (a request or a rule question), for the request flow."""
-        if REQUEST.search(text):
+        None: not a timetable question (a request or a rule question), for the request flow. ``gate=False``:
+        without the request-words check (the person said "it's a question")."""
+        if gate and REQUEST.search(text):
             return None, "request words"
         week = self.current_week() or 1
         start = self.semester.state.semester_start
@@ -668,7 +782,10 @@ class World:
             for retry in (True, False):  # a reset connection is usually momentary: once more, straight away
                 try:
                     agent = ToolAgent(self.instance, _task(self.model_link.client, "lookup"), sender, week,
-                                      semester_start=start)
+                                      semester_start=start,  # roles as the app has them now ("the HOD")
+                                      roles_of={i.person: i.role.value for i in self.directory.by_email.values()},
+                                      # a v3 adapter reads several lookups and the new tools (agents.more_lookups)
+                                      multi="v3" in (self.lookup_adapter or ""))
                     call = agent.read(text)
                     unreachable = False
                     if call is None or call.confident or call.note != COULD_NOT:

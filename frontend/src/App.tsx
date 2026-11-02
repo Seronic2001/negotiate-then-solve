@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Home = lazy(() => import("./pages/Home"));
 const Requests = lazy(() => import("./pages/Requests"));
 const RequestChat = lazy(() => import("./pages/RequestChat"));
+const RequestsTable = lazy(() => import("./pages/RequestsTable"));
 const CaseDetail = lazy(() => import("./pages/CaseDetail"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Timetable = lazy(() => import("./pages/Timetable"));
@@ -20,6 +21,7 @@ const Fairness = lazy(() => import("./pages/Fairness"));
 const Graph = lazy(() => import("./pages/Graph"));
 const Policy = lazy(() => import("./pages/Policy"));
 const PolicyDocuments = lazy(() => import("./pages/PolicyDocuments"));
+const SettingsPage = lazy(() => import("./pages/Settings"));
 const SemesterBuild = lazy(() => import("./pages/SemesterBuild"));
 const SemesterPreferences = lazy(() => import("./pages/SemesterPreferences"));
 const Clubs = lazy(() => import("./pages/Clubs"));
@@ -63,7 +65,8 @@ function HomePage() {
 function RequestsPage({ one = false }: { one?: boolean }) {
   const { user } = useAuth();
   const [params] = useSearchParams();
-  if (TIMETABLE_HOME.includes(user?.role as Role) && !params.has("details")) return <RequestChat />;
+  // the list as a table (quick actions); one request as a conversation
+  if (TIMETABLE_HOME.includes(user?.role as Role) && !params.has("details")) return one ? <RequestChat /> : <RequestsTable />;
   return one ? <CaseDetail /> : <Requests />;
 }
 
@@ -89,7 +92,7 @@ function Routed() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<Guard view="new"><Home /></Guard>} /> {/* the same request workspace for every role */}
+          <Route path="/new" element={<Guard view="new"><Home /></Guard>} /> {/* the timetable and the chat beside it, for every role */}
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/:id" element={<RequestsPage one />} />
           <Route path="/inbox" element={<Guard view="inbox"><Inbox /></Guard>} />
@@ -98,6 +101,7 @@ function Routed() {
           <Route path="/fairness" element={<Guard view="fairness"><Fairness /></Guard>} />
           <Route path="/policy" element={<Policy />} />
           <Route path="/documents" element={<Guard view="documents"><PolicyDocuments /></Guard>} />
+          <Route path="/settings" element={<Guard view="settings"><SettingsPage /></Guard>} />
           <Route path="/semester" element={<Guard view="semester"><SemesterBuild /></Guard>} />
           <Route path="/preferences" element={<Guard view="prefs"><SemesterPreferences /></Guard>} />
           <Route path="/clubs" element={<Guard view="clubs"><Clubs /></Guard>} />

@@ -4,6 +4,7 @@ Gemini (``ToolAgent``) and both together (ROADMAP.md, step 4).
     uv run python -m evaluation.lookup_set                          # the regex only: no API calls
     uv run python -m evaluation.lookup_set --gemini gemini-3.8-flash # also Gemini (cached: reruns are free)
     uv run python -m evaluation.lookup_set --local http://10.1.25.191:8080/v1   # also the nts-lookup-v1 adapter
+    uv run python -m evaluation.lookup_set --local --department 1 --shuffle      # a department it has not seen
 
 ``data/lookup-test-templates.jsonl`` has templates, not questions: *"is {teacher.any} free on {day.any} at
 {time.any}?"* with the expected lookup in the same placeholders, ``{"teachers": ["{teacher}"], ...}``. The
@@ -31,6 +32,7 @@ from core.instance import Faculty, Group, Instance, Room
 from language.corpus import FULL_DAY, hour
 
 TEMPLATES = Path(__file__).parents[2] / "data" / "lookup-test-templates.jsonl"
+TEMPLATES_V2 = Path(__file__).parents[2] / "data" / "lookup-test-templates-v2.jsonl"  # the kinds v2 adds
 NOW = datetime(2026, 10, 21, 10, 30)  # a Wednesday morning in week 13: "today", "tomorrow", "next class"
 WEEK = 13
 SEMESTER_START = date(2026, 7, 27)  # Monday of week 1 (the semester planner's start), so NOW is in week 13
@@ -51,6 +53,45 @@ def with_first_names(instance: Instance) -> Instance:
     return Instance.model_validate(data)
 
 
+def department(base: Instance, seed: int | None = None, shuffle: bool = False, shared: bool = False) -> Instance:
+    """The department to ask about (ROADMAP step 6: does the model read the question, or remember the department
+    it was trained on?). ``seed``: one made by ``core.generator`` with the same numbers of teachers, sections,
+    courses and rooms as ``base`` (other teacher-course pairs, section sizes, rooms with labs); None: ``base``.
+    ``shuffle``: names, the HOD and course titles moved around (the generator always gives F-101 the name
+    "Dr. Rao" and the HOD, and Section 1 the same courses), so a model that learned who is who is caught.
+    The expected lookups are filled from whichever department this is, so they are right for it."""
+    if seed is not None:
+        from core.generator import generate_department
+
+        courses = len(base.course_titles) // max(len(base.groups), 1)
+        made = generate_department(  # ``shared``: courses as departments have them, some with two teachers
+            seed, n_faculty=len(base.faculty), n_groups=len(base.groups),
+            courses_per_group=max(len(base.course_titles) // 2, 1) if shared else max(courses, 1),
+            n_lecture_rooms=sum(r.type.value == "lecture" for r in base.rooms),
+            n_labs=sum(r.type.value == "lab" for r in base.rooms), calendar=base.calendar,
+            shared_courses=shared, co_teaching=0.4 if shared else 0.0)
+        pairs = lambda i: {(s.course, s.faculty) for s in i.sessions}  # noqa: E731
+        if pairs(made) == pairs(base) and [g.size for g in made.groups] == [g.size for g in base.groups]:
+            # the app's own department is a generated one (seed 1 at the demo's size): that seed asks it again
+            raise ValueError(f"seed {seed} makes the same department as {base.name!r}; choose another seed")
+        base = made.model_copy(update={"name": f"{made.name} (like {base.name})"})
+    if not shuffle:
+        return base
+    rng = random.Random(f"shuffle-{seed}")
+    data = base.model_dump()
+    names = [f["name"] for f in data["faculty"]]
+    rng.shuffle(names)
+    roles = [f["role"] for f in data["faculty"]]
+    rng.shuffle(roles)  # the HOD lands on someone else
+    for f, name, role in zip(data["faculty"], names, roles, strict=True):
+        f["name"], f["role"] = name, role
+    titles = list(data["course_titles"].values())
+    rng.shuffle(titles)
+    data["course_titles"] = dict(zip(data["course_titles"], titles, strict=True))
+    data["name"] = f"{base.name}, shuffled"
+    return Instance.model_validate(data)
+
+
 @dataclass
 class Filled:
     """One question from a template, with the lookup it should give."""
@@ -63,6 +104,7 @@ class Filled:
     args: dict = field(default_factory=dict)
     week: int = WEEK
     also: list[dict] = field(default_factory=list)  # other answers that count as right (ambiguous wordings)
+    split: list[dict] = field(default_factory=list)  # "each one on its own": the lookup for each, in any order
 
 
 class TemplateFiller:
@@ -78,14 +120,15 @@ class TemplateFiller:
         self.semester_start = semester_start
         self.directory = Directory(instance)
 
-    def fill(self, row: dict, rng: random.Random) -> Filled | None:
-        """None when the department has nothing to fill a placeholder with (no shared first name, ...)."""
-        self.rng, self.picked = rng, {}
+    def fill(self, row: dict, rng: random.Random, asker: str | None = None) -> Filled | None:
+        """None when the department has nothing to fill a placeholder with (no shared first name, ...).
+        ``asker``: who asks (a conversation's person, nts-memory's data); by default one picked for the row."""
+        self.rng, self.picked, self.said = rng, {}, {}
         rep = row.get("asker") == "rep"
         teaching = sorted({s.faculty for s in self.instance.sessions})
-        self.asker = f"ST-{rng.choice(self.instance.groups).id}" if rep else rng.choice(teaching)
+        self.asker = asker or (f"ST-{rng.choice(self.instance.groups).id}" if rep else rng.choice(teaching))
         try:
-            question = PLACEHOLDER.sub(lambda m: self._text(m.group(1), m.group(2)), row["template"])
+            question = PLACEHOLDER.sub(lambda m: self._say(m.group(1), m.group(2)), row["template"])
             week = self._week(row)
             args = {k: self._label(k, v) for k, v in row.get("args", {}).items()}
         except LookupError:
@@ -93,10 +136,48 @@ class TemplateFiller:
         if args.pop("next", False):
             week, after = from_now(self.instance, self.current_week, self.now)
             args["after"] = list(after)
+        self._resolve(row["tool"], args)
         also = [{"tool": a["tool"], "args": {k: self._label(k, v) for k, v in a.get("args", {}).items()}}
                 for a in row.get("also", [])]
+        args = {k: v for k, v in args.items() if v not in (None, [], False)}
         return Filled(row["id"], row.get("group", row["tool"] or "none"), question, self.asker, row["tool"],
-                      {k: v for k, v in args.items() if v not in (None, [], False)}, week, also)
+                      args, week, also, apart(row["tool"], args, row["split"]) if row.get("split") else [])
+
+    def _resolve(self, tool: str | None, args: dict) -> None:
+        """The words the model writes for the code to resolve (v2), turned into the IDs the lookup ends with, as
+        ``ToolAgent`` resolves them in this department: ``"all"`` (every teacher, section or room), ``roles``
+        (whoever holds them here) and, in ``free_hours``, a ``course`` (its teachers; with ``"all"`` teachers,
+        only the course's: "both DS teachers")."""
+        i = self.instance
+        course = args.pop("course", None) if tool == "free_hours" else None
+        every = {"teachers": [f.id for f in i.faculty], "sections": [g.id for g in i.groups],
+                 "rooms": [r.id for r in i.rooms]}
+        for key, ids in every.items():
+            if isinstance(args.get(key), list) and "all" in args[key]:  # who_is_free's "sections" is a flag
+                rest = [x for x in args[key] if x != "all"]
+                args[key] = rest if key == "teachers" and course else list(dict.fromkeys(rest + ids))
+        if course:
+            taught = [s.faculty for s in i.sessions if s.course == course]
+            args["teachers"] = list(dict.fromkeys(args.get("teachers", []) + taught))
+        roles = args.pop("roles", [])
+        for role in roles:
+            holders = [p for p, r in self.roles_of.items() if r == role]
+            args.setdefault("teachers", []).extend(p for p in holders if p in i.faculty_by_id and p not in args["teachers"])
+            reps = [p[3:] for p in holders if p.startswith("ST-") and p[3:] in i.group_by_id]
+            args.setdefault("sections", []).extend(g for g in reps if g not in args["sections"])
+        if roles and tool in ("describe", "classes_of", "changes"):  # tools of one person: "teacher", "section"
+            for many, one in (("teachers", "teacher"), ("sections", "section")):
+                if len(found := args.pop(many, [])) == 1:
+                    args[one] = found[0]
+
+    @property
+    def roles_of(self) -> dict[str, str]:
+        """Who holds which role in this department: the sign-in directory the app (and ToolAgent) builds."""
+        if not hasattr(self, "_roles_of"):
+            from pipeline.ingest import Directory as People
+
+            self._roles_of = {x.person: x.role.value for x in People.from_instance(self.instance).by_email.values()}
+        return self._roles_of
 
     # -- what a placeholder is: picked once per question, so "{teacher}" is the same teacher everywhere ----
 
@@ -176,6 +257,16 @@ class TemplateFiller:
         return self.picked[key]
 
     # -- the question's words ---------------------------------------------------------------------------------
+
+    def _say(self, name: str, form: str | None) -> str:
+        """``_text``, remembering how a teacher, section, room or course was written ("khan sir", "sec 2", "ML"), for a
+        reader that copies names as written (nts-lookup-v3)."""
+        text = self._text(name, form)
+        if form == "n":  # "Sections 1, 2 and 3": the model writes each in full ("Section 2"), not "2"
+            self.said.setdefault(name, self._pick(name).name)
+        elif form != "course":  # "{teacher.course}" writes the teacher's course, not the teacher
+            self.said.setdefault(name, text)
+        return text
 
     def _text(self, name: str, form: str | None) -> str:
         if name.startswith("teacher") and form == "course":
@@ -288,8 +379,34 @@ def fill_all(instance: Instance, rows: list[dict], fills: int = 3, seed: int = 0
     return out
 
 
-def right(f: Filled, call: ToolCall | None) -> bool:
-    """Whether a reading is the expected one: the tool, the week and the arguments (lists in any order)."""
+ONE = {"teachers": "teacher", "sections": "section", "rooms": "room"}
+
+
+def apart(tool: str | None, args: dict, keys: list[str]) -> list[dict]:
+    """A label for "each one on its own" ("when is Section 1, Section 2 and Section 3 free?", "what do Sections 1
+    and 2 have on Monday?"): the arguments of the lookup for each teacher, section or room in ``keys``, the rest as
+    given. Tools of one teacher, section or room (classes_of, changes, describe) name it in the singular."""
+    single = tool in ("classes_of", "changes", "describe")
+    rest = {k: v for k, v in args.items() if k not in keys}
+    return [rest | ({ONE[k]: x} if single else {k: [x]}) for k in keys for x in args.get(k, [])]
+
+
+def right(f: Filled, call: ToolCall | None, partial: bool = False) -> bool:
+    """Whether a reading is the expected one: the tool, the week and the arguments (lists in any order).
+    ``partial``: the label gives only some arguments (v3's tool templates: "move_options" names the course, not the
+    class's ID), and those must match. A label split into one lookup each (``Filled.split``): every one of them,
+    in any order, and nothing else."""
+    if f.split:
+        got = call.args["parts"] if call is not None and call.tool == "multi" else [call]
+        if any(g is None or not g.confident or g.tool != f.tool or g.week != f.week for g in got):
+            return False
+        return sorted(json.dumps(_norm(g.args), sort_keys=True) for g in got) == \
+            sorted(json.dumps(_norm(x), sort_keys=True) for x in f.split)
+    if partial and f.tool not in (None, "unclear"):
+        if call is None or not call.confident or call.tool != f.tool or call.week != f.week:
+            return False
+        got = _norm(call.args)
+        return all(got.get(k) == v for k, v in _norm(f.args).items())
     if f.tool is None:
         return call is None
     if call is None:
@@ -302,25 +419,38 @@ def right(f: Filled, call: ToolCall | None) -> bool:
     return any(call.tool == want["tool"] and _norm(call.args) == _norm(want["args"]) for want in wants)
 
 
+SAID_ONLY = {"as_role", "via_course", "each"}  # how the answer is worded, worked out from the rest: not scored
+
+
 def _norm(args: dict) -> dict:
     return {k: sorted(v) if isinstance(v, list) and k != "after" else v
-            for k, v in args.items() if v not in (None, [], False)}
+            for k, v in args.items() if v not in (None, [], False) and k not in SAID_ONLY}
 
 
-def _with_retries(read, question: str, tries: int = 5, wait: float = 15.0):
-    """A dropped connection is tried again after a pause; a question that keeps failing is marked, not fatal."""
+class Unreachable(Exception):
+    """The model could not be reached for a while: the run stops, to be resumed (``--resume``), rather than
+    count the questions it could not ask as wrong."""
+
+
+def _with_retries(read, question: str, tries: int = 10, wait: float = 30.0):
+    """A dropped connection (Gemini's or the local server's) is tried again after a pause; still down after
+    ``tries``, the run stops (``Unreachable``)."""
     import time
 
     import httpx
 
+    from language.llm import LLMError
+
     for k in range(tries):
         try:
             return read(question)
-        except (httpx.TransportError, ConnectionError) as e:
-            print(f"  network error ({type(e).__name__}), trying again in {wait:.0f} s", flush=True)
+        except (httpx.TransportError, ConnectionError, LLMError) as e:
+            if isinstance(e, LLMError) and "not reachable" not in str(e) and "timed out" not in str(e):
+                raise  # a real error from the model, not the network
+            print(f"  network error ({type(e).__name__}), trying again in {wait:.0f} s ({k + 1}/{tries})", flush=True)
             if k < tries - 1:
                 time.sleep(wait)
-    return ToolCall("unclear", confident=False, note="(skipped: the network kept failing)")
+    raise Unreachable(f"the model was unreachable {tries} times in a row")
 
 
 def _show(call: ToolCall | None) -> str:
@@ -341,13 +471,30 @@ def main() -> None:
     ap.add_argument("--rpd", type=int, default=None, help="Gemini calls a day (a paid key: e.g. 5000)")
     ap.add_argument("--out", type=Path, default=Path("runs/lookup-set.jsonl"), help="every question and reading")
     ap.add_argument("--misses", action="store_true", help="print every miss")
+    ap.add_argument("--department", type=int, metavar="SEED", default=None,
+                    help="ask about a generated department of the same size (not the app's; ROADMAP step 6)")
+    ap.add_argument("--shuffle", action="store_true", help="move names, the HOD and course titles around")
+    ap.add_argument("--shared", action="store_true",
+                    help="with --department: courses shared by every section, some with two teachers (run D)")
+    ap.add_argument("--templates", type=Path, default=TEMPLATES,
+                    help=f"the test templates (default {TEMPLATES.name}; v2's new kinds: {TEMPLATES_V2.name})")
+    ap.add_argument("--names-listed", action="store_true",
+                    help="with --multi: the department's names in the prompt (v3 as first built), not names as written")
+    ap.add_argument("--multi", action="store_true",
+                    help="read with v3's prompt and answer (several lookups, more tools): for nts-lookup-v3")
+    ap.add_argument("--resume", action="store_true",
+                    help="keep the questions already in --out and ask only the rest (after a dropped connection)")
     a = ap.parse_args()
 
     from web.app import World
 
     w = World(parser_mode="offline", seed_history=False, deadline=60)
-    instance = with_first_names(w.instance)
-    rows = [json.loads(x) for x in TEMPLATES.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if a.shared and a.department is None:
+        raise SystemExit("--shared needs --department SEED")
+    instance = with_first_names(department(w.instance, a.department, a.shuffle, a.shared))
+    print("department:", instance.name)
+    rows = [json.loads(x) for x in a.templates.read_text(encoding="utf-8").splitlines() if x.strip()]
+    partial = {r["id"] for r in rows if r.get("choice") and r["tool"] not in (None, "unclear")}  # v3's tool templates
     questions = fill_all(instance, rows, a.fills, a.seed)
     client, model = None, None
     from agents.tool_agent import ToolAgent
@@ -367,19 +514,34 @@ def main() -> None:
     readers = ["regex"] + ([model, "both"] if client else [])
     score: dict[str, dict[str, list[int]]] = {r: {} for r in readers}
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    with a.out.open("w", encoding="utf-8") as out:
+    done: set[tuple[str, str]] = set()
+    if a.resume and a.out.exists():  # the questions already asked count as they were scored
+        for line in a.out.read_text(encoding="utf-8").splitlines():
+            if line.strip() and all(f"{r}_right" in (row := json.loads(line)) for r in readers):
+                done.add((row["id"], row["question"]))
+                for r in readers:
+                    score[r].setdefault(row["group"], []).append(row[f"{r}_right"])
+        print(f"resuming: {len(done)} questions already asked")
+    with a.out.open("a" if a.resume else "w", encoding="utf-8") as out:
         for f in questions:
+            if (f.id, f.question) in done:
+                continue
             got = {"regex": QuestionReader(instance, f.asker, WEEK, today=NOW.date(), now=NOW,
                                             semester_start=SEMESTER_START).read(f.question)}
             trace = []
             if client:
-                agent = ToolAgent(instance, client, f.asker, WEEK, today=NOW.date(), now=NOW,
+                agent = ToolAgent(instance, client, f.asker, WEEK, today=NOW.date(), now=NOW, multi=a.multi,
+                                  names_listed=a.names_listed if a.multi else None,
                                   semester_start=SEMESTER_START)
-                got[model] = _with_retries(agent.read, f.question)
+                try:
+                    got[model] = _with_retries(agent.read, f.question)
+                except Unreachable as e:
+                    raise SystemExit(f"\nstopped: {e}. {sum(len(v) for v in score['regex'].values())} questions are in "
+                                     f"{a.out}; run the same command with --resume to go on") from None
                 trace = agent.trace
                 got["both"] = got["regex"] if got["regex"] is not None or REQUEST.search(f.question) else got[model]
             for r in readers:
-                ok = right(f, got[r])
+                ok = right(f, got[r], f.id in partial)
                 score[r].setdefault(f.group, []).append(ok)
                 if a.misses and not ok and r != "both":
                     print(f"miss {r:6} {f.id} {f.question!r}\n       want {f.tool} {f.args} w{f.week}"
@@ -387,7 +549,8 @@ def main() -> None:
             out.write(json.dumps({"id": f.id, "group": f.group, "question": f.question, "asker": f.asker,
                                   "want": {"tool": f.tool, "args": f.args, "week": f.week},
                                   **{r: _show(got[r]) for r in readers}, "tries": trace,
-                                  **{f"{r}_right": right(f, got[r]) for r in readers}}) + "\n")
+                                  **{f"{r}_right": right(f, got[r], f.id in partial) for r in readers}}) + "\n")
+            out.flush()  # each question kept at once, so a run cut short can be resumed
 
     groups = sorted({g for s in score.values() for g in s})
     print(f"\n{len(questions)} questions from {len(rows)} templates\n")

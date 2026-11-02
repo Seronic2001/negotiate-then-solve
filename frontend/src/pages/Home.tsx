@@ -1,22 +1,21 @@
-import { Info } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { ChatPanel, type LookupMessage } from "../components/ChatPanel";
 import { ActionCard, ClassMenu, intent, sentence, type ActionKind, type Draft } from "../components/ClassActions";
-import { ConversationPane, useConversation } from "../components/ConversationPane";
-import { ConversationSwitcher, useConversations } from "../components/Conversations";
-import { DetailsDrawer } from "../components/DetailsDrawer";
 import { TimetableGrid } from "../components/TimetableGrid";
 import { WeekStepper } from "../components/WeekStepper";
 import { Card, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
-import type { AskAnswer, TimetableEntry } from "../lib/types";
+import type { TimetableEntry } from "../lib/types";
 
 /** The request workspace, the same for every role: the week's timetable first (click a class to cancel, move
- * or swap it, with the free slots shown, or to name it in a request); beside it, the person's requests and
- * what colleagues' requests asked of them, as conversations; and with none open, the full new-request
- * composer (examples, the week and days on the timetable, Undo). Faculty and class representatives have it
- * as their home (it replaces the Inbox for them); everyone else opens it as New request. */
+ * or swap it, with the free slots shown, or to name it in a message); beside it, one chat with the assistant
+ * (components/ChatPanel) for questions about the timetable or the rules and for requests, follow-ups included;
+ * the free hours an answer gives are shaded on the timetable. A request's progress is on its page (Requests).
+ * Faculty and class representatives have it as their home (it replaces the Inbox for them); everyone else opens
+ * it as New request. */
 export default function Home() {
   const { user } = useAuth();
   const teaching = ["faculty", "guest_faculty", "hod"].includes(user?.role ?? "");
@@ -42,30 +41,39 @@ export default function Home() {
   const { data: tt } = useApi(() => (week === null ? Promise.resolve(null) : api.timetable({ week })), [week], 5000);
   const shownWeek = week;
 
-  const { convs, refresh } = useConversations();
-  const s = useConversation(convs, refresh, { autoOpen: false }); // opens on a new request
-  const [details, setDetails] = useState<string | null>(null); // the request whose details are open
+  // a class named in the chat's message (its key changes each time), and a nudge to read the chat again
+  const [insert, setInsert] = useState<{ text: string; key: number } | null>(null);
+  const [poke, setPoke] = useState(0);
+  // the timetable beside the chat, or the chat alone: shown unless the person hid it (remembered in this browser)
+  const [timetableShown, setTimetableShown] = useState(() => {
+    try {
+      return localStorage.getItem("home.timetable") !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const showTimetable = (shown: boolean) => {
+    setTimetableShown(shown);
+    try {
+      localStorage.setItem("home.timetable", shown ? "shown" : "hidden");
+    } catch {
+      // private browsing: remembered for this page only
+    }
+  };
 
   const mine = useMemo(
     () => (tt?.entries ?? []).filter((e) => (teaching ? e.faculty === user?.id : group ? e.groups.includes(group) : false)),
     [tt, teaching, group, user],
   );
-  // classes clicked on the grid: shown as chips in the composer and named in the message when it is sent
-  const [picks, setPicks] = useState<TimetableEntry[]>([]);
-  // outlined: the classes attached to the message being written, else those the open request moves
+  // outlined: the classes the cancel, move or swap being put together is about
   // a request being put together by clicks (cancel, move or swap a class), and the menu that starts one
   const [menu, setMenu] = useState<{ x: number; y: number; cls: TimetableEntry } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const outlined = useMemo(
-    () =>
-      new Set(
-        draft
-          ? [draft.cls.session, ...(draft.theirs ? [draft.theirs.session] : [])]
-          : picks.map((e) => e.session),
-      ),
-    [draft, picks],
+    () => new Set(draft ? [draft.cls.session, ...(draft.theirs ? [draft.theirs.session] : [])] : []),
+    [draft],
   );
   const target = draft?.kind === "move" && draft.to?.slot != null && draft.to.day ? { day: draft.to.day, slot: draft.to.slot } : null;
   // while a move is being put together, where it would go (a request's change is shown in its conversation)
@@ -93,12 +101,14 @@ export default function Home() {
     return at < today;
   };
   const weekOver = !!cal && cal.days.every(dayPassed);
-  // free hours from a question answered in the panel ("when is Dr. Iyer free this week?"), shaded on that week
+  // free hours from a question answered in the chat ("when is Dr. Iyer free this week?"), shaded on that week;
+  // any other answer about a week opens that week
   const [shade, setShade] = useState<{ week: number; free: Set<string> } | null>(null);
-  const showAnswer = (a: AskAnswer) => {
-    if (!a.call || !a.free) return setShade(null);
-    setWeek(a.call.week);
-    setShade({ week: a.call.week, free: new Set(a.free.map((h) => `${h.day}:${h.slot}`)) });
+  const showAnswer = (m: LookupMessage) => {
+    const asked = m.call?.week ?? m.view?.week;
+    if (asked) setWeek(asked);
+    if (!m.call || !m.free) return setShade(null);
+    setShade({ week: m.call.week, free: new Set(m.free.map((h) => `${h.day}:${h.slot}`)) });
   };
   const shaded = !draft && !!shade && shade.week === week;
   const slotState = (day: string, slot: number): "free" | "blocked" | null => {
@@ -150,17 +160,10 @@ export default function Home() {
     const whose = teaching && e.faculty === user?.id ? "my" : !teaching && group && e.groups.includes(group) ? "the" : `${e.faculty_name}'s`;
     return `${whose} ${e.title} ${e.kind} on ${dayName(e.day)} at ${label(e.slot)}`;
   };
-  /** A click attaches that one class (or takes it off again); Ctrl or Shift + click adds it to the others. */
-  const toggle = (e: TimetableEntry, ev?: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => {
-    if (!s.answering) s.startNew();
-    if (!s.answering && s.replying) return; // options are waiting: a class click would start a new request
-    setPicks((p) => {
-      const has = p.some((x) => x.session === e.session);
-      if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) return has ? p.filter((x) => x.session !== e.session) : [...p, e];
-      return has && p.length === 1 ? [] : [e];
-    });
-  };
-  // clicking a class: in a swap it is the colleague's class; with Ctrl or Shift it is attached; otherwise the menu
+  /** The class named in the message being written in the chat ("…(my Data Structures lecture on Monday at 9 am)"). */
+  const name = (e: TimetableEntry) => setInsert((x) => ({ text: phrase(e), key: (x?.key ?? 0) + 1 }));
+  // clicking a class: in a swap it is the colleague's class; with Ctrl or Shift it is named in the chat; otherwise
+  // the menu
   const pickClass = (e: TimetableEntry, ev: MouseEvent) => {
     if (draft && e.session === draft.cls.session) return stopDraft(); // the class again: leave the action
     if (draft?.kind === "swap") {
@@ -168,7 +171,7 @@ export default function Home() {
       return;
     }
     if (draft) return; // choosing a time: classes are not targets
-    if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return toggle(e, ev);
+    if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return name(e);
     setMenu({ x: ev.clientX, y: ev.clientY, cls: e });
   };
   /** Leave a cancel, move or swap being put together: the Cancel button, Esc, or clicking its class again. */
@@ -186,8 +189,7 @@ export default function Home() {
   const startAction = (kind: ActionKind | "write") => {
     const cls = menu!.cls;
     setMenu(null);
-    if (kind === "write") return toggle(cls);
-    setPicks([]);
+    if (kind === "write") return name(cls);
     setActionError(null);
     const passed = !!cal && week !== null && week < cal.current_week; // a past week: pick the weeks instead
     setDraft({ kind, cls, to: null, theirs: null, when: { mode: passed ? "pick" : "this", weeks: [] }, hard: true, reason: "" });
@@ -198,11 +200,10 @@ export default function Home() {
     setSending(true);
     setActionError(null);
     try {
-      const { id } = await api.submitForm(sentence(draft, inst, week), intent(draft, week));
+      await api.submitForm(sentence(draft, inst, week), intent(draft, week));
       setDraft(null);
       if (draft.kind === "swap") setScope("mine");
-      s.open(id);
-      s.changed();
+      setPoke((n) => n + 1); // its card in the chat (the server adds the request there), at once
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -210,12 +211,16 @@ export default function Home() {
     }
   };
 
-  /** "a", "a and b", "a, b and c" */
-  const listed = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
-
   return (
-    <div className="grid gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(300px,27%)]">
-      <div className="flex min-h-0 min-w-0 flex-col gap-3">
+    <div
+      className={
+        timetableShown
+          ? "grid gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(300px,27%)]"
+          : "mx-auto grid w-full max-w-3xl gap-4 lg:h-full" // the chat alone, as a column of reading width
+      }
+    >
+      {/* hidden, not taken away: the week and what is being put together stay as they are */}
+      <div className={timetableShown ? "flex min-h-0 min-w-0 flex-col gap-3" : "hidden"}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           {cal ? (
             <WeekStepper cal={cal} week={shownWeek} onChange={(w) => w !== null && setWeek(w)} compact />
@@ -279,20 +284,7 @@ export default function Home() {
       </div>
 
       <Card className="flex h-[560px] min-h-0 flex-col lg:h-full">
-        <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
-          <ConversationSwitcher items={convs} selected={s.selected} onSelect={s.open} />
-          {s.caseId && (
-            <button
-              onClick={() => setDetails(s.caseId)}
-              title="Details: how the system handled this request"
-              aria-label="Details"
-              className="grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink"
-            >
-              <Info size={16} />
-            </button>
-          )}
-        </div>
-        {draft && inst && week !== null ? (
+        {draft && inst && week !== null && (
           <ActionCard
             d={draft}
             set={setDraft}
@@ -305,29 +297,31 @@ export default function Home() {
             onCancel={stopDraft}
             onSend={sendAction}
           />
-        ) : (
-          <ConversationPane
-            s={s}
-            convs={convs}
-            onAnswer={showAnswer}
-            when={
-              cal && shownWeek
-                ? { week: shownWeek, days: cal.days.map((d) => ({ code: d, name: cal.day_names[d], date: dates?.[d]?.label })) }
-                : undefined
-            }
-            attachments={{
-              items: picks.map((e) => ({ key: e.session, label: `${e.title} ${e.kind} · ${dayName(e.day)} ${label(e.slot)}` })),
-              remove: (key) => setPicks((p) => p.filter((x) => x.session !== key)),
-              compose: (t) => (picks.length ? `${t.replace(/[.!?]$/, "")} (${listed(picks.map(phrase))}).` : t),
-              clear: () => setPicks([]),
-            }}
-          />
         )}
+        {/* kept while a cancel, move or swap is put together (hidden), so a message being written is not lost */}
+        <div className={draft ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+          <ChatPanel
+            inst={inst ?? null}
+            cal={cal ?? null}
+            onShow={showAnswer}
+            insert={insert}
+            poke={poke}
+            actions={
+              <button
+                onClick={() => showTimetable(!timetableShown)}
+                className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
+                title={timetableShown ? "Hide the timetable: the chat alone" : "Show the timetable beside the chat"}
+              >
+                {timetableShown ? <PanelLeftClose size={13} /> : <PanelLeftOpen size={13} />}
+                {timetableShown ? "Hide timetable" : "Show timetable"}
+              </button>
+            }
+          />
+        </div>
       </Card>
       {menu && (
         <ClassMenu at={menu} cls={menu.cls} own={teaching && menu.cls.faculty === user?.id} onPick={startAction} onClose={() => setMenu(null)} />
       )}
-      <DetailsDrawer id={details} onClose={() => setDetails(null)} />
     </div>
   );
 }

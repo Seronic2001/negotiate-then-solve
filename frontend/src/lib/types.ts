@@ -11,7 +11,7 @@ export interface Persona {
   views?: View[];
 }
 
-export type View = "home" | "requests" | "timetable" | "handbook" | "how" | "new" | "inbox" | "approvals" | "history" | "documents" | "semester" | "prefs" | "clubs" | "fairness" | "graph" | "health" | "experiments" | "study";
+export type View = "home" | "requests" | "timetable" | "handbook" | "how" | "new" | "inbox" | "approvals" | "history" | "documents" | "semester" | "prefs" | "clubs" | "fairness" | "graph" | "health" | "experiments" | "study" | "settings";
 
 export type Status =
   | "received"
@@ -59,6 +59,10 @@ export interface CaseSummary {
   type: string | null;
   rounds: number;
   running: boolean;
+  /** In the person's own list (scope "mine"): they may withdraw it now. */
+  can_withdraw?: boolean;
+  /** In the person's list: it waits on their answer (a question back, or options a colleague's request sent them). */
+  waits_on_you?: boolean;
   /** Waiting for the model to read it (the server holds a change while the model is away). */
   held?: boolean;
   /** Who read the request: the fine-tuned model, the rule parser (fast path, or the stand-in while the model was
@@ -263,6 +267,8 @@ export interface Overview {
   my_decisions?: number;
   my_forwarded?: number;
   my_inbox: number;
+  /** requests waiting on this person's answer (the Requests tab's count) */
+  my_waiting?: number;
   published_version: number | null;
   gini: number;
   negotiations: { agreed: number; escalated: number; feasible: number; mean_rounds: number | null };
@@ -708,7 +714,71 @@ export interface ClubDecision {
 export interface AskAnswer {
   kind: "timetable" | "not_a_question";
   answer?: string;
+  /** Who read the question: the model (the lookup adapter), the regex, or the request words that ruled it out. */
+  reader?: "model" | "regex" | "request words";
   call?: { tool: string; args: Record<string, unknown>; week: number; confident: boolean };
   /** For free-hour questions: the free hours, for the timetable to shade. */
   free?: { day: string; slot: number }[];
+  /** The part of the timetable the answer is about, to draw beside it; null when there is nothing to draw. */
+  view?: SliceView | null;
+}
+
+/** What a timetable slice shows (agents/views.py). Two layouts:
+ * "week": one timetable, days across and hours down (free hours, classes, the next class, a week's changes);
+ * "rows": one row per room or person, hours across, for one day (which rooms are free, who is free). */
+export type SliceView = WeekSlice | RowsSlice;
+
+export interface WeekSlice {
+  layout: "week";
+  week: number;
+  /** The columns, in calendar order: the days asked about, or the days with something on them. */
+  days: string[];
+  /** The rows: the hours from the first to the last cell (slot numbers), lunch included when it falls between. */
+  slots: number[];
+  lunch: number | null;
+  cells: SliceCell[];
+}
+
+export interface SliceCell {
+  day: string;
+  slot: number;
+  /** Hours it covers from ``slot`` (a 2-hour practical: 2). */
+  span: number;
+  /** free / busy: an hour asked about; class: a class found; cancelled / moved_from / moved_to / extra: a change. */
+  kind: "free" | "busy" | "class" | "cancelled" | "moved_from" | "moved_to" | "extra";
+  label?: string; // classes: "Data Structures lecture"
+  sub?: string; // classes: "Room 102 · Section 1 · Dr. Menon"
+  session?: string;
+}
+
+export interface RowsSlice {
+  layout: "rows";
+  week: number;
+  day: string;
+  /** The columns: the hours to show (slot numbers). */
+  slots: number[];
+  lunch: number | null;
+  /** One row per room or person, with the hours (slot numbers) they are free on ``day``. */
+  rows: { name: string; free: number[] }[];
+}
+
+/** One message of the person's chat (GET/POST /api/chat, POST /api/chat/confirm; CHAT-PLAN.md). */
+export type ChatMessage =
+  /** what the person wrote; ``read_as``: a follow-up as it was read, made to stand on its own ("and Friday?" →
+   *  "when is Dr. Rao free on Friday?"), when it was rewritten */
+  | (ChatBase & { role: "you"; kind: "text"; text: string; read_as?: string })
+  | (ChatBase & { role: "assistant"; kind: "lookup" } & Omit<AskAnswer, "kind">)
+  /** a question about the rules, answered from them: every rule cited (none: "I couldn't find a rule"). */
+  | (ChatBase & { role: "assistant"; kind: "rule"; answer: string; rules: { id: string; title: string }[] })
+  /** "send this as a request?": nothing sent until answered (POST /api/chat/confirm). */
+  | (ChatBase & { role: "assistant"; kind: "confirm"; text: string; makeup?: boolean | null; answered?: ConfirmAs })
+  /** a request, once sent: its number (what happens next is on its page) */
+  | (ChatBase & { role: "assistant"; kind: "request"; case: string })
+  | (ChatBase & { role: "assistant"; kind: "other"; text: string });
+
+export type ConfirmAs = "request" | "question" | "cancel";
+
+interface ChatBase {
+  n: number;
+  at: string;
 }

@@ -35,7 +35,13 @@ REQUEST = re.compile(r"\b(cancel|move|reschedule|shift|swap|exchange|postpone|pr
                      r"\b(i|we) (want|need|would like|'d like)\b|"
                      r"\b(can|could|may) (i|we|you) (have|get|put|hold|teach|keep|take|make)\b|"
                      r"\b(can|could|would) (?!i\b|we\b|you\b)[a-z.]+ (take|cover|handle) (my|our)\b|"  # "could Rao take my class"
-                     r"\bclash(es|ing)?\b", re.IGNORECASE)  # a clash report is a request
+                     # a clash *reported* is a request ("our AI class clashes with another"); a question about one
+                     # ("does Reddy clash with Section 1?", "any clashes in my timetable?") is v3's clash_check
+                     r"\b(clashes|clashing) with\b", re.IGNORECASE)
+# a question about what the rules allow, not about what the timetable has: for the rule search, not a lookup
+RULE = re.compile(r"\b(allowed|permitted|rules?|polic(y|ies)|regulations?|approv\w*)\b|"
+                  r"\bhow (many|much|far|long|often)\b.*\b(can|may|must|should)\b|"
+                  r"\b(maximum|minimum|at most|at least)\b.*\b(can|may|must|allowed)\b", re.IGNORECASE)
 ME = re.compile(r"\b(i|me|my|mine|myself|we|us|our)\b", re.IGNORECASE)
 DAY = re.compile(r"\b(mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri)(day)?s?\b", re.IGNORECASE)
 WEEK = re.compile(r"\bweek\s*(\d{1,2})\b", re.IGNORECASE)
@@ -64,6 +70,20 @@ CHANGES = re.compile(r"\bwhat(?:'s| has| have)? changed\b|\bchanges\b|\bcancell?
 # questions the timetable must not, or cannot, answer: said so, never guessed
 PRIVATE = re.compile(r"\bwhy\b.*\b(absent|away|on leave|off|not (coming|here|in)|cancell?ed|missing)\b", re.IGNORECASE)
 NOT_IN_DATA = re.compile(r"\b(holidays?|vacations?|exams?|examinations?|mid-?sems?|end-?sems?)\b", re.IGNORECASE)
+# Roles as answers say them ("The HOD (Dr. Rao) is free on ..."); a role not listed is said from its name
+# ("guest_faculty" -> "the guest faculty"), so a role added to core.schemas.Role needs nothing here.
+ROLE_NAMES = {"hod": "the HOD", "coordinator": "the timetable coordinator", "lab_incharge": "the lab in-charge",
+              "student": "the class representatives"}
+
+
+# "changes" of one kind, as the model names them -> as WeekTimetable.changes() gives them
+CHANGE_KINDS = {"cancelled": "not_held", "moved": "moved", "extra": "extra"}
+
+
+def role_name(role: str) -> str:
+    return ROLE_NAMES.get(role, f"the {role.replace('_', ' ')}")
+
+
 PRIVATE_NOTE = "I can't say why someone is away: the reasons are private. I can tell you which classes are not held."
 NOT_IN_DATA_NOTE = "I don't know that: holidays and exam dates are not in the timetable."
 # calendar dates: "28 October", "28th Oct", "Oct 28", "28/10", "28-10-2026" (day first, as written in India)
@@ -108,6 +128,8 @@ class QuestionReader:
         text = spell_days(text)
         if REQUEST.search(text):
             return None  # a change is being asked for, not information
+        if RULE.search(text):
+            return None  # what the rules allow: the rule search answers it
         if PRIVATE.search(text):
             return ToolCall("unclear", week=self.current_week, confident=False, note=PRIVATE_NOTE)
         if NOT_IN_DATA.search(text):
@@ -293,13 +315,28 @@ class QuestionReader:
 class Answerer:
     """Runs a ToolCall on the week's timetable and writes the reply from what it returns."""
 
-    def __init__(self, instance: Instance, sender: str) -> None:
+    def __init__(self, instance: Instance, sender: str, records=None, sees_all: bool = False) -> None:
+        """``records``: the app's data the timetable doesn't hold (``more_lookups.Records``: requests, rules,
+        bookings, other weeks); the lookups that need it say so without it. ``sees_all``: the asker may see every
+        request (the timetable office)."""
         self.instance = instance
         self.sender = sender
+        self.records = records
+        self.sees_all = sees_all
 
     def answer(self, call: ToolCall, week: WeekTimetable) -> str:
         if not call.confident:
             return call.note
+        if call.tool == "multi":  # several lookups in one question (v3): each answered, in order
+            return " ".join(self.answer(p, self._week_of(p, week)) for p in call.args["parts"])
+        if len(call.args.get("weeks", [])) > 1:  # several weeks: each, and for free hours the hours free in all
+            return self._weeks(call, week)
+        from . import more_lookups
+
+        if call.tool in more_lookups.MORE_TOOLS:
+            return more_lookups.answer(self, call, week)
+        if call.tool == "free_hours" and call.args.get("room_for"):
+            return self._room_for(call, week)
         if call.tool == "free_hours":
             if call.args.get("kind") or call.args.get("min_capacity") or call.args.get("equipment"):
                 return self._free_with_room(call, week)
@@ -319,6 +356,74 @@ class Answerer:
         return "I can answer questions like: my free hours this week, when Dr. Iyer teaches Machine Learning, " \
                "or whether Lab 2 is free on Friday."
 
+    def _week_of(self, call: ToolCall, week: WeekTimetable) -> WeekTimetable:
+        """The timetable of ``call``'s week: ``week`` when it is that one, else read from the records' store."""
+        store = getattr(self.records, "store", None)
+        if call.week == week.week or store is None:
+            return week
+        return WeekTimetable(self.instance, store, call.week)
+
+    def _weeks(self, call: ToolCall, week: WeekTimetable) -> str:
+        """ "Am I free every Tuesday this month?": the lookup in each week asked, and, for free hours, the hours free
+        in every one of them."""
+        weeks = sorted(call.args["weeks"])
+        one = {k: v for k, v in call.args.items() if k != "weeks"}
+        parts, common = [], None
+        for w in weeks:
+            c = ToolCall(call.tool, one, w)
+            wk = self._week_of(c, week)
+            parts.append(f"Week {w}: {self.answer(c, wk)}")
+            if call.tool == "free_hours" and not one.get("slots"):
+                hours = set(self._in_part(wk.free_hours(one.get("teachers", ()), one.get("sections", ()),
+                                                        one.get("rooms", ()), one.get("days"),
+                                                        length=one.get("length", 1)), one))
+                common = hours if common is None else common & hours
+        if common is not None:
+            days = self.instance.calendar.days
+            every = sorted(common, key=lambda h: (days.index(h[0]), h[1]))
+            parts.insert(0, (f"Free in every one of weeks {weeks[0]}–{weeks[-1]}: {_spans(every)}." if every else
+                             f"There is no hour free in every one of weeks {weeks[0]}–{weeks[-1]}."))
+        return " ".join(parts)
+
+    def _room_for(self, call: ToolCall, week: WeekTimetable) -> str:
+        """ "Can Lab 3 hold Sections 1 and 2?": the free hours as asked, then whether each room named seats the
+        sections together, and, when one doesn't, rooms that do and are free then."""
+        a, i = call.args, self.instance
+        need = sum(i.group_by_id[g].size for g in a["room_for"])
+        plain = {k: v for k, v in a.items() if k != "room_for"}
+        groups = _listed([i.group_by_id[g].name for g in a["room_for"]])
+        if not a.get("rooms"):  # no room named: the hours when they're free with any room big enough
+            plain["min_capacity"] = max(need, plain.get("min_capacity") or 0)
+            return self._free_with_room(ToolCall("free_hours", plain, call.week), week)
+        said = self._free(ToolCall("free_hours", plain, call.week), week)
+        small = [r for r in (i.room_by_id[x] for x in a["rooms"]) if r.capacity < need]
+        if not small:
+            fits = _listed([f"{r.name} ({r.capacity} seats)" for r in (i.room_by_id[x] for x in a["rooms"])])
+            return f"{said} {fits} can seat {groups} together ({need} students)."
+        names = _listed([f"{r.name} has {r.capacity} seats" for r in small])
+        free = set(week.free_hours(a.get("teachers", ()), a.get("sections", ()), (), a.get("days")))
+        others = []
+        for room in i.rooms:
+            if room.capacity >= need and room.id not in a["rooms"]:
+                hours = [h for h in week.free_hours(rooms=[room.id], days=a.get("days")) if h in free]
+                if hours := self._in_part(hours, a):
+                    others.append(f"{room.name} ({room.capacity} seats), free {_spans(hours[:6])}")
+        alt = (f" Rooms that can: {'; '.join(others[:3])}." if others else
+               f" No room seats {need} at those hours.")
+        return f"{said} But {names}, and {groups} have {need} students together, so it can't hold them at once.{alt}"
+
+    def _name(self, who: tuple[str, str]) -> str:
+        """One teacher, section or room by name ("you" for the asker): ("teacher", "F-103") -> "Dr. Iyer"."""
+        kind, i = who
+        if kind == "teacher":
+            return "you" if i == self.sender else self.instance.faculty_by_id[i].name
+        if kind == "section":
+            return "your section" if self.sender == f"ST-{i}" else self.instance.group_by_id[i].name
+        return self.instance.room_by_id[i].name
+
+    def _spans(self, hours: list[tuple[str, int]]) -> str:
+        return _spans(hours)
+
     def _free(self, call: ToolCall, week: WeekTimetable) -> str:
         a = call.args
         free = week.free_hours(a.get("teachers", ()), a.get("sections", ()), a.get("rooms", ()), a.get("days"),
@@ -326,22 +431,38 @@ class Answerer:
         free = self._in_part(free, a)
         who, plural = self._who(a)
         when = f"week {call.week}"
+        taught = ""  # "when is the DS teacher free?": who that is, first
+        if a.get("via_course"):
+            course_teachers = {s.faculty for s in self.instance.sessions if s.course == a["via_course"]}
+            by = [self.instance.faculty_by_id[f].name for f in a.get("teachers", []) if f in course_teachers]
+            taught = f"{self.instance.course_title(a['via_course'])} is taught by {_listed(by)}. "
+        if a.get("each"):  # co-teachers: each one's free time on its own, with whoever else was asked about
+            co = [t for t in a.get("teachers", []) if t in course_teachers]
+            rest = [t for t in a.get("teachers", []) if t not in co]
+            parts = [self._free(ToolCall("free_hours", {**a, "teachers": rest + [t], "each": False, "via_course": None},
+                                         call.week), week) for t in co]
+            return taught + " ".join(parts)
+        if a.get("first") and free:  # only the earliest: the first hour, or the first run of ``length`` hours
+            day, slot = free[0]
+            run = [(day, s) for s in range(slot, slot + a.get("length", 1)) if (day, s) in free]
+            both = " both" if plural and len(self._people(a)) == 2 else ""
+            return taught + _cap(f"the earliest {who} {'are' if plural else 'is'}{both} free is {_spans(run)} ({when}).")
         if a.get("slots"):  # "is Lab 2 free on Thursday at 3 pm?": yes or no for those hours
             days = a.get("days") or self.instance.calendar.days
             asked = [(d, s) for d in days for s in a["slots"]]
             taken = [h for h in asked if h not in free]
             at = ", ".join(f"{FULL_DAY[d]} {hour(s)}" for d, s in asked)
             if not taken:
-                return f"Yes, {who} {'are' if plural else 'is'} free on {at} ({when})."  # who mid-sentence
-            return f"No, {who} {'are' if plural else 'is'} not free on " \
+                return taught + f"Yes, {who} {'are' if plural else 'is'} free on {at} ({when})."  # who mid-sentence
+            return taught + f"No, {who} {'are' if plural else 'is'} not free on " \
                    f"{', '.join(f'{FULL_DAY[d]} {hour(s)}' for d, s in taken)} ({when})."
         run = f" ({a['length']} hours in a row)" if a.get("length", 1) > 1 else ""
         if not free:
             on = f" on {', '.join(FULL_DAY[d] for d in a['days'])}" if a.get("days") else ""
             part = f" in the {a['part']}" if a.get("part") else ""
-            return _cap(f"{who} {'have' if plural else 'has'} no free hours{run}{on}{part} in {when}.")
+            return taught + _cap(f"{who} {'have' if plural else 'has'} no free hours{run}{on}{part} in {when}.")
         both = " both" if plural and len(self._people(a)) == 2 else ""
-        return _cap(f"{who} {'are' if plural else 'is'}{both} free{run} on {_spans(free)} ({when}).")
+        return taught + _cap(f"{who} {'are' if plural else 'is'}{both} free{run} on {_spans(free)} ({when}).")
 
     def _free_with_room(self, call: ToolCall, week: WeekTimetable) -> str:
         """ "When can Section 1 and I have a 2-hour class in a lab?": per room, the hours when it and they are free."""
@@ -404,7 +525,9 @@ class Answerer:
             return f"{g.name} has {g.size} students; courses: {_listed(courses)}."
         if a.get("teacher"):
             f = i.faculty_by_id[a["teacher"]]
-            who = "You teach" if f.id == self.sender else f"{f.name} teaches"
+            role = a.get("as_role", {}).get(f.id)
+            who = ("You teach" if f.id == self.sender else
+                   _cap(f"{role_name(role)} is {f.name}, who teaches") if role else f"{f.name} teaches")
             return (f"{who} {_listed([i.course_title(c) for c in d.courses_of(f.id)])}: "
                     f"{d.weekly_hours(f.id)} hours a week.")
         if a.get("course"):
@@ -418,8 +541,11 @@ class Answerer:
             kind = a.get("kind")
             name = {"lab": "Labs", "lecture": "Lecture rooms"}.get(kind, "Rooms")
             return f"{name}: " + "; ".join(f"{r.name} ({self._room_facts(r)})" for r in d.rooms(kind)) + "."
-        if what == "sections":
-            return "Sections: " + "; ".join(f"{g.name} ({g.size} students)" for g in d.sections()) + "."
+        if what == "sections":  # each with what it studies, as the teachers' list gives what they teach
+            return "Sections: " + "; ".join(
+                f"{g.name} ({g.size} students): "
+                + _listed(list(dict.fromkeys(i.course_title(s.course) for s in i.sessions if g.id in s.groups)))
+                for g in d.sections()) + "."
         if what == "teachers":
             return "Teachers: " + "; ".join(
                 f"{f.name} ({_listed([i.course_title(c) for c in d.courses_of(f.id)]) or 'no classes'})"
@@ -441,7 +567,21 @@ class Answerer:
         found = week.changes(a.get("teacher"), a.get("section"))
         whose = "" if not (a.get("teacher") or a.get("section")) else " for " + self._who(
             {"teachers": [a["teacher"]] if a.get("teacher") else [],
-             "sections": [a["section"]] if a.get("section") else []})[0]
+             "sections": [a["section"]] if a.get("section") else [], "as_role": a.get("as_role", {})})[0]
+        if kind := a.get("change"):  # "any cancelled classes next week?": yes or no, about that kind only
+            mine = [c for c in found if c.kind == CHANGE_KINDS[kind]]
+            others, found = len(found) - len(mine), mine
+            if not found:
+                none = (f"There are no extra classes{whose} in week {call.week}." if kind == "extra" else
+                        f"No classes{whose} are {'cancelled' if kind == 'cancelled' else 'moved'} in week {call.week}.")
+                more = (f" ({others} other change{'s' if others != 1 else ''} that week: ask what changed to see "
+                        f"{'them' if others != 1 else 'it'}.)") if others else ""
+                return none + more
+            n = len(found)
+            done = {"cancelled": "not held", "moved": "moved", "extra": "added"}[kind]
+            lead = f"Yes, {n} class{'es' if n != 1 else ''}{whose} {'is' if n == 1 else 'are'} {done} in week {call.week}: "
+        else:
+            lead = f"Changes{whose} in week {call.week}: "
         if not found:
             return f"No changes{whose} in week {call.week}: the timetable is as planned."
         said = []
@@ -454,7 +594,7 @@ class Answerer:
                             f"{FULL_DAY[c.after.day]} {hour(c.after.slot)}")
             else:
                 said.append(f"extra {what} on {FULL_DAY[c.after.day]} {hour(c.after.slot)}")
-        return f"Changes{whose} in week {call.week}: " + "; ".join(said) + "."
+        return lead + "; ".join(said) + "."
 
     def _in_part(self, hours: list[tuple[str, int]], a: dict) -> list[tuple[str, int]]:
         """Only the morning's or the afternoon's hours, when the question says which."""
@@ -507,7 +647,7 @@ class Answerer:
             found = [c for c in found if c.placement.day in a["days"]]
         who, _ = self._who({"teachers": [a["teacher"]] if a.get("teacher") else [],
                             "sections": [a["section"]] if a.get("section") else [],
-                            "rooms": [a["room"]] if a.get("room") else []})
+                            "rooms": [a["room"]] if a.get("room") else [], "as_role": a.get("as_role", {})})
         course = self.instance.course_title(a["course"]) if a.get("course") else ""
         when = f"week {call.week}"
         if a.get("count"):  # "how many hours do I teach this week?"
@@ -534,7 +674,10 @@ class Answerer:
             return _cap(f"{who}'s{' ' + course if course else ''} classes in {when}: ") + listed + "."
         if a.get("room"):
             return f"{course + ' c' if course else 'C'}lasses in {who} in {when}: " + listed + "."
-        return f"{course} in {when}: " + listed + "."  # a course asked about, nobody named: everyone's classes of it
+        if course:
+            return f"{course} in {when}: " + listed + "."  # a course asked about, nobody named: everyone's classes of it
+        on = f" on {_listed([FULL_DAY[d] for d in a['days']])}" if a.get("days") else ""
+        return f"Classes{on} in {when}: " + listed + "."  # every teacher ("which teachers teach on Friday?")
 
     def _one(self, c: ScheduledClass, teacher: bool = False) -> str:
         s, p = c.session, c.placement
@@ -547,16 +690,30 @@ class Answerer:
         return [*a.get("teachers", []), *a.get("sections", []), *a.get("rooms", [])]
 
     def _who(self, a: dict) -> tuple[str, bool]:
-        """ "you", "you and Dr. Iyer", "Section 4", "Lab 2": and whether it is plural ("are", "have")."""
-        names = []
+        """ "you", "you and Dr. Iyer", "Section 4", "Lab 2", "all teachers": and whether it is plural ("are",
+        "have"). Every teacher, section or room of the department is said as "all teachers" (not the list)."""
+        i = self.instance
+        every = [w for w, have, ids in (("teachers", a.get("teachers", []), [f.id for f in i.faculty]),
+                                        ("sections", a.get("sections", []), [g.id for g in i.groups]),
+                                        ("rooms", a.get("rooms", []), [r.id for r in i.rooms]))
+                 if len(ids) > 1 and set(have) >= set(ids)]
+        if every:
+            rest = {k: [] if k in every else a.get(k, []) for k in ("teachers", "sections", "rooms")}
+            others, _ = self._who(rest) if any(rest.values()) else ("", False)
+            return _listed([f"all {w}" for w in every] + ([others] if others else [])), True
+        names, as_role, by_role = [], a.get("as_role", {}), {}  # a role named: "the HOD (Dr. Rao)"
         for t in a.get("teachers", []):
-            names.append("you" if t == self.sender else self.instance.faculty_by_id[t].name)
+            name = "you" if t == self.sender else self.instance.faculty_by_id[t].name
+            (by_role.setdefault(as_role[t], []) if t in as_role else names).append(name)
         for g in a.get("sections", []):
-            names.append("your section" if self.sender == f"ST-{g}" else self.instance.group_by_id[g].name)
+            name = "your section" if self.sender == f"ST-{g}" else self.instance.group_by_id[g].name
+            (by_role.setdefault(as_role[g], []) if g in as_role else names).append(name)
         names += [self.instance.room_by_id[r].name for r in a.get("rooms", [])]
-        if not names:
+        roles = [f"{role_name(r)} ({_listed(people)})" for r, people in by_role.items()]
+        if not names and not roles:
             return "anyone", False
-        return _listed(names), len(names) > 1 or names == ["you"]
+        count = len(names) + sum(len(p) for p in by_role.values())
+        return _listed(roles + names), count > 1 or names == ["you"]
 
 
 def dates_in(text: str, today: date) -> list[date]:
