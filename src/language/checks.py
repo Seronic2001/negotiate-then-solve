@@ -223,6 +223,8 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
                          "requirement")
             intent = intent.model_copy(update={"hard": True})
         intent = _ground_period(intent, text, notes, i)
+        if len(items) == 1:
+            intent = _restore_weeks(intent, text, notes, i)
         if isinstance(intent, ClubBooking):
             intent = _club_times(intent, text, notes, i)
         if isinstance(intent, Move):
@@ -432,6 +434,42 @@ def _ground_period(intent, text: str, notes: list[str], i: int):
     else:
         return intent
     return intent.model_copy(update={"period": Period()})
+
+
+# a week the message names by number: "in week 10", "weeks 10-12", "weeks 10 and 11", "from week 10"
+_WEEK_NUMBERS = re.compile(r"\b(from\s+)?weeks?\s+(\d{1,2})(?:\s*(-|–|to|through|and|&)\s*(\d{1,2}))?\b", re.IGNORECASE)
+_EVERY_WEEK = re.compile(r"\b(every|each)\s+week\b|\bfrom now on\b|\b(whole|entire|rest of the)\s+(semester|term)\b",
+                         re.IGNORECASE)
+
+
+def _restore_weeks(intent, text: str, notes: list[str], i: int):
+    """``intent`` with the weeks the message names by number, when the reading dropped them: "My lecture has
+    to be on Monday at 11 am in week 10" read as every week would move the class for the whole semester.
+    Only for a message that is one request and names one span of weeks, and says nothing of every week."""
+    period = getattr(intent, "period", None)
+    if not isinstance(period, Period) or not period.is_recurring or _EVERY_WEEK.search(text):
+        return intent
+    spans = _WEEK_NUMBERS.findall(text)
+    if len(spans) != 1:
+        return intent
+    start, a, joint, b = spans[0]
+    a = int(a)
+    if b and joint.lower() in ("and", "&"):
+        new = Period(weeks=sorted({a, int(b)}))
+    elif b:
+        new = Period(from_week=min(a, int(b)), to_week=max(a, int(b)))
+    elif start:
+        new = Period(from_week=a)
+    else:
+        new = Period(weeks=[a])
+    try:
+        out = intent.model_copy(update={"period": new})
+        type(intent).model_validate(out.model_dump())
+    except ValueError:
+        return intent
+    notes.append(f"intent {i} ({intent.kind}): every week, but the message names {spans[0][1]}"
+                 f"{(' ' + joint + ' ' + b) if b else ''}; read as those weeks")
+    return out
 
 
 def _check_move(instance: Instance, intent: Move, sender: str, timetable: Mapping[str, Placement] | None,

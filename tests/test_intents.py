@@ -578,3 +578,18 @@ def test_an_intent_reads_back_as_a_sentence(instance, teacher):
         f"Cancel my {title} {s.kind.value} from week 15 to week 16."
     assert say(instance, Avoid(time=TimeSpec(days=["Wed"], before="10:00"), hard=True), teacher) == \
         "Do not schedule my classes on Wednesday before 10 am."
+
+
+def test_the_office_names_a_class_by_what_it_is_whoever_teaches_it(instance):
+    """The timetable office teaches nothing: "move the Algorithms lecture on Monday at 9" is anyone's class
+    that fits, found by its day and time; a teacher's own reference still means their own classes."""
+    tt = timetable(instance)
+    s = next(s for s in instance.sessions if s.kind.value == "lecture")
+    at = tt[s.id]
+    ref = ClassRef(course=s.course, kind="lecture", day=at.day, time=f"{9 + at.slot:02d}:00")
+    c = compile_(instance, "C-TT", Move(which=ref, to=TimeSpec(days=["Fri"], part="afternoon")),
+                 role=Role.COORDINATOR, timetable=tt)
+    assert c.question is None and [p.scope.session for p in c.result.constraints] == [s.id]
+    other = next(f.id for f in instance.faculty if f.id != s.faculty and any(x.faculty == f.id for x in instance.sessions))
+    c = compile_(instance, other, Move(which=ref, to=TimeSpec(days=["Fri"])), timetable=tt)
+    assert c.missing == ["session"] and "could not find" in c.question

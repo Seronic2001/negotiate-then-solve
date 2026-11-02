@@ -32,7 +32,7 @@ format, so parsers that emit intents feed everything built on that format.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
@@ -55,6 +55,7 @@ from core.validator import validate_constraint
 
 from .corpus import FIRST_SLOT_HOUR, FULL_DAY, hour
 from .parsing import (
+    STUDENTS_REPORT,
     DraftConstraint,
     ParseOutput,
     ParseResult,
@@ -692,12 +693,15 @@ def classes(instance: Instance, ref: ClassRef, sender: str,
             raise Unresolved("I could not find that class. Which one do you mean?", "session")
         return [ref.session]
     owner = ref.owner or sender
+    # someone who teaches no classes (the timetable office, the lab in-charge) means a class by what it is,
+    # whoever teaches it: "move the Section 3 Algorithms lecture on Monday at 9 am"
+    anyone = ref.owner is None and not any(s.faculty == sender for s in instance.sessions)
     courses = {ref.course} if ref.course is not None else None
     if ref.course is not None and ref.course in instance.course_titles:
         title = instance.course_title(ref.course)
-        courses = {s.course for s in instance.sessions if s.faculty == owner
+        courses = {s.course for s in instance.sessions if (anyone or s.faculty == owner)
                    and instance.course_title(s.course) == title} or courses
-    found = [s for s in instance.sessions if s.faculty == owner
+    found = [s for s in instance.sessions if (anyone or s.faculty == owner)
              and (courses is None or s.course in courses)
              and (ref.kind is None or s.kind.value == ref.kind)
              and (ref.group is None or ref.group in s.groups)]
@@ -937,13 +941,18 @@ def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
     return days, hours, weeks
 
 
-def unaccounted(text: str, out: IntentOutput) -> list[str]:
+def unaccounted(text: str, out: IntentOutput, where: Iterable[tuple[str, int]] = ()) -> list[str]:
     """What a message says that its reading does not use: a day, a time or a week nothing was read from, and
     a requirement ("only", "must", "can't") read as a wish. Shown to the sender and the approver, so a
-    reading that dropped a clause ("... but not on Friday") is seen before anything is approved."""
+    reading that dropped a clause ("... but not on Friday") is seen before anything is approved. ``where``:
+    (day, clock hour) of the classes the reading picked out, now; "my lecture on Thursday" names the class by
+    where it is, so that day and hour were used to find it, not dropped."""
     if out.action != "compile" or not out.intents:
         return []
     days, hours, weeks = _used(out)
+    for d, h in where:
+        days.add(d)
+        hours.add(h)
     notes = []
     said_days = list(dict.fromkeys(_SAID_DAY_FULL[m[1].lower()[:3]] for m in _SAID_DAY.finditer(text)))
     if missed := [d for d in said_days if d not in days]:
@@ -1307,7 +1316,7 @@ def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
     if out.action == "withdraw":
         compiled.result = ParseResult(request=request, output=None, withdraw=True)
         if request.role == Role.STUDENT:
-            compiled.result.refusal = "students can report issues but cannot change the timetable"
+            compiled.result.refusal = STUDENTS_REPORT
         return compiled
     # swaps and extra classes have their own flows, which ask their own questions: the old format routes them there
     own_flow = any(i.kind in ("swap", "extra_class") for i in out.intents)

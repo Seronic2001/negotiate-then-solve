@@ -383,3 +383,21 @@ def test_a_move_of_a_course_the_message_does_not_name_is_dropped(instance, lectu
     assert move.which.course == title
     both = check_reading(instance, request(lecture.faculty, f"Move {title} and {other} to Wednesday morning."), out)
     assert len(both.output.intents) == 3
+
+
+@pytest.mark.parametrize(("text", "period"), [
+    ("My lecture has to be on Monday at 11 am in week 10; I have a guest speaker.", {"weeks": [10]}),
+    ("Please move my lecture to Monday at 11 am for weeks 10-12.", {"from_week": 10, "to_week": 12}),
+    ("Move my lecture to Monday at 11 am in weeks 10 and 12.", {"weeks": [10, 12]}),
+    ("From week 10 my lecture should be on Monday at 11 am.", {"from_week": 10}),
+    ("Move my lecture to Monday at 11 am every week from now on.", {}),  # every week, as read
+])
+def test_weeks_the_message_names_by_number_are_kept_when_the_reading_drops_them(instance, lecture, text, period):
+    move = Move(which=ClassRef(session=lecture.id), to=TimeSpec(days=["Mon"], at=["11:00"]), hard=True)
+    got = check_reading(instance, request(lecture.faculty, text), IntentOutput(action="compile", intents=[move]))
+    p = got.output.intents[0].period
+    assert {k: v for k, v in p.model_dump().items() if v} == period
+    # two requests in one message: which of them a week is about is not plain, so neither is changed
+    two = IntentOutput(action="compile", intents=[move, Avoid(time=TimeSpec(days=["Fri"]))])
+    got = check_reading(instance, request(lecture.faculty, text + " And no Fridays for me."), two)
+    assert all(i.period.is_recurring for i in got.output.intents)
