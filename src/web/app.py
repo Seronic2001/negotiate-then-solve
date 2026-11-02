@@ -22,11 +22,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextlib
 import json
 import os
 import re
 import threading
+import time
 from collections import Counter
+from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -42,7 +45,7 @@ from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
 from agents.questions import Answerer
-from core.graph import add_conflict, build_graph
+from core.graph import add_conflict, add_constraint, build_graph
 from core.instance import Session
 from core.schemas import DAYS, ConstraintType, Placement, Request, RequestStatus, Role, Tier
 from evaluation.stats import mean
@@ -425,6 +428,15 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
     return sorted(out, key=lambda x: x["at"], reverse=True)
 
 
+def _negotiation_settings(w: World) -> dict:
+    """The negotiator's settings as it runs, for the How it works page."""
+    n = w.orch.negotiator
+    return {"rounds_at_most": n.max_rounds, "options_per_message": n.k, "asks_per_owner": n.asks_per_owner,
+            "reminders_before_escalating": 1, "reply_deadline_minutes": round(w.deadline / 60),
+            "solver_time_limit_s": n.time_limit, "solves_around_the_conflict": "yes" if n.local else "no",
+            "ledger_decay_per_semester": n.ledger.decay if n.ledger else None}
+
+
 def _reading(w: World, m: Message, r: Reply) -> str:
     """A typed reply in plain words, for the sender to confirm."""
     days = ", ".join(FULL_DAY.get(d, d) for d in r.counter_days or [])
@@ -470,32 +482,268 @@ def _pct(xs: list[float], q: float) -> float | None:
     return xs[min(len(xs) - 1, round(q / 100 * (len(xs) - 1)))]
 
 
-_CACHE_MODEL: dict[str, str] = {}  # cache file -> model; cached answers never change, so each file is read once
+_CACHE = ROOT / "runs" / "llm_cache"
+_CACHE_INDEX = _CACHE / "_models.json"  # cache file -> model, kept across restarts: cached answers never change
+_CACHE_MODEL: dict[str, str] = {}
 _CACHE_LOCK = threading.Lock()
+_CACHE_STATE = {"thread": None, "listed": 0.0, "names": set(), "quota": [], "counting": False}
+_CACHE_RELIST_S = 30.0  # how stale the file listing may be (listing ~24k files takes a moment)
+
+
+def _cache_names() -> set[str]:
+    """The cached answers' file names, listed again at most every ``_CACHE_RELIST_S`` seconds."""
+    now = time.monotonic()
+    if now - _CACHE_STATE["listed"] > _CACHE_RELIST_S:
+        try:
+            with os.scandir(_CACHE) as it:
+                all_names = [e.name for e in it]
+        except OSError:
+            all_names = []
+        _CACHE_STATE["names"] = {n for n in all_names if n.endswith(".json") and not n.startswith("_")}
+        _CACHE_STATE["quota"] = [n for n in all_names if n.startswith("_quota-") and n.endswith(".txt")]
+        _CACHE_STATE["listed"] = now
+    return _CACHE_STATE["names"]
+
+
+def _index_cache(names: set[str]) -> None:
+    """Read the model of each cache file not in the index yet (the first start reads them all, once), saving
+    the index as it goes, so a restart only reads files added since."""
+    todo = sorted(names - _CACHE_MODEL.keys())
+    for i, name in enumerate(todo, 1):
+        try:
+            model = json.loads((_CACHE / name).read_text(encoding="utf-8")).get("model", "?")
+        except (OSError, ValueError):
+            continue
+        with _CACHE_LOCK:
+            _CACHE_MODEL[name] = model
+        if i % 2000 == 0 or i == len(todo):
+            with _CACHE_LOCK:
+                snapshot = dict(_CACHE_MODEL)
+            with contextlib.suppress(OSError):
+                tmp = _CACHE_INDEX.with_suffix(".tmp")
+                tmp.write_text(json.dumps(snapshot), encoding="utf-8")
+                tmp.replace(_CACHE_INDEX)
+    _CACHE_STATE["counting"] = False
+
+
+def _warm_cache_index() -> None:
+    """Load the saved index and start reading what it lacks in the background; called at start-up and by
+    ``_llm_usage``, which never waits for it."""
+    with _CACHE_LOCK:
+        if not _CACHE_MODEL and _CACHE_INDEX.exists():
+            with contextlib.suppress(OSError, ValueError):
+                _CACHE_MODEL.update(json.loads(_CACHE_INDEX.read_text(encoding="utf-8")))
+        t = _CACHE_STATE["thread"]
+        if t is not None and t.is_alive():
+            return
+        names = _cache_names()
+        if not names - _CACHE_MODEL.keys():
+            return
+        _CACHE_STATE["counting"] = True
+        _CACHE_STATE["thread"] = threading.Thread(target=_index_cache, args=(names,), daemon=True, name="llm-cache-index")
+        _CACHE_STATE["thread"].start()
 
 
 def _llm_usage() -> list[dict]:
-    cache = ROOT / "runs" / "llm_cache"
+    """Calls per model today (quota files, one per model, day and API key) and cached answers per model. The
+    cached counts come from the index; while it is still being filled the rows say ``counting``."""
+    if not _CACHE.exists():
+        return []
     today = date.today().isoformat()
+    _warm_cache_index()
+    with _CACHE_LOCK:
+        names = _cache_names()
+        counts = Counter(m for n, m in _CACHE_MODEL.items() if n in names)
+        quota = list(_CACHE_STATE["quota"])
+    used: Counter = Counter()
+    for m in FREE_TIER:  # "_quota-<model>-<date>.txt", or "_quota-<model>-<date>-<key>.txt" per API key
+        for q in quota:
+            if q.startswith(f"_quota-{m}-{today}"):
+                with contextlib.suppress(OSError, ValueError):
+                    used[m] += int((_CACHE / q).read_text().strip() or 0)
     out = []
-    with _CACHE_LOCK:  # requests run in a thread pool
-        if cache.exists():
-            names = {f.name for f in cache.glob("*.json")}
-            for name in names - _CACHE_MODEL.keys():
-                try:
-                    _CACHE_MODEL[name] = json.loads((cache / name).read_text(encoding="utf-8")).get("model", "?")
-                except (OSError, ValueError):
-                    continue
-            for gone in _CACHE_MODEL.keys() - names:
-                del _CACHE_MODEL[gone]
-        counts = Counter(_CACHE_MODEL.values())
-    models = set(counts) | {m for m in FREE_TIER if (cache / f"_quota-{m}-{today}.txt").exists()}
-    for m in sorted(models):
-        q = cache / f"_quota-{m}-{today}.txt"
+    for m in sorted(set(counts) | set(used)):
         rpm, rpd = FREE_TIER.get(m, (None, None))
-        out.append({"model": m, "used_today": int(q.read_text()) if q.exists() else 0, "rpd": rpd, "rpm": rpm,
-                    "cached_responses": counts.get(m, 0)})
+        out.append({"model": m, "used_today": used.get(m, 0), "rpd": rpd, "rpm": rpm,
+                    "cached_responses": counts.get(m, 0), "counting": _CACHE_STATE["counting"]})
     return out
+
+
+_LEVEL = {"bad": 0, "warn": 1, "info": 2, "ok": 3}
+# the settled outcomes of a request, in the order the health page shows them
+_OUTCOMES = ("published", "awaiting_approval", "negotiating", "escalated", "clarification_requested", "denied",
+             "refused", "forwarded", "answered", "withdrawn")
+
+
+def _health(w: World, cases: list[Case], events: list[dict]) -> dict:
+    """What the health page explains: where requests ended up, who read them, how negotiations went, and a
+    list of checks, worst first, each with what it means and the next step to take. Thresholds are
+    deliberately simple: they point at something to look at, they do not grade the system."""
+    S = RequestStatus
+    n = len(cases)
+    kinds = Counter(e["kind"] for e in events)
+    received = kinds.get("received", 0) or n
+
+    def ids(xs: Iterable[Case]) -> list[str]:
+        return [c.id for c in xs][:8]
+
+    # -- who read each request ---------------------------------------------------------------------------
+    readers = Counter((c.routing or {}).get("reader") or ("form" if c.form is not None else "unknown") for c in cases)
+    by_rules = [c for c in cases if (c.routing or {}).get("reader") == "rules"]
+    injected = [c for c in cases if (c.routing or {}).get("injection")]
+    unused = [c for c in cases if c.unused]
+    split = [c for c in cases if c.parts]
+    questioned = {e["case"] for e in events if e["kind"] == "clarification_requested"}
+    asked = [c for c in cases if c.id in questioned]
+    # -- outcomes -----------------------------------------------------------------------------------------
+    status = Counter(c.status.value for c in cases)
+    outcomes = {k: status.get(k, 0) for k in _OUTCOMES}
+    outcomes["in_progress"] = n - sum(outcomes.values())
+    # -- negotiations --------------------------------------------------------------------------------------
+    # negotiated: someone was asked, or the clash went straight to a person with authority
+    neg = [c for c in cases if c.outcome is not None and (c.outcome.messages or c.outcome.status == "escalated")]
+    replies = [r for c in neg for r in c.outcome.replies]
+    no_reply = sum(r.decision == "no_reply" for r in replies)
+    declined = sum(r.decision in ("reject", "counter", "propose") for r in replies)
+    agreed = [c for c in neg if c.outcome.status == "agreed"]
+    escalated = [c for c in cases if c.outcome is not None and c.outcome.status == "escalated"]
+    rounds = [c.outcome.rounds for c in neg if c.outcome.rounds]
+    negotiation = {"negotiated": len(neg), "agreed": len(agreed), "escalated": len(escalated),
+                   "first_round": sum(c.outcome.rounds <= 1 for c in agreed), "mean_rounds": mean(rounds) if rounds else None,
+                   "messages": sum(len(c.outcome.messages) for c in neg), "no_reply": no_reply, "declined": declined}
+    # -- approvals waiting ---------------------------------------------------------------------------------
+    now = datetime.now(UTC)
+    since: dict[str, datetime] = {}
+    for e in events:
+        if e["case"] and e["kind"] == "awaiting_approval":
+            with contextlib.suppress(ValueError, TypeError):
+                since[e["case"]] = datetime.fromisoformat(_event_time(e["at"]))
+    waiting = [c for c in cases if c.status == S.AWAITING_APPROVAL]
+    ages = [(now - since[c.id]).total_seconds() / 60 for c in waiting if c.id in since]
+    oldest = max(ages) if ages else None
+    # -- model link ----------------------------------------------------------------------------------------
+    link = None if w.model_link is None else w.model_link.status()
+    outages = kinds.get("model_unreachable", 0)
+    held = len(w.held)
+
+    checks: list[dict] = []
+
+    def check(level: str, area: str, title: str, detail: str, next_step: str | None = None, cases_: list[str] | None = None):
+        checks.append({"level": level, "area": area, "title": title, "detail": detail, "next": next_step,
+                       "cases": cases_ or []})
+
+    # the model that reads requests
+    if link is None:
+        check("info", "Model", "Running offline: the rule reader reads every request",
+              "No model is configured, so requests are read by rules. On the test split the rule reader is right on "
+              "52% of requests, the fine-tuned model on 99.8%.",
+              "Start the app with the GPU server (scripts/host.ps1) for the demo.")
+    elif not link.get("up"):
+        check("bad", "Model", "The request reader is unreachable",
+              f"The GPU server did not answer ({link.get('error') or 'no reply'}). New requests wait up to "
+              f"{os.environ.get('NTS_HOLD_MINUTES', '10')} min for it ({held} waiting now), then the rule stand-ins read them.",
+              "Check the GPU server (NTS_LOCAL_URL) is running and reachable; the app reconnects by itself.")
+    elif outages:
+        check("warn", "Model", f"The model dropped out {outages} time{'s' * (outages != 1)} since start",
+              "It is reachable now. While it was away, requests waited for it or were read by the rule stand-ins.",
+              "If this repeats, check the GPU server's load and the network between the two machines.")
+    else:
+        check("ok", "Model", "The request reader is up", "Every request since start could be read by the model.")
+    if by_rules and link is not None:
+        check("warn", "Reading", f"{len(by_rules)} request{'s' * (len(by_rules) != 1)} read by the rule stand-ins",
+              "These were read while the model was away (or by the fast path). The rule reader misses more, so their "
+              "readings deserve a second look before they are approved.",
+              "Open each one and check 'Read as' against the message; send it again if it was misread.", ids(by_rules))
+    # reading quality
+    rate = len(asked) / received if received else 0
+    if asked:
+        check("warn" if rate > 0.15 else "info", "Reading",
+              f"{len(asked)} of {received} requests needed a question back ({rate:.0%})",
+              "The reader asks when something is missing or unclear (which week, which class) instead of guessing. "
+              "A high share means people write things the reader does not know yet.",
+              "Read the questions asked: a phrase that comes back often is vocabulary to add to the intents training "
+              "data (count how often it appears in real requests first).", ids(asked))
+    else:
+        check("ok", "Reading", "No request needed a question back", "Every request named what it needed.")
+    if unused:
+        check("warn", "Reading", f"{len(unused)} reading{'s' * (len(unused) != 1)} left part of the message unused",
+              "A day, time or week in the message that the reading does not use (\"... but not on Friday\"). The sender "
+              "and the approver are shown it, so nothing is approved unseen.",
+              "Check these were approved knowingly; a pattern that keeps being dropped is a gap in the reader.", ids(unused))
+    if injected:
+        check("info", "Safety", f"{len(injected)} message{'s' * (len(injected) != 1)} tried to instruct the system",
+              "Lines like \"ignore your rules\" were left out before reading; nothing was obeyed.", None, ids(injected))
+    # negotiation
+    if no_reply:
+        check("warn", "Negotiation", f"{no_reply} ask{'s' * (no_reply != 1)} got no reply in time",
+              f"Each owner gets one reminder; a second silence escalates. The reply deadline is {round(w.deadline / 60)} min.",
+              "If people miss messages, lengthen NTS_REPLY_DEADLINE or make sure they see the inbox notification.")
+    if escalated:
+        check("info", "Negotiation", f"{len(escalated)} negotiation{'s' * (len(escalated) != 1)} went to a person with authority",
+              "No option was agreed (or the clash was with an institute rule), so the head of department or the office decides.",
+              "Read the briefs: the same room or teacher coming up again points at a bottleneck in the timetable itself.",
+              ids(escalated))
+    if neg and not escalated and not no_reply:
+        check("ok", "Negotiation", f"All {len(neg)} negotiations were agreed",
+              f"{negotiation['first_round']} on the first round of options.")
+    # approvals
+    if waiting:
+        old = oldest is not None and oldest > 60
+        check("warn" if old else "info", "Approvals", f"{len(waiting)} change{'s' * (len(waiting) != 1)} waiting for approval"
+              + (f", the oldest for {oldest / 60:.1f} h" if old else ""),
+              "Nothing reaches the timetable until the office approves it, and each queued change builds on the one before.",
+              "Approve or reject them in the Inbox (Needs you).", ids(waiting))
+    # speed
+    def p95(stage: str) -> float | None:
+        return _pct([c.timings[stage] for c in cases if stage in c.timings], 95)
+
+    slow_read, slow_solve = p95("parse"), p95("solve_and_negotiate")
+    if slow_read is not None and slow_read > 20:
+        check("warn", "Speed", f"Reading is slow: 95% of requests within {slow_read:.0f} s",
+              "Reading waits for the model; a busy GPU server or a long message makes it slower.",
+              "Check the GPU server's load; other clients sharing it slow every request.")
+    if slow_solve is not None and slow_solve > 30:
+        check("warn", "Speed", f"Solving is slow: 95% within {slow_solve:.0f} s",
+              "This covers solving and the negotiation's own solves (not people's replies).",
+              "Look at the slowest requests' traces: a conflict that needs the whole timetable is the usual cause.")
+    if (slow_read is None or slow_read <= 20) and (slow_solve is None or slow_solve <= 30) and n:
+        check("ok", "Speed", "Reading and solving are quick",
+              f"95% of readings within {secs_(slow_read)} and of solves within {secs_(slow_solve)}.")
+    # errors and guarantees
+    errors = [e for e in events if e["kind"] == "error"]
+    if errors:
+        check("bad", "Errors", f"{len(errors)} error{'s' * (len(errors) != 1)} logged since start",
+              f"The last: {str(errors[-1].get('error'))[:160]}", "See Recent errors at the bottom of this page.",
+              [e["case"] for e in errors if e["case"]][-8:])
+    msgs = [m for c in cases if c.outcome for m in c.outcome.messages]
+    leaks = sum(len(m.leaks) for m in msgs)
+    if leaks:
+        check("bad", "Safety", f"{leaks} private reason{'s' * (leaks != 1)} reached a colleague",
+              "An explanation named something a sender said in confidence (an illness, a personal reason).",
+              "Report it: explanations are built from constraints and should never carry private reasons.")
+    unapproved = any(e.get("approver") != COORDINATOR for e in events if e["kind"] == "published")
+    check("bad" if unapproved else "ok", "Safety",
+          "A change was published without the office's approval" if unapproved else "Every published change was approved",
+          "Publishing is gated in code: only an approval from the timetable office publishes a version.")
+    for m in _llm_usage():
+        if m["rpd"] and m["used_today"] / m["rpd"] > 0.85:
+            check("warn", "Model", f"{m['model']} has used {m['used_today']} of {m['rpd']} calls today",
+                  "The free tier stops at its daily limit; cached answers still work.",
+                  "Use the local model for the demo, or wait for the reset (midnight Pacific time).")
+    checks.sort(key=lambda c: _LEVEL[c["level"]])
+    return {
+        "checks": checks,
+        "outcomes": outcomes, "total": n,
+        "reading": {"readers": dict(readers), "asked": len(asked), "unused": len(unused), "injected": len(injected),
+                    "split": len(split), "received": received},
+        "negotiation": negotiation,
+        "approvals": {"waiting": len(waiting), "oldest_minutes": oldest},
+        "model": None if link is None else {**link, "outages": outages, "held": held},
+    }
+
+
+def secs_(x: float | None) -> str:
+    return "–" if x is None else f"{x * 1000:.0f} ms" if x < 1 else f"{x:.1f} s"
 
 
 # The main negotiation experiment: three runs that together make the reduced plan (README, Interpretation layer)
@@ -670,6 +918,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     """``world``: the demo world (built when omitted). Worlds made from offering documents are kept
     in ``worlds_dir`` and restored at start (by default only when the demo world is built here, so tests
     that pass their own world start alone); ``campus`` also makes the demo campus if it is missing."""
+    if world is None:  # the real server (tests pass their own world): the health page's model counts
+        _warm_cache_index()
     from .worlds import DEMO, Registry, WorldStarting, current_world
 
     registry = Registry(world or World(), worlds_dir, restore=world is None if restore is None else restore)
@@ -1266,18 +1516,107 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.get("/api/graph")
     def graph(u: dict = Depends(view("graph"))) -> dict:
+        """The knowledge graph, made to be read: every node has a short label, a title and details in plain
+        words (who teaches a class and when, what a constraint asks and how firm it is, what a request said),
+        and ``conflicts`` lists the clashes negotiations found (from the event log, so they survive a restart)."""
         w = W()
-        teaching = sorted({s.faculty for s in w.instance.sessions})
+        inst = w.instance
+        teaching = sorted({s.faculty for s in inst.sessions})
         led = ConcessionLedger(w.store.ledger())
+        entries = w.store.ledger()
+        given = Counter(e.stakeholder for e in entries)
         cons = [c for c in w.store.constraints() if c.tier >= Tier.COMMITMENT or c.owner]
-        g = build_graph(w.instance, cons, {f: led.credit(f, SEMESTER) for f in teaching})
-        for c in w.orch.cases.values():
-            for mus in (c.outcome.mus_log if c.outcome else []):
-                add_conflict(g, [i for i in mus if i in g])
-        nodes = [{"id": n, **{k: v for k, v in d.items()}, "label": w.name_of(n) if d.get("kind") == "stakeholder"
-                  else n} for n, d in g.nodes(data=True)]
+        by_id = {c.id: c for c in w.store.constraints(active_only=False)}
+        g = build_graph(inst, cons, {f: led.credit(f, SEMESTER) for f in teaching})
+        conflicts = []
+        for e in w.store.events(kind="negotiation_conflict"):
+            mus = [i for i in e.get("mus") or [] if i in by_id]
+            if len(mus) < 2:
+                continue
+            for i in mus:  # a constraint in a conflict that is no longer in force: shown, so the clash reads whole
+                if i not in g:
+                    add_constraint(g, by_id[i])
+            add_conflict(g, mus)
+            case = w.orch.cases.get(e["case"] or "")
+            conflicts.append({"case": e["case"], "round": e.get("round"), "constraints": mus,
+                              "request": case.request.raw_text if case else None,
+                              "sender": w.name_of(case.request.sender_id) if case else None,
+                              "status": case.status.value if case else None})
+        current = w.store.current_version()
+        assignment = current.assignment if current else {}
+        sessions_of: dict[str, list] = {}
+        for s_ in inst.sessions:
+            sessions_of.setdefault(s_.faculty, []).append(s_)
+
+        def abbr(title: str) -> str:
+            words = [x for x in re.findall(r"[A-Za-z]+", title) if x.lower() not in ("of", "and", "the", "to", "in")]
+            return "".join(x[0] for x in words).upper() if len(words) > 1 else title[:10]
+
+        def where(sid: str) -> str | None:
+            pl = assignment.get(sid)
+            return placement_text(inst, pl) if pl else None
+
+        nodes = []
+        for n, d in g.nodes(data=True):
+            kind = d.get("type") if d.get("kind") == "resource" else d.get("kind")
+            out = {"id": n, "kind": kind, "label": n, "title": n, "details": []}
+            if kind == "stakeholder":
+                f = inst.faculty_by_id.get(n)
+                out["label"] = out["title"] = w.name_of(n)
+                out["role"] = d.get("role")
+                out["details"] = [["Role", (d.get("role") or "").replace("_", " ")]]
+                if f is not None:
+                    classes = sessions_of.get(n, [])
+                    out["details"] += [["Teaches", f"{len(classes)} class{'es' * (len(classes) != 1)}"],
+                                       ["Reports to", w.name_of(f.reports_to) if f.reports_to else "nobody (top of the chain)"],
+                                       ["Has given way", f"{given.get(n, 0)} time{'s' * (given.get(n, 0) != 1)}"],
+                                       ["Fairness credit", f"{d.get('balance', 0.0):.2f}"]]
+                    out["credit"] = d.get("balance", 0.0)
+                    out["given"] = given.get(n, 0)
+            elif kind == "session":
+                s_ = inst.session_by_id.get(n)
+                if s_ is not None:
+                    title = inst.course_title(s_.course)
+                    groups = ", ".join(inst.group_by_id[x].name for x in s_.groups if x in inst.group_by_id)
+                    out["label"] = f"{abbr(title)} {s_.kind.value[:4]}"
+                    out["title"] = f"{title} {s_.kind.value}"
+                    out["details"] = [["Teacher", w.name_of(s_.faculty)], ["Sections", groups],
+                                      ["When", where(n) or "not placed"], ["Class ID", n]]
+            elif kind == "room":
+                r = inst.room_by_id.get(n)
+                if r is not None:
+                    out["label"] = out["title"] = r.name
+                    out["details"] = [["Type", r.type.value], ["Capacity", str(r.capacity)]] + (
+                        [["Equipment", ", ".join(r.equipment)]] if r.equipment else [])
+            elif kind == "group":
+                grp = inst.group_by_id.get(n)
+                if grp is not None:
+                    out["label"] = out["title"] = grp.name
+                    out["details"] = [["Students", str(grp.size)]]
+            elif kind == "constraint":
+                c = by_id.get(n)
+                out["tier"] = d.get("tier")
+                if c is not None:
+                    out["hard"] = c.hard
+                    word = {"prefer": "needs" if c.hard else "prefers", "avoid": "can't" if c.hard else "avoids",
+                            "unavailable": "away", "require_room": "needs room"}.get(c.type.value, c.type.value.replace("_", " "))
+                    out["label"] = f"{w.name_of(c.owner).replace('Dr. ', '') if c.owner else 'rule'} {word}"
+                    out["title"] = describe(inst, c)
+                    out["details"] = [["Firmness", "requirement (hard)" if c.hard else "preference (soft)"],
+                                      ["Tier", f"{int(c.tier)}, {TIER_NAME[c.tier]}"],
+                                      ["Owner", w.name_of(c.owner) if c.owner else "institute rule"],
+                                      ["From", c.source.request or c.source.rule or "–"],
+                                      ["In force", "yes" if n in {x.id for x in cons} else "no longer"]]
+            elif kind in ("request", "rule"):
+                case = w.orch.cases.get(n)
+                if case is not None:
+                    text = case.request.raw_text
+                    out["title"] = text if len(text) <= 160 else text[:157] + "…"
+                    out["details"] = [["From", w.name_of(case.request.sender_id)], ["Status", case.status.value.replace("_", " ")],
+                                      ["Request", n]]
+            nodes.append(out)
         edges = [{"source": u_, "target": v, "rel": d.get("rel")} for u_, v, d in g.edges(data=True)]
-        return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "edges": edges, "conflicts": conflicts}
 
     @app.get("/api/handbook")
     def handbook(u: dict = Depends(user)) -> list[dict]:
@@ -1347,21 +1686,47 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                       for t in Tier],
             "weights": Weights().__dict__, "role_authority": {r.value: v for r, v in ROLE_AUTHORITY.items()},
             "justification": {j.value: v for j, v in JUSTIFICATION.items()},
+            "lifecycle": [
+                {"name": "Read", "text": "Shorthand is spelled out (\"my DL prac in wk 5\" names the Digital Logic practical in week 5). Lines that "
+                 "try to instruct the system are never read; a message that is nothing else is refused. System One sends "
+                 "familiar requests down a fast path; the rest are read by the intents model into typed intents."},
+                {"name": "Check the reading", "text": "Code checks every reading against the message and the timetable: "
+                 "weeks the message names are kept, the sender's own name is not read as someone else's class, made-up "
+                 "options and duplicates are dropped. Anything the reading could not account for (a day, a time, a week) "
+                 "is shown to the sender and the approver; when it is unsure, it asks the sender instead of guessing."},
+                {"name": "Split", "text": "A message that asks for several things becomes one request per part: what can "
+                 "be solved together stays together; a swap, a cancellation, an extra class or an unclear part goes on its own, "
+                 "so one question does not hold up the rest."},
+                {"name": "Check policy", "text": "The policy agent looks the request up in the handbook and policy "
+                 "documents; authority is checked by code. A request against policy is denied with the rule it breaks."},
+                {"name": "Solve and negotiate", "text": "CP-SAT repairs the timetable; the resolution ladder below runs when "
+                 "something has to give."},
+                {"name": "Approve and publish", "text": "The timetable office sees the change, how the message was read and "
+                 "who is affected, then approves or rejects it. Only then is a new version published and its people told."},
+            ],
             "ladder": [
-                {"step": 1, "name": "Auto-substitute", "text": "If the hard constraints fit, repair the timetable "
-                 "moving as little as possible and notify those affected."},
-                {"step": 2, "name": "Auto-relax", "text": "Preferences that cannot be kept are dropped by the "
+                {"step": 1, "name": "Repair", "text": "If the requirements fit together, the timetable is repaired moving as "
+                 "few classes as possible. A requirement that already fits moves nothing but still waits for the office, "
+                 "because it binds every later change."},
+                {"step": 2, "name": "Drop preferences", "text": "Preferences the repair cannot keep are dropped by the "
                  "objective; their owners are told, and can send the request again as a requirement."},
-                {"step": 3, "name": "Negotiate", "text": "Find the minimal conflict, the cheapest minimal corrections "
-                 "(Tier 3-4 only), and ask the owner of the cheapest with 2-3 solver-verified alternatives."},
-                {"step": 4, "name": "Escalate", "text": "On deadlock, no reply, or a Tier 0-2 conflict, brief the "
-                 "person with authority along the reporting chain."}],
-            "negotiation": {"max_rounds": 6, "options_per_message": 3, "asks_per_owner": 2,
-                            "reply_deadline_s": w.deadline, "ledger_decay_per_semester": 0.5},
+                {"step": 3, "name": "Negotiate", "text": "The solver finds the smallest set of constraints that clash and "
+                 "the cheapest ways to resolve it (Tiers 3-4 only), solving around the conflict first and checking against "
+                 "the whole timetable. The owner of the cheapest is offered 2-3 solver-verified options. When a fix needs "
+                 "several people to give way, each is asked for their own part, and what one agrees to is held while the "
+                 "next is asked. A declined option rules out that day and half-day, so the next options look elsewhere."},
+                {"step": 4, "name": "Escalate", "text": "On deadlock, the round limit, no reply after one reminder, or a "
+                 "Tier 0-2 conflict, the person with authority along the reporting chain gets a brief. A request with a "
+                 "fallback (\"Thursday, or else Friday\") tries the fallback as a request of its own instead."}],
+            "negotiation": _negotiation_settings(w),
             "system_one": w.system_one_info, "models": w.models,
-            "safety": ["Nothing is published without the coordinator's approval.",
+            "safety": ["Nothing changes the timetable without the timetable office's approval, including a requirement "
+                       "that already fits.",
                        "Authority is checked by code before any constraint is created; the model cannot override it.",
-                       "Message text is data: models return structured data and code decides what happens.",
+                       "Message text is data: lines that try to instruct the system are never read, and models return "
+                       "structured data that code acts on.",
+                       "What a reading left out is shown to the sender and the approver before anything is approved.",
+                       "Every option offered is checked by the solver; a counter-proposal is passed on only if it is.",
                        "Explanations name constraints, never private reasons; leaks are measured.",
                        "Tier 0-2 constraints are never relaxed without a named person with authority."],
         }
@@ -1396,6 +1761,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                                                         if e["kind"] == "published") else 1,
                        "leaks": sum(len(m.leaks) for m in msgs)},
             "threads_running": sum(t.is_alive() for t in w.threads.values()),
+            "health": _health(w, cases, events),
         }
 
     @app.get("/api/experiments")

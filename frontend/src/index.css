@@ -157,3 +157,10 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* knowledge graph: clash edges flow, the selected node pulses */
+@keyframes kg-dash { to { stroke-dashoffset: -18; } }
+.kg-flow { animation: kg-dash 1.2s linear infinite; }
+@keyframes kg-pulse { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.35; } }
+.kg-pulse { animation: kg-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .kg-flow, .kg-pulse { animation: none; } }

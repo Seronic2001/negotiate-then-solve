@@ -133,6 +133,13 @@ export const EVENT_LABEL: Record<string, string> = {
   duplicate_dropped: "Duplicate dropped",
   unknown_sender: "Unknown sender rejected",
   error: "Error",
+  carried: "Carried into later weeks",
+  resumed: "Picked up again after a restart",
+  spelled_out: "Shorthand spelled out",
+  model_reachable: "Model reachable",
+  model_unreachable: "Model unreachable",
+  swap_consent_requested: "Swap: colleague asked",
+  swap_consent: "Swap: colleague answered",
 };
 
 export const TONE_CLASS: Record<Tone, { text: string; bg: string; ring: string; dot: string }> = {

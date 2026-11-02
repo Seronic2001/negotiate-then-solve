@@ -426,9 +426,32 @@ export interface Ledger {
   stakeholders: { id: string; name: string; credit: number; concessions: number }[];
 }
 
+export interface GraphNode {
+  id: string;
+  kind: "stakeholder" | "constraint" | "session" | "room" | "group" | "request" | "rule" | "change" | string;
+  label: string;
+  title: string;
+  details: [string, string][];
+  role?: string;
+  tier?: number;
+  hard?: boolean;
+  credit?: number;
+  given?: number;
+}
+
+export interface GraphConflict {
+  case: string | null;
+  round: number | null;
+  constraints: string[];
+  request: string | null;
+  sender: string | null;
+  status: string | null;
+}
+
 export interface GraphData {
-  nodes: { id: string; kind: string; label: string; role?: string; type?: string; tier?: number; balance?: number }[];
+  nodes: GraphNode[];
   edges: { source: string; target: string; rel: string }[];
+  conflicts: GraphConflict[];
 }
 
 export interface Rule {
@@ -464,17 +487,18 @@ export interface Transparency {
   weights: Record<string, number>;
   role_authority: Record<string, number>;
   justification: Record<string, number>;
+  lifecycle: { name: string; text: string }[];
   ladder: { step: number; name: string; text: string }[];
-  negotiation: Record<string, number>;
+  negotiation: Record<string, number | string | null>;
   system_one: { trained_on?: number; val_action_accuracy?: number; tau?: number };
-  models: { parser: string; policy: string };
+  models: Record<string, string> & { parser: string; policy: string };
   safety: string[];
 }
 
 export interface Observability {
   uptime_s: number;
-  models: { parser: string; policy: string };
-  llm: { model: string; used_today: number; rpd: number | null; rpm: number | null; cached_responses: number }[];
+  models: Record<string, string> & { parser: string; policy: string };
+  llm: { model: string; used_today: number; rpd: number | null; rpm: number | null; cached_responses: number; counting?: boolean }[];
   stages: Record<string, { n: number; p50: number | null; p95: number | null; max: number | null }>;
   solver: { n: number; p50: number | null; p95: number | null };
   routing: { counts: Record<string, number>; tau: number; system_one_latency_ms_p50: number | null; fast_path_share: number | null };
@@ -483,6 +507,26 @@ export interface Observability {
   errors: EventRow[];
   safety: { refused: number; denied: number; unapproved_publishes: number; leaks: number };
   threads_running: number;
+  health: Health;
+}
+
+export interface HealthCheck {
+  level: "bad" | "warn" | "info" | "ok";
+  area: string;
+  title: string;
+  detail: string;
+  next: string | null;
+  cases: string[];
+}
+
+export interface Health {
+  checks: HealthCheck[];
+  outcomes: Record<string, number>;
+  total: number;
+  reading: { readers: Record<string, number>; asked: number; unused: number; injected: number; split: number; received: number };
+  negotiation: { negotiated: number; agreed: number; escalated: number; first_round: number; mean_rounds: number | null; messages: number; no_reply: number; declined: number };
+  approvals: { waiting: number; oldest_minutes: number | null };
+  model: { up: boolean | null; error: string | null; since: number | null; outages: number; held: number } | null;
 }
 
 export interface NegotiationSummary {
