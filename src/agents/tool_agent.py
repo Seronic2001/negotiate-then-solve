@@ -16,7 +16,7 @@ import itertools
 import re
 from datetime import date, datetime
 from collections.abc import Mapping
-from typing import Literal, Protocol
+from typing import Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -266,6 +266,15 @@ class _Ask(Exception):
     """v3, names as written: a name the department doesn't have, or that fits several; said to the person."""
 
 
+class Other(NamedTuple):
+    """A part of a message that is not a timetable question: ``request``, ``rule`` or ``other`` (v4), or None
+    (v3's "none": a request or a rule question, it doesn't say which); ``text``: its words, when the model wrote
+    them."""
+
+    kind: Literal["request", "rule", "other"] | None
+    text: str = ""
+
+
 class ChoiceV3(Choice):
     """``Choice`` with v3's tools and fields."""
 
@@ -332,10 +341,13 @@ class ToolAgent:
     def __init__(self, instance: Instance, client: Client, sender: str, current_week: int,
                  today: date | None = None, now: datetime | None = None, semester_start: date | None = None,
                  roles_of: Mapping[str, str] | None = None, multi: bool = False,
-                 names_listed: bool | None = None) -> None:
+                 names_listed: bool | None = None, dsl: bool = False) -> None:
         """``roles_of``: who holds which role now (person ID -> role); by default the sign-in directory the app
         builds from the department (teachers' roles, class representatives, the office accounts). ``multi``: the v3
-        prompt and answer (``SYSTEM_V3``, ``Lookups``: several lookups, more tools); else v2's (one lookup)."""
+        prompt and answer (``SYSTEM_V3``, ``Lookups``: several lookups, more tools); else v2's (one lookup).
+        ``dsl``: v4's (``agents.lookups_v4``: a part per thing asked, each tool its own fields, clock times)."""
+        self.dsl = dsl
+        multi = multi or dsl
         self.multi = multi
         # the department's names in the prompt (v1, v2), or names as the message writes them (v3: SYSTEM_V3)
         self.names_listed = (not multi) if names_listed is None else names_listed
@@ -354,13 +366,17 @@ class ToolAgent:
         self.semester_start = semester_start  # for dates; None: a date can't be placed in a week
         self.directory = Directory(instance)
         self.trace: list[dict] = []
-        # v3: the parts of the last message that are not timetable questions (a request, a rule question), each
-        # as its words when the model wrote them ("request"), else "": what the chat does with them besides
-        self.others: list[str] = []
+        # v3, v4: the parts of the last message that are not timetable questions (a request, a rule question):
+        # what the chat does with them besides
+        self.others: list[Other] = []
         # a local model is held to its answer's shape by a grammar: send it the grammar-friendly schema
         local = isinstance(client, LocalClient)
         self.schema = (GrammarLookups if local else Lookups) if multi else (GrammarChoice if local else Choice)
         self.system = (SYSTEM_V3_LISTED if self.names_listed else SYSTEM_V3) if multi else SYSTEM
+        if dsl:
+            from .lookups_v4 import SYSTEM_V4, LookupsV4
+
+            self.names_listed, self.schema, self.system = False, LookupsV4, SYSTEM_V4
 
     def read(self, text: str) -> ToolCall | None:
         if self.multi:
@@ -394,27 +410,38 @@ class ToolAgent:
         prompt = self._prompt(text)
         for _ in range(MAX_TRIES):
             got = self.client.generate(self.system, prompt, self.schema)
-            # a week left out is this week: on a weekend, the coming one (as read())
-            choices = [c if c.week is not None else c.model_copy(update={"week": self.this_week}) for c in got.lookups]
-            calls, problem = [], None
-            for k, c in enumerate(choices, 1):
+            calls, problem, others = [], None, []
+            parts = got.parts if self.dsl else got.lookups
+            for k, c in enumerate(parts, 1):
+                if self.dsl:  # v4: the part as the v3 lookup it means (agents.lookups_v4), then the same checks
+                    from .lookups_v4 import to_choice
+
+                    try:
+                        c = to_choice(c, self)
+                    except _Ask as q:  # a time or week that doesn't exist ("at 7 pm", week 20): said
+                        calls.append(ToolCall("unclear", week=self.this_week, confident=False, note=str(q)))
+                        continue
+                if isinstance(c, Other) or c.tool == "none":  # no lookup: the chat sends a request on, answers a rule
+                    others.append(c if isinstance(c, Other) else Other(None, (c.request or "").strip()))
+                    continue
+                if c.week is None:  # a week left out is this week: on a weekend, the coming one (as read())
+                    c = c.model_copy(update={"week": self.this_week})
                 for piece in self._split(c):
                     try:
                         calls += self._apart(self._check(piece), piece)
                     except _Ask as q:  # a name the department doesn't have, or that fits several: said, not retried
                         calls.append(ToolCall("unclear", week=c.week, confident=False, note=str(q)))
                     except Problem as p:
-                        problem = f"lookup {k}: {p}" if len(choices) > 1 else str(p)
+                        problem = f"{'part' if self.dsl else 'lookup'} {k}: {p}" if len(parts) > 1 else str(p)
                         break
                 if problem:
                     break
             self.trace.append({"choice": got.model_dump(exclude_defaults=True), "problem": problem})
             if problem:
-                prompt += (f"\n\nYour lookups: {got.model_dump_json(exclude_defaults=True)}\n"
+                prompt += (f"\n\nYour {'parts' if self.dsl else 'lookups'}: {got.model_dump_json(exclude_defaults=True)}\n"
                            f"Problem: {problem}\nChoose again.")
                 continue
-            # a "none" part has no lookup, but it is not dropped: the chat sends a request on, answers a rule question
-            self.others = [(c.request or "").strip() for c in choices if c.tool == "none"]
+            self.others = others
             parts = [c for c in calls if c is not None]
             if not parts:
                 return None
@@ -431,9 +458,12 @@ class ToolAgent:
         rooms = "; ".join(f"{r.name} ({r.type.value}, {r.capacity} seats{', ' + ', '.join(r.equipment) if r.equipment else ''})"
                           for r in i.rooms)
         now = self.now or datetime.now()
+        if self.dsl:  # v4 writes clock times; the code finds the slots
+            slots = (f"classes start on the hour, {hour(0)} to {hour(cal.slots_per_day - 1)}"
+                     + (f"; lunch at {hour(cal.lunch_slot)}" if cal.lunch_slot is not None else ""))
         head = (f"Asking: {asking}. Today: {self.today:%A %d %B %Y}, {now:%H:%M}; this is week "
                 f"{self.this_week} of {cal.weeks}.\n"
-                f"Days: {', '.join(cal.days)}.\nHours (slots): {slots}.\n")
+                f"Days: {', '.join(cal.days)}.\nHours{'' if self.dsl else ' (slots)'}: {slots}.\n")
         if not self.names_listed:  # v3: names as the message writes them, found by the code (SYSTEM_V3)
             return head + f"\nQuestion:\n<question>{text}</question>"
         return (head +

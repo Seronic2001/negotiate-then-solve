@@ -73,6 +73,35 @@ memory loses, not v3's own mistakes).
 Memory is what makes follow-ups work: without it, 146 of 400 are looked up right. Three of memory's 15 "wrong"
 rewrites (kind `list`) are still looked up right.
 
-### Left for Phase 2
+## Phase 2: the lookup vocabulary, v4 (3 Nov)
 
-The lookup schema version and migrations: their first use is the v3 -> v4 conversion of the training rows.
+Code only: no model yet, so no before and after of a model here (that is Phase 5, v3 against v3.1 and v4 on
+every set above). What Phase 2 checks is that v4 can say everything v3 says, with the same lookups.
+
+`agents/lookups_v4.py`: `LookupsV4`, a part per thing a message asks, each tool with only its own fields
+(20 kinds of part, at most 8 a message). Shared pieces: `who` (names as written, roles, unknown), `when`
+(days, today/tomorrow, dates, part of the day, clock times `at` / `after` / `before`, and the request
+vocabulary's `Period`: `next_week`, weeks, from/to), `room`, and `which` for the class `move_options` moves.
+`request` and `rule` parts carry their own words; `other` is left out. The code works out slots and week numbers
+(`language.intents.slots` / `weeks`), then v3's checks run unchanged (`to_choice` gives a `ChoiceV3`), so
+`Answerer` and every test set treat v3 and v4 alike. `LOOKUP_SCHEMA = 4`.
+
+v3's training rows in v4 (`training/lookup_data_v4.py`, `data/lookup-train-v4/`): each row's v4 answer is read
+by `ToolAgent` next to its v3 answer, and kept only if the lookups are the same.
+
+| | v3 rows | in v4, same lookups | left out |
+|---|---|---|---|
+| train | 2,503 | 2,399 | 104 |
+| val | 495 | 459 | 36 |
+| distilled (Gemini's rewordings) | 583 | 571 | 12 |
+
+Every row left out is a mixed message: v3's "none" didn't keep the request's words, so its v4 `request` part
+can't be written. Phase 3 writes those messages again, with the words, for v3.1 and v4 alike. No row gives other
+lookups. v4 rows are about a third shorter (prompt 3,805 characters against 5,786; answers about the same), so
+training takes less time.
+
+Found on the way, and fixed in the schema: `free_rooms` and `who_is_free` had no `unknown` ("is the auditorium
+free?" would have listed lecture rooms).
+
+In the chat with v4 (`tests/test_lookups_v4.py`): a rule question inside a mixed message is answered from its own
+words (P1-15's "online classes" now finds §3.4, not §2.1), and the request card holds only the request.

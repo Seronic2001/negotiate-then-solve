@@ -909,20 +909,21 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         return [w.store.add_chat(me, "you", "text", mine),
                 *(w.store.add_chat(me, "assistant", kind, m) for kind, m in [reply, *rest])]
 
-    def _other_parts(w: World, me: str, text: str, others: list[str], makeup: bool,
+    def _other_parts(w: World, me: str, text: str, others: list, makeup: bool,
                      reader: str) -> list[tuple[str, dict]]:
         """The replies to what a message asks besides its timetable questions (``World.read_message``'s other
-        parts): a rule question answered from the rules; a request offered as one card, every request part in it
-        (the request reader turns them into an intent each). v3 does not say which a part is: rule words make it
-        a rule question, request words (or no rule found) a request. The card holds the parts' own words when the
-        model wrote them, else the whole message."""
-        if not others:
-            return []
-        out = []
-        if (rule := w.answer_rule(text, me)) is not None and rule["rules"]:
+        parts, ``Other``s): each rule question answered from the rules; the requests offered as one card, every
+        request part in it (the request reader turns them into an intent each); anything else left out. v4 says
+        which a part is, in its own words. v3 does not ("none", no words): rule words make it a rule question,
+        request words (or no rule found) a request, and the whole message is what is read."""
+        rules = [o for o in others if o.kind == "rule"]
+        requests = [o for o in others if o.kind == "request"]
+        unsure = [o for o in others if o.kind is None]
+        out = [("rule", rule) for o in rules if (rule := w.answer_rule(o.text or text, me, known=True)) is not None]
+        if unsure and not rules and (rule := w.answer_rule(text, me)) is not None and rule["rules"]:
             out.append(("rule", rule))
-        if REQUEST.search(text) or not out:
-            words = [o for o in others if o]
+        if requests or (unsure and (REQUEST.search(text) or not out)):
+            words = [o.text for o in requests + unsure if o.text]
             out.append(("confirm", {"text": "; ".join(words) if words else text, "makeup": makeup,
                                     "reader": reader, "part": True}))
         return out

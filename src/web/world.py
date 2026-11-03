@@ -21,7 +21,7 @@ from agents.negotiation import Message, Negotiator, Reply
 from agents.policy import RulePolicyAgent, embedder
 from agents.priority import PriorityModel
 from agents.questions import REQUEST, QuestionReader, ToolCall
-from agents.tool_agent import COULD_NOT, ToolAgent
+from agents.tool_agent import COULD_NOT, Other, ToolAgent
 from agents.simulators import Profile, Simulator, Window
 from core.generator import generate_department
 from core.instance import Instance, policy_constraints
@@ -655,11 +655,12 @@ class World:
             return "model" if chosen == "model" and self.parser_mode in ("gemini", "local") else "regex"
         return "model" if self.lookup_adapter else "regex"
 
-    def answer_rule(self, text: str, sender: str) -> dict | None:
+    def answer_rule(self, text: str, sender: str, known: bool = False) -> dict | None:
         """A question about the rules answered from them (the policy check, as for a rule question sent as a
         request), or None when ``text`` is not one. A rule question: the regex's check for what is allowed, or
-        System One's "policy question". Returns the answer and every rule it cites; with no rule cited, an honest
-        "no rule found" instead of whatever the check wrote (KNOWN_BUGS B7)."""
+        System One's "policy question"; ``known``: the lookup model said so (v4's rule part). Returns the answer
+        and every rule it cites; with no rule cited, an honest "no rule found" instead of whatever the check
+        wrote (KNOWN_BUGS B7)."""
         from agents.questions import RULE
         from core.schemas import Channel, Role
         from language.corpus import ExpectedAction, RequestType
@@ -669,7 +670,7 @@ class World:
         request = Request(id="R-CHAT", channel=Channel.PORTAL, sender_id=sender,
                           role=Role(role) if role in Role._value2member_map_ else Role.FACULTY,
                           raw_text=text, received_at=datetime.now(UTC))
-        rule = bool(RULE.search(text))
+        rule = known or bool(RULE.search(text))
         if not rule and self.system_one is not None:
             d = self.system_one.decide(request)
             rule = d.request_type == RequestType.POLICY_QUESTION and d.action == ExpectedAction.ANSWER
@@ -773,20 +774,27 @@ class World:
         call, reader, _ = self._read_lookups(text, sender, gate)
         return call, reader
 
-    def read_message(self, text: str, sender: str) -> tuple[ToolCall | None, str, list[str]]:
+    @property
+    def lookup_version(self) -> int:
+        """Which lookup adapter reads questions: 4 (``nts-lookup-v4``: the lookup vocabulary, agents.lookups_v4),
+        3 (several lookups a message), else 2 or before (one lookup)."""
+        name = self.lookup_adapter or ""
+        return 4 if "v4" in name else 3 if "v3" in name else 2
+
+    def read_message(self, text: str, sender: str) -> tuple[ToolCall | None, str, list[Other]]:
         """A chat message read for its timetable questions and for what else it asks: the lookups and who read
-        them (as ``read_question``), and the parts that are not timetable questions (a request, a rule question),
-        each as its words when the model wrote them, else "". A v3 model reads every message, request words or
-        not: "when am I free on Friday, and move my DS lecture to Thursday" is a lookup and a request (v3 was
-        trained on such messages, its request a "none" part). Request words beside the lookups are a request part
-        even when the model left it out. Without v3, as ``read_question``: request words make it a request."""
-        call, reader, others = self._read_lookups(text, sender, model_first="v3" in (self.lookup_adapter or ""))
-        if call is not None and not others and REQUEST.search(text):
-            others = [""]
+        them (as ``read_question``), and the parts that are not timetable questions (``Other``: a request, a rule
+        question; v4 says which, with their words). A v3 or v4 model reads every message, request words or not:
+        "when am I free on Friday, and move my DS lecture to Thursday" is a lookup and a request (both were trained
+        on such messages). Request words beside the lookups are a request part even when the model left it out.
+        Before v3, as ``read_question``: request words make it a request."""
+        call, reader, others = self._read_lookups(text, sender, model_first=self.lookup_version >= 3)
+        if call is not None and not [o for o in others if o.kind != "other"] and REQUEST.search(text):
+            others = [*others, Other("request")]
         return call, reader, others
 
     def _read_lookups(self, text: str, sender: str, gate: bool = True,
-              model_first: bool = False) -> tuple[ToolCall | None, str, list[str]]:
+              model_first: bool = False) -> tuple[ToolCall | None, str, list[Other]]:
         """``read_question``'s reading, with the parts the model found that are not timetable questions
         (``ToolAgent.others``). ``model_first``: the model reads before the request-words check, which then
         stops only the regex (it would read a request as a question)."""
@@ -804,8 +812,9 @@ class World:
                     agent = ToolAgent(self.instance, _task(self.model_link.client, "lookup"), sender, week,
                                       semester_start=start,  # roles as the app has them now ("the HOD")
                                       roles_of={i.person: i.role.value for i in self.directory.by_email.values()},
-                                      # a v3 adapter reads several lookups and the new tools (agents.more_lookups)
-                                      multi="v3" in (self.lookup_adapter or ""))
+                                      # a v3 adapter reads several lookups and the new tools (agents.more_lookups);
+                                      # a v4 one, the same in the lookup vocabulary (agents.lookups_v4)
+                                      multi=self.lookup_version == 3, dsl=self.lookup_version == 4)
                     call = agent.read(text)
                     unreachable = False
                     if call is None or call.confident or call.note != COULD_NOT:

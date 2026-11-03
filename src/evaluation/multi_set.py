@@ -138,10 +138,12 @@ def _want(filler: TemplateFiller, p: dict, partial: bool) -> dict:
             "partial": partial}
 
 
-def score(row: dict, call: ToolCall | None, others: list[str]) -> dict:
+def score(row: dict, call: ToolCall | None, others: list) -> dict:
     """What a reading of ``row`` got right: every lookup (``lookups``), each question part by position
-    (``parts``), the other parts found (``others``: as many as the message has), every request found as the chat
-    finds one (``requests``), and all of it (``message``)."""
+    (``parts``), the other parts found (``others``: as many requests and rule questions as the message has; v4's
+    "other" parts don't count), every request found as the chat finds one (``requests``), and all of it
+    (``message``)."""
+    others = [o for o in others if getattr(o, "kind", None) != "other"]
     got = call.args["parts"] if call is not None and call.tool == "multi" else ([call] if call else [])
     wants = [p for p in row["parts"] if p["kind"] == "question"]
     marks = [i < len(got) and right(Filled(p["template"], p["group"], row["message"], row["asker"], p["tool"],
@@ -187,7 +189,7 @@ def main() -> None:
     with a.out.open("w", encoding="utf-8") as out:
         for row in rows:
             agent = ToolAgent(instance, client, row["asker"], WEEK, today=NOW.date(), now=NOW, multi=True,
-                              semester_start=SEMESTER_START)
+                              semester_start=SEMESTER_START, dsl="v4" in a.adapter)
             try:
                 call = _with_retries(agent.read, row["message"])
             except Unreachable as e:

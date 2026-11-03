@@ -69,9 +69,9 @@ def main() -> None:
 
             def read(text: str) -> tuple[list, list[str]]:
                 agent = ToolAgent(dept, lookup_client, m["asker"], m["week"], today=now.date(), now=now,
-                                  semester_start=SEMESTER_START, multi=True)
+                                  semester_start=SEMESTER_START, multi=True, dsl="v4" in a.lookup)
                 call = _with_retries(agent.read, text)
-                return _key(call), agent.others
+                return _key(call), [o for o in agent.others if o.kind != "other"]
 
             try:
                 got = _with_retries(lambda text: Memory(dept, memory_client, m["asker"], m["week"], now=now)
