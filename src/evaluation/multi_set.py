@@ -189,7 +189,7 @@ def main() -> None:
     with a.out.open("w", encoding="utf-8") as out:
         for row in rows:
             agent = ToolAgent(instance, client, row["asker"], WEEK, today=NOW.date(), now=NOW, multi=True,
-                              semester_start=SEMESTER_START, dsl="v4" in a.adapter)
+                              semester_start=SEMESTER_START, dsl="v4" in a.adapter, words="v3_2" in a.adapter)
             try:
                 call = _with_retries(agent.read, row["message"])
             except Unreachable as e:

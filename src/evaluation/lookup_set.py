@@ -532,7 +532,8 @@ def main() -> None:
             if client:
                 agent = ToolAgent(instance, client, f.asker, WEEK, today=NOW.date(), now=NOW, multi=a.multi,
                                   names_listed=a.names_listed if a.multi else None,
-                                  semester_start=SEMESTER_START, dsl=bool(a.local) and "v4" in a.adapter)
+                                  semester_start=SEMESTER_START, dsl=bool(a.local) and "v4" in a.adapter,
+                                  words=bool(a.local) and "v3_2" in a.adapter)
                 try:
                     got[model] = _with_retries(agent.read, f.question)
                 except Unreachable as e:

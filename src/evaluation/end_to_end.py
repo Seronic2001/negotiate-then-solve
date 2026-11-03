@@ -69,7 +69,8 @@ def main() -> None:
 
             def read(text: str) -> tuple[list, list[str]]:
                 agent = ToolAgent(dept, lookup_client, m["asker"], m["week"], today=now.date(), now=now,
-                                  semester_start=SEMESTER_START, multi=True, dsl="v4" in a.lookup)
+                                  semester_start=SEMESTER_START, multi=True, dsl="v4" in a.lookup,
+                                  words="v3_2" in a.lookup)
                 call = _with_retries(agent.read, text)
                 return _key(call), [o for o in agent.others if o.kind != "other"]
 

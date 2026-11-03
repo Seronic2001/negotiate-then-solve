@@ -814,7 +814,8 @@ class World:
                                       roles_of={i.person: i.role.value for i in self.directory.by_email.values()},
                                       # a v3 adapter reads several lookups and the new tools (agents.more_lookups);
                                       # a v4 one, the same in the lookup vocabulary (agents.lookups_v4)
-                                      multi=self.lookup_version == 3, dsl=self.lookup_version == 4)
+                                      multi=self.lookup_version == 3, dsl=self.lookup_version == 4,
+                                      words="v3_2" in (self.lookup_adapter or ""))  # v3.2: requests' words
                     call = agent.read(text)
                     unreachable = False
                     if call is None or call.confident or call.note != COULD_NOT:

@@ -53,8 +53,9 @@ def _weekless(call: ToolCall | None) -> ToolCall | None:
     return replace(call, week=0) if call.tool in WEEKLESS else call
 
 
-def migrate_row(row: dict, dept, groups: dict[str, str]) -> dict:
-    """``row`` (v3) in v4, checked; ``Left`` says why it can't be."""
+def migrate_row(row: dict, dept, groups: dict[str, str], others: list[Other] | None = None) -> dict:
+    """``row`` (v3) in v4, checked; ``Left`` says why it can't be. ``others``: what each "none" part is, with its
+    words, in order, when the row's maker knows (``training.lookup_data_v3_2``); else from the templates."""
     m = row["meta"]
     question = QUESTION.search(row["messages"][1]["content"]).group(1)
     v3 = Lookups.model_validate_json(row["messages"][-1]["content"])
@@ -65,10 +66,12 @@ def migrate_row(row: dict, dept, groups: dict[str, str]) -> dict:
                          semester_start=SEMESTER_START, multi=True, dsl=dsl)
 
     v4_agent = agent(None, True)
-    parts = []
+    parts, given = [], iter(others or [])
     for k, c in enumerate(v3.lookups):
         other = None
-        if c.tool == "none":
+        if c.tool == "none" and others is not None:
+            other = next(given)
+        elif c.tool == "none":
             template = row["templates"][k] if len(row["templates"]) == len(v3.lookups) else None
             kind = {"request": "request", "rule": "rule"}.get(groups.get(template, ""), "other") if template else None
             if kind is None:

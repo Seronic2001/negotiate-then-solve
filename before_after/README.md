@@ -105,3 +105,32 @@ free?" would have listed lecture rooms).
 
 In the chat with v4 (`tests/test_lookups_v4.py`): a rule question inside a mixed message is answered from its own
 words (P1-15's "online classes" now finds §3.4, not §2.1), and the request card holds only the request.
+
+## Phase 3: training data for v3.2 and v4 (3 Nov)
+
+`python -m training.lookup_data_v3_2` writes `data/lookup-train-v3_2/` and `data/lookup-train-v4/`: **the same
+rows** in the two formats (each row checked in both; kept only if both give the expected lookups), so the two
+Kaggle runs differ only in the format. (`nts-lookup-v3_2`, not v3_1: that name is v3's second session, on the
+server.)
+
+| | rows | of which new |
+|---|---|---|
+| train | 2,354 | 655: 410 mixed, 301 long, 256 slips (with validation's share) |
+| val | 768 | 312 |
+| distilled (Gemini's rewordings of v3's rows) | 571 | 0 |
+
+New: mixed messages of 1 to 4 questions with 1 to 3 requests (806 request parts, 145 rule questions, 66
+"thanks"), each request and rule question with its own words; long messages of 4 to 8 questions (v3: at most
+5); 32 new training templates for the slips (`data/lookup-v3_2-train-templates.jsonl`: "a 2 hr slot", "is Rao
+away", "the exam hall", "any section free for a guest session", "list the teachers", "when are we and Dr X both
+free", rule questions on hours in a row), none of them a test template's wording. v3's rows replayed (1,699 of
+2,399), its mixed messages left out (no request words). Left out of both formats: 4 rows whose two readings
+differ (2 "tomorrow" asked on a weekend, where v3's label has the wrong week; 2 long messages splitting a
+"separately" question differently).
+
+Notebooks: `notebooks/train_lookup_v3_2_kaggle.ipynb` and `train_lookup_v4_kaggle.ipynb`, both made from v3's by
+`scripts/make_lookup_notebooks.py` (only the header, settings, row check, quick check and manifest differ; v4's
+row check takes each tool's fields from the schema). Both continue from v3's adapter at v3's learning rate.
+Each notebook's row check passes every row of its data here (0 left out).
+
+Not yet: Gemini's rewordings of the new rows (needs the paid key's OK), memory v1.1's data.
