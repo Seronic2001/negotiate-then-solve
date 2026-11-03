@@ -770,8 +770,28 @@ class World:
         never a lookup; then the model; the regex when the model is off, unreachable or could not read it.
         None: not a timetable question (a request or a rule question), for the request flow. ``gate=False``:
         without the request-words check (the person said "it's a question")."""
-        if gate and REQUEST.search(text):
-            return None, "request words"
+        call, reader, _ = self._read_lookups(text, sender, gate)
+        return call, reader
+
+    def read_message(self, text: str, sender: str) -> tuple[ToolCall | None, str, list[str]]:
+        """A chat message read for its timetable questions and for what else it asks: the lookups and who read
+        them (as ``read_question``), and the parts that are not timetable questions (a request, a rule question),
+        each as its words when the model wrote them, else "". A v3 model reads every message, request words or
+        not: "when am I free on Friday, and move my DS lecture to Thursday" is a lookup and a request (v3 was
+        trained on such messages, its request a "none" part). Request words beside the lookups are a request part
+        even when the model left it out. Without v3, as ``read_question``: request words make it a request."""
+        call, reader, others = self._read_lookups(text, sender, model_first="v3" in (self.lookup_adapter or ""))
+        if call is not None and not others and REQUEST.search(text):
+            others = [""]
+        return call, reader, others
+
+    def _read_lookups(self, text: str, sender: str, gate: bool = True,
+              model_first: bool = False) -> tuple[ToolCall | None, str, list[str]]:
+        """``read_question``'s reading, with the parts the model found that are not timetable questions
+        (``ToolAgent.others``). ``model_first``: the model reads before the request-words check, which then
+        stops only the regex (it would read a request as a question)."""
+        if gate and not model_first and REQUEST.search(text):
+            return None, "request words", []
         week = self.current_week() or 1
         start = self.semester.state.semester_start
         start = date.fromisoformat(start) if start else None
@@ -789,7 +809,7 @@ class World:
                     call = agent.read(text)
                     unreachable = False
                     if call is None or call.confident or call.note != COULD_NOT:
-                        return call, "model"
+                        return call, "model", agent.others
                     break  # the model could not settle it in three tries: the regex may still read it
                 except Exception as e:  # noqa: BLE001 - the regex answers instead
                     if retry and _reset(e):
@@ -801,11 +821,13 @@ class World:
                         unreachable = False  # it answered, badly: not an outage
                     print(f"[model] lookup: {type(e).__name__}: {str(e)[:160]}; regex used", flush=True)
                     break
+        if gate and model_first and REQUEST.search(text):  # the model could not read it: the regex can't either
+            return None, "request words", []
         call = QuestionReader(self.instance, sender, week, semester_start=start).read(text)
         if call is None and unreachable and LOOKS_ASKED.search(text) and not ABOUT_RULES.search(text):
             # the model would have read it; without it, saying so beats sending a question on as a request
-            return ToolCall("unclear", week=week, confident=False, note=MODEL_AWAY), "regex"
-        return call, "regex"
+            return ToolCall("unclear", week=week, confident=False, note=MODEL_AWAY), "regex", []
+        return call, "regex", []
 
     def _fast_path_now(self) -> bool:
         """System One's fast path (the rule parser) only while there is no model to read the request: offline, or

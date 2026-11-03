@@ -8,7 +8,7 @@
 {"id": "T-008", "group": "free_hours", "template": "is {lab.any} free on {day.any} at {time}", "tool": "free_hours", "args": {"rooms": ["{lab}"], "days": ["{day}"], "slots": ["{time}"]}}
 {"id": "T-009", "group": "free_hours", "template": "when is {room} empty {when}?", "tool": "free_hours", "args": {"rooms": ["{room}"]}}
 {"id": "T-010", "group": "free_hours", "template": "free periods for {section.any} {when}", "tool": "free_hours", "args": {"sections": ["{section}"]}}
-{"id": "T-011", "group": "free_hours", "template": "do I have any gaps on {day.any}?", "tool": "free_hours", "args": {"teachers": ["me"], "days": ["{day}"]}}
+{"id": "T-011", "group": "free_hours", "template": "do I have any gaps on {day.any}?", "tool": "free_hours", "args": {"teachers": ["me"], "days": ["{day}"]}, "also": [{"tool": "gaps", "args": {"teachers": ["me"], "days": ["{day}"], "measure": "free"}}]}
 {"id": "T-012", "group": "free_hours", "template": "am I free this afternoon?", "tool": "free_hours", "args": {"teachers": ["me"], "days": ["Wed"], "part": "afternoon"}}
 {"id": "T-013", "group": "free_hours", "template": "is {teacher.any} free tomorrow {part}?", "tool": "free_hours", "args": {"teachers": ["{teacher}"], "days": ["Thu"], "part": "{part}"}}
 {"id": "T-014", "group": "free_hours", "template": "when can {section.any} and I meet for 2 hours {when}?", "tool": "free_hours", "args": {"teachers": ["me"], "sections": ["{section}"], "length": 2}}
@@ -72,17 +72,17 @@
 {"id": "T-072", "group": "describe", "template": "who are the faculty in this department?", "tool": "describe", "args": {"what": "teachers"}}
 {"id": "T-073", "group": "describe", "template": "list the courses", "tool": "describe", "args": {"what": "courses"}}
 {"id": "T-074", "group": "describe", "template": "list all sections and their sizes", "tool": "describe", "args": {"what": "sections"}}
-{"id": "T-075", "group": "describe", "template": "what week is it?", "tool": "describe", "args": {"what": "calendar"}}
+{"id": "T-075", "group": "describe", "template": "what week is it?", "tool": "describe", "args": {"what": "calendar"}, "also": [{"tool": "calendar", "args": {}}]}
 {"id": "T-076", "group": "describe", "template": "what time is lunch?", "tool": "describe", "args": {"what": "calendar"}}
 {"id": "T-077", "group": "describe", "template": "how many teaching hours a week does {teacher.any} have?", "tool": "describe", "args": {"teacher": "{teacher}"}, "also": [{"tool": "classes_of", "args": {"teacher": "{teacher}", "count": true}}]}
 {"id": "T-078", "group": "describe", "template": "what courses am I teaching this semester", "tool": "describe", "args": {"teacher": "me"}, "also": [{"tool": "classes_of", "args": {"teacher": "me"}}]}
 {"id": "T-079", "group": "changes", "template": "what changed {when}?", "tool": "changes", "args": {}}
 {"id": "T-080", "group": "changes", "template": "did anything get shuffled around {when}", "tool": "changes", "args": {}}
-{"id": "T-081", "group": "changes", "template": "was my class cancelled {when}?", "tool": "changes", "args": {"teacher": "me"}}
-{"id": "T-082", "group": "changes", "template": "anything cancelled for {section.any} {when}?", "tool": "changes", "args": {"section": "{section}"}}
-{"id": "T-083", "group": "changes", "template": "any extra classes for us {when}?", "asker": "rep", "tool": "changes", "args": {"section": "me"}}
+{"id": "T-081", "group": "changes", "template": "was my class cancelled {when}?", "tool": "changes", "args": {"teacher": "me"}, "also": [{"tool": "changes", "args": {"teacher": "me", "change": "cancelled"}}]}
+{"id": "T-082", "group": "changes", "template": "anything cancelled for {section.any} {when}?", "tool": "changes", "args": {"section": "{section}"}, "also": [{"tool": "changes", "args": {"section": "{section}", "change": "cancelled"}}]}
+{"id": "T-083", "group": "changes", "template": "any extra classes for us {when}?", "asker": "rep", "tool": "changes", "args": {"section": "me"}, "also": [{"tool": "changes", "args": {"section": "me", "change": "extra"}}]}
 {"id": "T-084", "group": "changes", "template": "is {teacher.any}'s class happening {when} or not?", "tool": "changes", "args": {"teacher": "{teacher}"}, "also": [{"tool": "classes_of", "args": {"teacher": "{teacher}"}}]}
-{"id": "T-085", "group": "changes", "template": "have any of my classes moved {when}", "tool": "changes", "args": {"teacher": "me"}}
+{"id": "T-085", "group": "changes", "template": "have any of my classes moved {when}", "tool": "changes", "args": {"teacher": "me"}, "also": [{"tool": "changes", "args": {"teacher": "me", "change": "moved"}}]}
 {"id": "T-086", "group": "changes", "template": "what's different in the timetable {when}?", "tool": "changes", "args": {}}
 {"id": "T-087", "group": "request", "template": "can I have {day} off {when}?", "tool": null}
 {"id": "T-088", "group": "request", "template": "can I have {day.any} free?", "tool": null}
@@ -136,7 +136,7 @@
 {"id": "T-136", "group": "dates", "template": "is {teacher.any} free on {date.any}?", "week": "{date}", "tool": "free_hours", "args": {"teachers": ["{teacher}"], "days": ["{date}"]}}
 {"id": "T-137", "group": "dates", "template": "need a room for {seats} on {date.any} afternoon", "week": "{date}", "tool": "free_rooms", "args": {"kind": "lecture", "min_capacity": "{seats}", "days": ["{date}"], "part": "afternoon"}}
 {"id": "T-138", "group": "dates", "template": "who is free on {date.any} at {time}?", "week": "{date}", "tool": "who_is_free", "args": {"days": ["{date}"], "slots": ["{time}"]}}
-{"id": "T-139", "group": "dates", "template": "was anything cancelled on {date.any}?", "week": "{date}", "tool": "changes", "args": {}}
+{"id": "T-139", "group": "dates", "template": "was anything cancelled on {date.any}?", "week": "{date}", "tool": "changes", "args": {}, "also": [{"tool": "changes", "args": {"change": "cancelled"}}]}
 {"id": "T-140", "group": "dates", "template": "is {room.any} free on {weekend_date.any}?", "tool": "unclear"}
 {"id": "T-141", "group": "dates", "template": "what do I teach on {outside_date.any}?", "tool": "unclear"}
 {"id": "T-142", "group": "dates", "template": "can I book {room} on {date.any} from {time} for a talk?", "tool": null}

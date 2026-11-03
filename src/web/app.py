@@ -43,7 +43,7 @@ from agents.memory import turns_of
 from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
-from agents.questions import Answerer
+from agents.questions import REQUEST, Answerer
 from agents.views import free_hours_of, view_of
 from core.graph import add_conflict, build_graph
 from core.instance import Session
@@ -873,6 +873,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         - a greeting or thanks → what the chat can do (``kind: other``);
         - anything else → "send this as a request?" (``kind: confirm``): nothing is sent until the person
           confirms (``POST /api/chat/confirm``).
+        A message with timetable questions and something else ("when am I free on Friday, and move my DS lecture
+        to Thursday"): the questions answered, then the rest (``_other_parts``).
         First, a follow-up ("and Friday?", "move my DS lecture there") is made to stand on its own from the last
         messages of today (agents.memory): what it was read as is kept with the person's message (``read_as``);
         when it leans on something the chat doesn't have, the reply asks what they mean.
@@ -890,10 +892,12 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                 and read.strip() == last["text"].strip()):  # "yes" to "send this as a request?": it is sent
             w.store.update_chat(me, last["n"], {"answered": "request"})
             return [w.store.add_chat(me, "you", "text", mine), _send_request(w, me, last)]
+        rest: list[tuple[str, dict]] = []
         if follow and follow.ask:
             reply = ("other", {"text": follow.ask})
-        elif (q := w.read_question(read, me)) and q[0] is not None:
+        elif (q := w.read_message(read, me)) and q[0] is not None:
             reply = ("lookup", _lookup_answer(w, q[0], me, q[1]))
+            rest = _other_parts(w, me, read, q[2], body.makeup, q[1])
         elif (rule := w.answer_rule(read, me)) is not None:
             reply = ("rule", rule)
         elif SMALL_TALK.match(text):
@@ -902,7 +906,26 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                                        "requests (“move my Monday lecture to Tuesday”)."})
         else:  # a request: sent as it was read ("move my DS lecture there" with "there" filled in)
             reply = ("confirm", {"text": read, "makeup": body.makeup, "reader": q[1]})
-        return [w.store.add_chat(me, "you", "text", mine), w.store.add_chat(me, "assistant", reply[0], reply[1])]
+        return [w.store.add_chat(me, "you", "text", mine),
+                *(w.store.add_chat(me, "assistant", kind, m) for kind, m in [reply, *rest])]
+
+    def _other_parts(w: World, me: str, text: str, others: list[str], makeup: bool,
+                     reader: str) -> list[tuple[str, dict]]:
+        """The replies to what a message asks besides its timetable questions (``World.read_message``'s other
+        parts): a rule question answered from the rules; a request offered as one card, every request part in it
+        (the request reader turns them into an intent each). v3 does not say which a part is: rule words make it
+        a rule question, request words (or no rule found) a request. The card holds the parts' own words when the
+        model wrote them, else the whole message."""
+        if not others:
+            return []
+        out = []
+        if (rule := w.answer_rule(text, me)) is not None and rule["rules"]:
+            out.append(("rule", rule))
+        if REQUEST.search(text) or not out:
+            words = [o for o in others if o]
+            out.append(("confirm", {"text": "; ".join(words) if words else text, "makeup": makeup,
+                                    "reader": reader, "part": True}))
+        return out
 
     @app.post("/api/chat/confirm")
     def chat_confirm(body: ConfirmBody, u: dict = Depends(user)) -> list[dict]:

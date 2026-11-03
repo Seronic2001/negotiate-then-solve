@@ -238,7 +238,8 @@ function Message(props: {
     );
   if (m.kind === "lookup") return <LookupCard m={m} inst={props.inst} cal={props.cal} onShow={props.onShow} />;
   if (m.kind === "rule") return <RuleCard answer={m.answer} rules={m.rules} />;
-  if (m.kind === "confirm") return <ConfirmCard n={m.n} answered={m.answered} busy={props.busy} onConfirm={props.onConfirm} />;
+  if (m.kind === "confirm")
+    return <ConfirmCard n={m.n} text={m.part ? m.text : undefined} answered={m.answered} busy={props.busy} onConfirm={props.onConfirm} />;
   if (m.kind === "request") return <RequestCard id={m.case} />;
   return <Card label="Assistant">{m.text}</Card>;
 }
@@ -332,11 +333,13 @@ const ANSWERED: Record<ConfirmAs, string> = {
   cancel: "Not sent.",
 };
 
-/** "Send this as a request?": nothing is sent until the person chooses. */
-function ConfirmCard({ n, answered, busy, onConfirm }: { n: number; answered?: ConfirmAs; busy: boolean; onConfirm: (n: number, as: ConfirmAs) => void }) {
+/** "Send this as a request?": nothing is sent until the person chooses. ``text``: the request part of a message
+ * whose questions were answered above it (shown, and no "It's a question": they already were). */
+function ConfirmCard({ n, text, answered, busy, onConfirm }: { n: number; text?: string; answered?: ConfirmAs; busy: boolean; onConfirm: (n: number, as: ConfirmAs) => void }) {
   return (
     <Card label="Request?" icon={HelpCircle} tone={answered ? undefined : "warn"}>
-      <p>This looks like a request. Send it to the timetable office?</p>
+      <p>{text ? "Part of your message looks like a request. Send it to the timetable office?" : "This looks like a request. Send it to the timetable office?"}</p>
+      {text && <p className="mt-1.5 border-l-2 border-line pl-2 text-[12px] text-ink-2">{text}</p>}
       {answered ? (
         <p className="mt-1.5 text-[11.5px] text-ink-3">{ANSWERED[answered]}</p>
       ) : (
@@ -344,9 +347,11 @@ function ConfirmCard({ n, answered, busy, onConfirm }: { n: number; answered?: C
           <Button variant="primary" size="sm" disabled={busy} onClick={() => onConfirm(n, "request")}>
             Send as a request
           </Button>
-          <Button size="sm" disabled={busy} onClick={() => onConfirm(n, "question")}>
-            It's a question
-          </Button>
+          {!text && (
+            <Button size="sm" disabled={busy} onClick={() => onConfirm(n, "question")}>
+              It's a question
+            </Button>
+          )}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => onConfirm(n, "cancel")}>
             Cancel
           </Button>

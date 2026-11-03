@@ -354,6 +354,9 @@ class ToolAgent:
         self.semester_start = semester_start  # for dates; None: a date can't be placed in a week
         self.directory = Directory(instance)
         self.trace: list[dict] = []
+        # v3: the parts of the last message that are not timetable questions (a request, a rule question), each
+        # as its words when the model wrote them ("request"), else "": what the chat does with them besides
+        self.others: list[str] = []
         # a local model is held to its answer's shape by a grammar: send it the grammar-friendly schema
         local = isinstance(client, LocalClient)
         self.schema = (GrammarLookups if local else Lookups) if multi else (GrammarChoice if local else Choice)
@@ -385,7 +388,7 @@ class ToolAgent:
         """v3: every lookup the message asks for. Each is checked; a problem in any sends the whole answer back
         ("lookup 2: …"). None when no part is a timetable question; one part: its ToolCall; several: a ToolCall
         "multi" with the parts (``Answerer`` answers each, in order)."""
-        self.trace = []
+        self.trace, self.others = [], []
         text = spell_days(text)  # as read(): misspelt day names put right first
         self.question = text
         prompt = self._prompt(text)
@@ -410,6 +413,8 @@ class ToolAgent:
                 prompt += (f"\n\nYour lookups: {got.model_dump_json(exclude_defaults=True)}\n"
                            f"Problem: {problem}\nChoose again.")
                 continue
+            # a "none" part has no lookup, but it is not dropped: the chat sends a request on, answers a rule question
+            self.others = [(c.request or "").strip() for c in choices if c.tool == "none"]
             parts = [c for c in calls if c is not None]
             if not parts:
                 return None

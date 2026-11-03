@@ -771,7 +771,7 @@ export type ChatMessage =
   /** a question about the rules, answered from them: every rule cited (none: "I couldn't find a rule"). */
   | (ChatBase & { role: "assistant"; kind: "rule"; answer: string; rules: { id: string; title: string }[] })
   /** "send this as a request?": nothing sent until answered (POST /api/chat/confirm). */
-  | (ChatBase & { role: "assistant"; kind: "confirm"; text: string; makeup?: boolean | null; answered?: ConfirmAs })
+  | (ChatBase & { role: "assistant"; kind: "confirm"; text: string; makeup?: boolean | null; answered?: ConfirmAs; part?: boolean })
   /** a request, once sent: its number (what happens next is on its page) */
   | (ChatBase & { role: "assistant"; kind: "request"; case: string })
   | (ChatBase & { role: "assistant"; kind: "other"; text: string });
