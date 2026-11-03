@@ -133,4 +133,24 @@ Notebooks: `notebooks/train_lookup_v3_2_kaggle.ipynb` and `train_lookup_v4_kaggl
 row check takes each tool's fields from the schema). Both continue from v3's adapter at v3's learning rate.
 Each notebook's row check passes every row of its data here (0 left out).
 
-Not yet: Gemini's rewordings of the new rows (needs the paid key's OK), memory v1.1's data.
+Not yet: Gemini's rewordings of the new rows (needs the paid key's OK).
+
+### Memory v1.1 (4 Nov)
+
+`python -m training.memory_data_v1_1` writes `data/memory-train-v1_1/`; v1's data and its 400-conversation test
+set are unchanged (v1's numbers stay comparable). New kind `plural`: a plural word means all of it: "these days"
+(every day just asked about), "those times" (every free span the reply gave; "then" after several is still asked
+back), "the same time" (another day, next week, someone else). Also more of v1's weakest kinds (`list` 9/14,
+`two_back` 9/12, `ask` 12/16 on its test set) and `same` rows, so a fifth of the rows are still messages to leave as
+they are (v1: 24%).
+
+| | rows |
+|---|---|
+| train | 1,850 (900 new: 512 plural, 223 same, 135 list, 67 two_back, 63 ask; 950 of v1's) |
+| val | 380 |
+| distilled (Gemini's rewordings of v1's rows) | 400 |
+| test-plural (test templates and wordings only) | 64 |
+
+Notebook `notebooks/train_memory_v1_1_kaggle.ipynb` (from v1's by `scripts/make_memory_notebook.py`): continues from
+nts-memory-v1's adapter at 5e-5; ~3 h. Its row check passes every row here. Before, memory v1 on test-plural:
+not run yet (the GPU server was unreachable on 4 Nov).
