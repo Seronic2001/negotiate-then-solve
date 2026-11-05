@@ -6,15 +6,17 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\host.ps1 -Adapters "" # every task on -Model, as before
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\host.ps1 -Adapters adapters-router.toml  # a router server
+#   powershell -ExecutionPolicy Bypass -File scripts\host.ps1 -DemoWeek 9  # the demo department's and campus' "today" is in week 9
 #
 # By default each task goes to its own LoRA adapter on the GPU server's base model (adapters-lora.toml, what
-# the server at 10.1.25.191 runs): requests are read by nts-intents-v6-read100, which the app then asks for
+# the server at 10.1.25.191 runs): requests are read by nts-intents-v12-read-100, which the app then asks for
 # intents (NTS_INTENTS); policy, replies and explanations by nts-read100; timetable questions by nts-lookup-v1.
 param(
     [string]$GpuUrl = "http://10.1.25.191:8080/v1",
     [string]$Adapters = "adapters-lora.toml",
     [string]$Model = "Qwen3.5-4B-Finetune-NTS-Read100-Q8_0",
     [int]$Port = 8000,
+    [int]$DemoWeek = 0,  # >0: the demo department and demo campus stay on Monday of this week; 0: week 5 (set NTS_DEMO_WEEK=0 for the real date)
     [switch]$Offline
 )
 
@@ -24,6 +26,7 @@ $env:NTS_HOST = "0.0.0.0"  # reachable from other machines, not only this one
 $env:NTS_PORT = "$Port"
 $env:NTS_LOCAL_URL = $GpuUrl
 $env:NTS_LOCAL_MODEL = $Model
+if ($DemoWeek -gt 0) { $env:NTS_DEMO_WEEK = "$DemoWeek" } else { Remove-Item Env:NTS_DEMO_WEEK -ErrorAction SilentlyContinue }
 $needed = @($Model)
 if ($Adapters) {
     $env:NTS_ADAPTERS = $Adapters

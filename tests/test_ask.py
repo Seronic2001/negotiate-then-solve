@@ -195,3 +195,34 @@ def test_a_question_is_not_made_a_request_while_the_model_is_away(with_model):
 def test_offline_a_question_the_regex_cannot_read_goes_on_as_before(client):
     _, world = client
     assert world.read_question("What is the wifi password?", faculty(world, "Dr. Menon")) == (None, "regex")
+
+
+# -- a timetable question that comes in as a request (the portal, a channel, the demo's history) --------------------
+
+
+def test_a_timetable_question_sent_as_a_request_is_answered_not_passed_on(client):
+    """Answered from the timetable, as the chat answers it: not read as a room report for the office, nor solved
+    and recorded as a request that "already fits" (the campus demo's R-00054 and R-00053)."""
+    from test_form_requests import DONE
+    from test_web import wait_for
+
+    c, world = client
+    menon = faculty(world, "Dr. Menon")
+    for text in ("Is Lab 2 free on Thursday at 3 pm?", "When does Dr. Iyer teach?"):
+        rid = c.post("/api/requests", json={"text": text}, headers=as_(menon)).json()["id"]
+        d = wait_for(c, rid, DONE)
+        assert d["status"] == "answered" and d["route"] == "lookup", (text, d["status"], d["route"])
+        assert d["reply"] == ask(c, menon, text)["answer"]  # the chat's answer, word for word
+        assert "solved" not in [e["kind"] for e in d["events"]] and "forwarded" not in [e["kind"] for e in d["events"]]
+
+
+def test_a_request_still_goes_through_the_pipeline(client):
+    from test_form_requests import DONE
+    from test_web import wait_for
+
+    c, world = client
+    menon = faculty(world, "Dr. Menon")
+    rid = c.post("/api/requests", json={"text": "Please cancel my Data Structures lecture in week 14."},
+                 headers=as_(menon)).json()["id"]
+    d = wait_for(c, rid, DONE)
+    assert d["route"] != "lookup" and "classified" in [e["kind"] for e in d["events"]]

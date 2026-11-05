@@ -15,7 +15,8 @@ row mined from a model's mistakes or labelled by a person meets the same bar as 
   sign-off, case or spacing.
 
 ``check`` returns the failures by gate and row; ``report`` counts rows by split, source, kind, action and
-firmness, which is what a run's manifest records.
+firmness, which is what a run's manifest records, and the rows of one request labelled off the firmness rule
+(``lexicon.firmness_rule``) by generator: the conventions a generator has that the rule does not.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ from core.schemas import Placement, Request
 from language.checks import check_reading
 from language.intent_compiler import completion
 from language.intents import SCHEMA_VERSION, IntentOutput, Move, compile_intents
-from language.lexicon import placement_is_hard
+from language.lexicon import firmness_rule, placement_is_hard
 
 GATES = ("schema", "resolves", "rubric", "leak")
 _MESSAGE = re.compile(r"<message>\n(.*)\n</message>", re.DOTALL)
@@ -110,11 +111,26 @@ def firmness_of(out: IntentOutput) -> str:
     return "none" if not hard else "hard" if all(hard) else "soft" if not any(hard) else "mixed"
 
 
+def off_rule(row: dict) -> str | None:
+    """How a row of one request is labelled against the firmness rule (``lexicon.firmness_rule``):
+    ``"<intent kind> hard"`` (or ``soft``) when the gold is firmer (or softer) than the rule says, else none."""
+    o = IntentOutput.model_validate_json(row["messages"][-1]["content"])
+    if o.action != "compile" or len(o.intents) != 1 or not hasattr(o.intents[0], "hard"):
+        return None
+    intent = o.intents[0]
+    text = row.get("parent_text") or row["request"]["raw_text"]
+    if intent.hard == firmness_rule(intent.kind, text):
+        return None
+    return f"{intent.kind} {'hard' if intent.hard else 'soft'}"
+
+
 def report(splits: dict[str, list[dict]]) -> dict:
-    """Counts for the manifest: rows by split and origin, intent kind, action and firmness."""
+    """Counts for the manifest: rows by split and origin, intent kind, action and firmness, and the rows of
+    one request labelled off the firmness rule, by generator (``kind``) and how: the drift to look at."""
     out: dict = {}
     for name, rows in splits.items():
-        c: dict[str, Counter] = {k: Counter() for k in ("origin", "kind", "action", "firmness", "augment")}
+        c: dict[str, Counter] = {k: Counter() for k in ("origin", "kind", "action", "firmness", "augment",
+                                                         "off_rule")}
         for r in rows:
             o = IntentOutput.model_validate_json(r["messages"][-1]["content"])
             c["origin"][r.get("origin", r.get("source", "?"))] += 1
@@ -122,6 +138,8 @@ def report(splits: dict[str, list[dict]]) -> dict:
             c["action"][o.action] += 1
             c["firmness"][firmness_of(o)] += 1
             c["augment"][r.get("augment", "none")] += 1
+            if how := off_rule(r):
+                c["off_rule"][f"{r.get('kind', '?')}: {how}"] += 1
         out[name] = {"rows": len(rows), **{k: dict(sorted(v.items())) for k, v in c.items()}}
     return out
 

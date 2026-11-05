@@ -1,10 +1,10 @@
-import { LayoutDashboard, Lock, MessagesSquare } from "lucide-react";
+import { Lock } from "lucide-react";
 import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { Shell } from "./components/Shell";
-import { EmptyState, Mark, Skeleton, Tabs } from "./components/ui";
+import { EmptyState, Mark, Skeleton } from "./components/ui";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { TIMETABLE_HOME, workspacePath } from "./lib/meta";
+import { REQUESTS_AS_CHATS, WORKSPACE_HOME } from "./lib/meta";
 import { ThemeProvider } from "./lib/theme";
 import type { Role, View } from "./lib/types";
 
@@ -20,7 +20,6 @@ const Timetable = lazy(() => import("./pages/Timetable"));
 const Fairness = lazy(() => import("./pages/Fairness"));
 const Graph = lazy(() => import("./pages/Graph"));
 const Policy = lazy(() => import("./pages/Policy"));
-const PolicyDocuments = lazy(() => import("./pages/PolicyDocuments"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
 const SemesterBuild = lazy(() => import("./pages/SemesterBuild"));
 const SemesterPreferences = lazy(() => import("./pages/SemesterPreferences"));
@@ -54,40 +53,12 @@ function Guard({ view, children }: { view: View; children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** The home page. Faculty and class representatives: their workspace (the timetable and the chat). Everyone else:
- * two tabs, the Overview (what needs them, the department at a glance) and the same Workspace, kept in the
- * address (``?tab=workspace``) so a link can open either. */
+/** The home page: the request workspace for the roles that live in the timetable (WORKSPACE_HOME: teachers, the
+ * HoD, class representatives, the lab in-charge and the exam cell); the dashboard, a queue of what waits on them,
+ * for the timetable office and the Dean (their workspace is New request, /new). */
 function HomePage() {
-  const { user, sees } = useAuth();
-  const [params, setParams] = useSearchParams();
-  if (TIMETABLE_HOME.includes(user?.role as Role)) return <Home />;
-  if (!sees("new")) return <Dashboard />;
-  const tab = params.get("tab") === "workspace" ? "workspace" : "overview";
-  return (
-    <div className={tab === "workspace" ? "flex flex-col gap-3 lg:h-full" : "space-y-5"}>
-      <Tabs
-        tabs={[
-          { id: "overview", label: "Overview", icon: LayoutDashboard },
-          { id: "workspace", label: "Workspace", icon: MessagesSquare },
-        ]}
-        value={tab}
-        onChange={(t) => setParams(t === "workspace" ? { tab: "workspace" } : {})}
-      />
-      {tab === "workspace" ? (
-        <div className="min-h-0 lg:flex-1">
-          <Home />
-        </div>
-      ) : (
-        <Dashboard />
-      )}
-    </div>
-  );
-}
-
-/** The old New request address: the workspace, where requests are made now. */
-function NewRequest() {
   const { user } = useAuth();
-  return <Navigate to={user ? workspacePath(user.role) : "/"} replace />;
+  return WORKSPACE_HOME.includes(user?.role as Role) ? <Home /> : <Dashboard />;
 }
 
 /** For faculty and class representatives, requests are conversations (their own screen, read as a chat);
@@ -97,8 +68,15 @@ function RequestsPage({ one = false }: { one?: boolean }) {
   const { user } = useAuth();
   const [params] = useSearchParams();
   // the list as a table (quick actions); one request as a conversation
-  if (TIMETABLE_HOME.includes(user?.role as Role) && !params.has("details")) return one ? <RequestChat /> : <RequestsTable />;
+  if (REQUESTS_AS_CHATS.includes(user?.role as Role) && !params.has("details")) return one ? <RequestChat /> : <RequestsTable />;
   return one ? <CaseDetail /> : <Requests />;
+}
+
+/** Teachers and class representatives send their own semester preferences here; the timetable office
+ * sees everyone's, in the semester plan's Preferences tab. */
+function PreferencesPage() {
+  const { user } = useAuth();
+  return user?.role === "coordinator" ? <Navigate to="/semester?tab=preferences" replace /> : <SemesterPreferences />;
 }
 
 function Routed() {
@@ -123,7 +101,7 @@ function Routed() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<Guard view="new"><NewRequest /></Guard>} /> {/* requests are made in the workspace */}
+          <Route path="/new" element={<Guard view="new"><Home /></Guard>} /> {/* the timetable and the chat beside it, for every role */}
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/:id" element={<RequestsPage one />} />
           <Route path="/inbox" element={<Guard view="inbox"><Inbox /></Guard>} />
@@ -131,10 +109,10 @@ function Routed() {
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/fairness" element={<Guard view="fairness"><Fairness /></Guard>} />
           <Route path="/policy" element={<Policy />} />
-          <Route path="/documents" element={<Guard view="documents"><PolicyDocuments /></Guard>} />
-          <Route path="/settings" element={<Guard view="settings"><SettingsPage /></Guard>} />
+          <Route path="/documents" element={<Navigate to="/policy?tab=documents" replace />} /> {/* documents are a tab of the handbook */}
+          <Route path="/settings" element={<SettingsPage />} /> {/* each person's own choices; the coordinator's section inside */}
           <Route path="/semester" element={<Guard view="semester"><SemesterBuild /></Guard>} />
-          <Route path="/preferences" element={<Guard view="prefs"><SemesterPreferences /></Guard>} />
+          <Route path="/preferences" element={<Guard view="prefs"><PreferencesPage /></Guard>} />
           <Route path="/clubs" element={<Guard view="clubs"><Clubs /></Guard>} />
           <Route path="/transparency" element={<Transparency />} />
           <Route path="/graph" element={<Guard view="graph"><Graph /></Guard>} />

@@ -2,9 +2,11 @@ import clsx from "clsx";
 import { CalendarClock, MessagesSquare } from "lucide-react";
 import { useMemo } from "react";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
-import { ago, STATUS, TONE_CLASS } from "../lib/meta";
-import type { CaseSummary, FeedItem, Status } from "../lib/types";
+import { ago, PLAIN_STATUS, STATUS, TONE_CLASS } from "../lib/meta";
+import type { CaseSummary, ChangeView, FeedItem, Status } from "../lib/types";
+import { ChangeCard, weeksLabel } from "./ChangeCard";
 import { Options } from "./RequestThread";
 import { ReplyBubble } from "./thread/Bubble";
 
@@ -24,6 +26,8 @@ export interface Conversation {
   status?: Status;
   running?: boolean;
   handled?: boolean;
+  /** Only changes to this person's timetable: no request of theirs, nothing to answer. */
+  changeOnly?: boolean;
   feed: FeedItem[];
 }
 
@@ -51,7 +55,7 @@ export function buildConversations(cases: CaseSummary[], feed: FeedItem[]): Conv
       own: true,
       case: c.id,
       title: c.text,
-      latest: c.running ? "Working on it…" : STATUS[c.status].label,
+      latest: c.running ? "Working on it…" : PLAIN_STATUS[c.status].label,
       at: items[0]?.at ?? c.received_at,
       needs: c.status === "clarification_requested" || items.some((f) => f.needs_you),
       unread: items.some((f) => f.unread),
@@ -70,12 +74,15 @@ export function buildConversations(cases: CaseSummary[], feed: FeedItem[]): Conv
   }
   for (const [key, items] of others) {
     const top = items[0]; // the feed is newest first
+    const change: ChangeView | null | undefined = items.find((f) => f.change)?.change;
     out.push({
       key: `other:${key}`,
       own: false,
       case: top.case,
-      title: top.request ?? top.title,
-      latest: top.title,
+      // a change is named by what it did ("Information Security practical cancelled"), not by the request
+      title: change?.title ?? top.request ?? top.title,
+      latest: change ? weeksLabel(change) : top.title,
+      changeOnly: items.every((f) => f.kind === "change"),
       at: top.at,
       needs: items.some((f) => f.needs_you),
       unread: items.some((f) => f.unread),
@@ -108,6 +115,9 @@ export function ConversationList({ items, selected, onSelect, q = "", short = fa
   q?: string;
   short?: boolean;
 }) {
+  const { user } = useAuth();
+  // a class representative sees changes to their section's timetable, not colleagues' requests
+  const label = (g: Group) => (g === "updates" && user?.role === "student" ? "Changes to your timetable" : GROUP_LABEL[g]);
   const groups = useMemo(() => {
     const ql = q.trim().toLowerCase();
     const out: Record<Group, Conversation[]> = { needs: [], progress: [], updates: [], done: [] };
@@ -120,9 +130,9 @@ export function ConversationList({ items, selected, onSelect, q = "", short = fa
         (g) =>
           groups[g].length > 0 && (
             <div key={g}>
-              <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-ink-3">{GROUP_LABEL[g]}</p>
+              <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-ink-3">{label(g)}</p>
               {(short ? groups[g].slice(0, g === "done" || g === "updates" ? 8 : 20) : groups[g]).map((c) => {
-                const s = c.status ? STATUS[c.status] : null;
+                const s = c.status ? { ...STATUS[c.status], tone: PLAIN_STATUS[c.status].tone } : null;
                 const Icon = s ? s.icon : c.feed.some((f) => f.kind === "negotiation") ? MessagesSquare : CalendarClock;
                 return (
                   <button
@@ -156,12 +166,14 @@ export function ColleagueThread({ c, onChanged }: { c: Conversation; onChanged: 
   const items = [...c.feed].reverse(); // oldest first, like a conversation
   return (
     <div className="space-y-3">
-      {c.feed[0]?.request && (
+      {c.feed[0]?.request && !c.changeOnly && (
         <ReplyBubble label="A colleague's request">“{c.feed[0].request}”</ReplyBubble>
       )}
       {items.map((f) =>
         f.kind === "negotiation" && f.message ? (
           <Options key={f.id} item={f.message} onDone={onChanged} />
+        ) : f.change ? (
+          <ChangeCard key={f.id} item={f} change={f.change} />
         ) : (
           <ReplyBubble
             key={f.id}

@@ -163,3 +163,54 @@ def test_a_range_is_checked(client):
         assert r.status_code == 422 and "at most 1 week." in r.json()["detail"]
     finally:
         world.store.set_setting("max_range_weeks", 4)
+
+
+def test_demo_department_keeps_its_own_day(client, monkeypatch):
+    """The demo does not follow the real date: it stays on the Monday of DEMO_WEEK, so the weeks its
+    history and examples name (6 onwards) are never "passed", whenever the demo is given."""
+    from datetime import date, timedelta
+
+    from web.world import DEMO_WEEK
+
+    c, world = client
+    monkeypatch.delenv("NTS_DEMO_WEEK", raising=False)
+    cal = c.get("/api/calendar", headers=as_("F-101")).json()
+    assert cal["current_week"] == DEMO_WEEK
+    monday = date.fromisoformat(cal["weeks"][DEMO_WEEK - 1]["monday"])
+    assert cal["today"] == monday.isoformat() and world.today() == monday
+    assert world.now().date() == monday and world.now().hour == 8
+    monkeypatch.setenv("NTS_DEMO_WEEK", "9")
+    assert world.current_week() == 9 and world.today() == monday + timedelta(weeks=4)
+    monkeypatch.setenv("NTS_DEMO_WEEK", "5")
+    _, e = own_class(c, "F-101", 7)
+    r = c.post("/api/requests/form", headers=as_("F-101"),
+               json={"text": "x", "intent": {"kind": "cancel", "which": {"session": e["session"]}, "period": {"weeks": [7]}}})
+    assert r.status_code == 200, r.text
+    d = wait_for(c, r.json()["id"], DONE)
+    assert "has passed" not in (d.get("reply") or "")
+
+
+def test_a_published_cancellation_reaches_the_sections_chat(client):
+    """Class representatives have no inbox: a change that reaches them is a "Timetable change" card in their
+    chat, worded for them (the class by its time, why it is not held); the sender gets none (their request's card)."""
+    from web.app import COORDINATOR
+
+    c, world = client
+    week = c.get("/api/calendar", headers=as_("F-106")).json()["current_week"] + 1
+    _, e = own_class(c, "F-106", week)
+    rid = c.post("/api/requests/form", headers=as_("F-106"), json={
+        "text": f"Please cancel my {e['title']} lecture in week {week}.", "makeup": False,
+        "intent": {"kind": "cancel", "which": {"session": e["session"]}, "period": {"weeks": [week]}}}).json()["id"]
+    d = wait_for(c, rid, DONE)
+    if d["status"] != "awaiting_approval":
+        pytest.skip(f"not waiting for approval here: {d['status']}")
+    r = c.post(f"/api/approvals/{rid}/approve", headers=as_(COORDINATOR), json={})
+    assert r.status_code == 200, r.text
+    rep = f"ST-{e['groups'][0]}"
+    cards = [m for m in c.get("/api/chat", headers=as_(rep)).json() if m["kind"] == "change" and m["case"] == rid]
+    assert len(cards) == 1 and cards[0]["weeks"] == [week], cards
+    assert e["title"] in cards[0]["text"] and "(C-" not in cards[0]["text"]
+    assert not [m for m in c.get("/api/chat", headers=as_("F-106")).json() if m["kind"] == "change" and m["case"] == rid]
+    tt = c.get(f"/api/timetable?week={week}", headers=as_(rep)).json()
+    held = next(x for x in tt["cancelled"] if x["session"] == e["session"])
+    assert held["day"] == e["day"] and held["slot"] == e["slot"] and held["why"]

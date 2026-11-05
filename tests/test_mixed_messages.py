@@ -61,8 +61,8 @@ def test_a_question_and_a_request_get_an_answer_and_a_card(chat_with):
     mine, answer, card = send(c, menon(world), MIXED)
     assert mine["text"] == MIXED and model.calls == 1  # request words, yet the model read it
     assert answer["kind"] == "lookup" and answer["call"]["tool"] == "free_hours"
-    assert card["kind"] == "confirm" and card["part"] and card["text"] == MIXED  # v3 writes no words: the message
-    assert len(world.store.requests()) == before  # nothing sent until confirmed
+    assert card["kind"] == "request" and card["part"] and card["request_text"] == MIXED  # v3 writes no words
+    assert len(world.store.requests()) == before + 1  # sent at once
 
 
 def test_several_requests_go_in_one_card_with_their_words(chat_with):
@@ -73,8 +73,8 @@ def test_several_requests_go_in_one_card_with_their_words(chat_with):
                      ChoiceV3(tool="none", request="move my DS practical to Thursday", week=week))
     replies = send(c, menon(world), "When am I free on Friday? Cancel my Friday lecture, and move my DS practical "
                                     "to Thursday.")
-    assert [m["kind"] for m in replies] == ["text", "lookup", "confirm"]
-    assert replies[2]["text"] == "cancel my Friday lecture; move my DS practical to Thursday"
+    assert [m["kind"] for m in replies] == ["text", "lookup", "request"]
+    assert replies[2]["request_text"] == "cancel my Friday lecture; move my DS practical to Thursday"
 
 
 def test_request_words_beside_the_lookups_still_offer_the_card(chat_with):
@@ -82,7 +82,7 @@ def test_request_words_beside_the_lookups_still_offer_the_card(chat_with):
     c, world = chat_with(model)
     model.lookups = (ChoiceV3(tool="free_hours", teachers=["Dr. Iyer"], days=["Fri"], week=world.current_week()),)
     replies = send(c, menon(world), "When is Dr. Iyer free on Friday? Please give my Friday class to him.")
-    assert [m["kind"] for m in replies] == ["text", "lookup", "confirm"]  # the model left the request out
+    assert [m["kind"] for m in replies] == ["text", "lookup", "request"]  # the model left the request out
 
 
 def test_a_question_alone_gets_no_card(chat_with):
@@ -98,7 +98,7 @@ def test_a_request_alone_is_a_card_as_before(chat_with):
     model.lookups = (ChoiceV3(tool="none", week=world.current_week()),)
     text = "Please move my Data Structures lecture from Monday to Tuesday."
     _, card = send(c, menon(world), text)
-    assert card["kind"] == "confirm" and card["text"] == text and not card.get("part")
+    assert card["kind"] == "request" and card["request_text"] == text and not card.get("part")
 
 
 def test_a_question_and_a_rule_question_get_both_answers(chat_with):
@@ -112,7 +112,7 @@ def test_a_question_and_a_rule_question_get_both_answers(chat_with):
 def test_with_the_model_down_request_words_make_it_a_request(chat_with):
     c, world = chat_with(FakeV3(error=ConnectionError("server gone")))
     _, card = send(c, menon(world), MIXED)  # the regex must not read it as a question
-    assert card["kind"] == "confirm" and card["text"] == MIXED
+    assert card["kind"] == "request" and card["request_text"] == MIXED
 
 
 def test_before_v3_request_words_never_reach_the_model(chat_with):

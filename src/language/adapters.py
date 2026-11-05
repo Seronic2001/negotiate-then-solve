@@ -93,6 +93,26 @@ class TaskClients:
         return self._made[task]
 
 
+def reads_intents(reg: Registry | None = None) -> bool:
+    """Whether requests are read as intents (``language.intent_compiler``) rather than with the older compiler
+    prompt: ``NTS_INTENTS=1``/``0`` when set, else whenever an adapter registry is in use (every adapter one names
+    for ``compile`` was trained on intents). One rule for the web app and the evaluations, so a score is a score
+    of the pipeline the app runs: without it, an intents adapter was asked for the compiler format unless
+    ``NTS_INTENTS`` happened to be set."""
+    chosen = os.environ.get("NTS_INTENTS")
+    if chosen in ("0", "1"):
+        return chosen == "1"
+    return reg is not None
+
+
+def request_reader(instance, client, reg: Registry | None = None):
+    """The parser that reads requests with ``client``, as the web app reads them (``reads_intents``)."""
+    from .compiler import CompilerParser
+    from .intent_compiler import IntentCompilerParser
+
+    return (IntentCompilerParser if reads_intents(reg) else CompilerParser)(instance, client)
+
+
 def local_client(task: str, *, base_url: str, adapter: str | None = None, server_model: str | None = None,
                  reg: Registry | None = None, domain: str | None = None, **kwargs):
     """A ``LocalClient`` for ``task``: on ``adapter`` if given, else on the registry's adapter for the task,

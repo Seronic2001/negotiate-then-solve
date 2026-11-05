@@ -87,6 +87,31 @@ export default function Timetable() {
     return all;
   }, [tt, by, who]);
   const changed = useMemo(() => new Set(tt?.changed ?? []), [tt]);
+  // the week's changes on the grid itself, for what is shown: classes not held in their usual place (why), moved
+  // classes tagged (where they usually are), and a placeholder where a moved class usually sits
+  const shows = (x: { faculty?: string | null; groups: string[] }, rooms: (string | null | undefined)[]) =>
+    by === "all" || (by === "faculty" && x.faculty === who) || (by === "group" && x.groups.includes(who)) || (by === "room" && rooms.includes(who));
+  const notHeld = (tt?.cancelled ?? [])
+    .filter((c) => c.day && c.slot != null && shows(c, [c.room]))
+    .map((c) => ({
+      session: c.session, day: c.day!, slot: c.slot!, title: c.title ?? c.session_name, course: c.course, kind: c.kind,
+      note: `Not held${c.faculty === user?.id ? ` · ${{ away: "you are away", asked: "you cancelled it", closed: "its room is closed" }[c.reason ?? "away"]}` : c.why ? ` · ${c.why}` : ""}`,
+      tone: "cancelled" as const,
+    }));
+  const movedShown = (tt?.moved ?? []).filter((m) => shows(m, [m.from?.room, m.to?.room]));
+  const marks = new Map(
+    movedShown.map((m) => {
+      const sameTime = !!m.from && !!m.to && m.from.day === m.to.day && m.from.slot === m.to.slot;
+      return [m.session, { tag: sameTime ? "room" : "moved", usually: m.from ? `${m.from.day} ${m.from.time} · ${m.from.room_name}` : "elsewhere" }] as const;
+    }),
+  );
+  const movedFrom = movedShown
+    .filter((m) => m.from && m.to && (m.from.day !== m.to.day || m.from.slot !== m.to.slot) && (by !== "room" || m.from.room === who))
+    .map((m) => ({ session: `${m.session}:from`, day: m.from!.day, slot: m.from!.slot, title: m.title, note: `→ ${m.to!.day} ${m.to!.time}`, tone: "from" as const, course: m.course ?? undefined, kind: m.kind }));
+  const ghosts = version ? [] : [...notHeld, ...movedFrom];
+  // the week strip's dots for what is shown: the teacher, section or room picked (the department's for "Everything")
+  const of = by === "faculty" ? { teacher: who } : by === "group" ? { group: who } : by === "room" ? { room: who } : undefined;
+  const { data: marksCal } = useApi(() => (of && who ? api.calendar(of) : Promise.resolve(null)), [by, who]);
 
   return (
     <div className="flex flex-col gap-3 lg:h-full">
@@ -111,7 +136,7 @@ export default function Timetable() {
               onChange={(e) => setVersion(e.target.value ? +e.target.value : null)}
               className="h-9 rounded-md border border-line bg-panel px-2.5 text-[13px] outline-none"
             >
-              <option value="">Latest published</option>
+              <option value="">Latest for the week shown</option>
               {versions?.map((v) => (
                 <option key={v.version} value={v.version}>
                   v{v.version}
@@ -121,17 +146,6 @@ export default function Timetable() {
             </select>
           )}
       </div>
-      {(tt?.cancelled.length ?? 0) > 0 && (
-        <p
-          className="shrink-0 truncate rounded-lg border border-bad/40 bg-bad/5 px-4 py-2 text-[13px]"
-          title={tt!.cancelled.map((c) => `${c.session_name.replace(/^the /, "")} (${c.faculty_name})`).join(" · ")}
-        >
-          <span className="font-medium">
-            Not held in week {tt!.week}: {tt!.cancelled.length} {tt!.cancelled.length === 1 ? "class" : "classes"} (a make-up is owed)
-          </span>
-          <span className="text-ink-2"> · {tt!.cancelled.map((c) => `${c.session_name.replace(/^the /, "")} (${c.faculty_name})`).join(" · ")}</span>
-        </p>
-      )}
       {/* fills the rest of the window: the week takes the height; the office's version history sits beside it on wide
           screens, and under it (a third of the height, scrolling) on narrower ones */}
       <div
@@ -147,7 +161,7 @@ export default function Timetable() {
               value={by}
               onChange={setBy}
             />
-            {!version && cal && <WeekStepper cal={cal} week={week} onChange={setWeek} />}
+            {!version && cal && <WeekStepper cal={marksCal ?? cal} week={week} onChange={setWeek} mine={by !== "all"} />}
             {by !== "all" && options.length > 1 && (
               <select value={who} onChange={(e) => setWho(e.target.value)} className="h-8 rounded-md border border-line bg-panel px-2.5 text-[13px] outline-none">
                 {options.map((o) => (
@@ -172,17 +186,17 @@ export default function Timetable() {
               <Skeleton className="h-full" />
             ) : by === "all" ? (
               <div className="h-full overflow-auto">
-                <TimetableGrid instance={inst} entries={entries} changed={changed} onPick={setPicked} />
+                <TimetableGrid instance={inst} entries={entries} changed={changed} onPick={setPicked} ghosts={ghosts} marks={version ? undefined : marks} />
               </div>
             ) : (
-              <TimetableGrid instance={inst} entries={entries} changed={changed} onPick={setPicked} fill />
+              <TimetableGrid instance={inst} entries={entries} changed={changed} onPick={setPicked} fill ghosts={ghosts} marks={version ? undefined : marks} />
             )}
           </div>
         </Card>
 
         {office && (
           <Card className="flex h-fit min-h-0 flex-col lg:h-auto">
-            <CardHeader icon={History} title="Version history" subtitle="Rollback publishes a copy of an older version. A change that also reaches a week with its own changes saves that week as the next number." />
+            <CardHeader icon={History} title="Version history" subtitle="Each week shows its own latest change, else the semester timetable, so the version shown need not be the newest. Rollback publishes a copy of an older version." />
             <div className="max-h-[640px] min-h-0 space-y-0 overflow-y-auto p-3 lg:max-h-none lg:flex-1">
               {versions?.map((v, i) => (
                 <div key={v.version} data-index={i} className={clsx("relative rounded-md px-3 py-2", tt?.version === v.version && "bg-panel-2")}>
@@ -191,8 +205,13 @@ export default function Timetable() {
                     <button onClick={() => setVersion(v.version)} className="font-medium hover:text-brand">
                       v{v.version}
                     </button>
-                    {v.week && <Badge tone="info">week {v.week}</Badge>}
+                    {v.week ? <Badge tone="info">week {v.week}</Badge> : <Badge tone="muted">semester</Badge>}
                     <Badge tone={v.published ? "ok" : "muted"}>{v.published ? "published" : "proposed"}</Badge>
+                    {tt?.version === v.version && (
+                      <span title={version ? "The version picked above" : `What week ${week ?? ""} shows: its own latest change, or the semester timetable`}>
+                        <Badge tone="brand">shown{!version && week ? ` · week ${week}` : ""}</Badge>
+                      </span>
+                    )}
                     {can("approve") && v.published && tt?.version !== v.version && (
                       <button
                         title="Roll back to this version"

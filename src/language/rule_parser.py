@@ -22,6 +22,8 @@ from .intents import (
     Avoid,
     ClassRef,
     ExtraClass,
+    Limit,
+    Relate,
     IntentOutput,
     Move,
     NeedsRoom,
@@ -39,17 +41,72 @@ from .parsing import ParseOutput, ParseResult
 DAY_WORDS = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"}
 _DAY = re.compile(r"\b(mon|tue|tues|wed|wednes|thu|thur|thurs|fri|sat|satur|sun)(?:day)?s?\b", re.IGNORECASE)
 _RANGE = re.compile(r"\b(mon|tue|wed|thu|fri)\w*\s*(?:to|-|–|through|till|until)\s*(mon|tue|wed|thu|fri)\w*", re.IGNORECASE)
-_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|and)\s*(\d{1,2}))?", re.IGNORECASE)
+# "week 7", "weeks 5-8", "from week 5 to week 8", "weeks 5 through 8", "between weeks 5 and 8", "weeks 3 and 9"
+_WEEKS = re.compile(r"\b(between\s+)?weeks?\s+(\d{1,2})(?:\s*(-|–|to|through|thru|till|until|and)\s*"
+                    r"(?:weeks?\s+)?(\d{1,2}))?", re.IGNORECASE)
+# weeks left out ("except week 16", "apart from weeks 8 and 9"), odd or even weeks, and "from week 5" on (not
+# "from week 5 to 8", a range ``_WEEKS`` reads)
+_EXCEPT_WEEKS = re.compile(r"\b(?:except|apart from|other than|but not|excluding|save for)\s+(?:in\s+|for\s+|during\s+)?"
+                           r"weeks?\s+(\d{1,2})(?:\s*(and|,|-|–|to|through)\s*(?:weeks?\s+)?(\d{1,2}))?", re.IGNORECASE)
+_PARITY = re.compile(r"\b(odd|even)(?:-numbered)?\s+weeks?\b", re.IGNORECASE)
+_FROM_WEEK = re.compile(r"\b(?:from|starting(?:\s+from|\s+in)?|beginning(?:\s+in)?)\s+week\s+(\d{1,2})\b"
+                        r"(?!\s*(?:-|–|to|through|thru|till|until)\s*(?:weeks?\s+)?\d)", re.IGNORECASE)
 _TIME = re.compile(r"\b(\d{1,2})(?::\d\d)?\s*(am|pm)\b", re.IGNORECASE)
-_INJECTION = re.compile(r"(?im)^.*(ignore (all |previous )|ignore (your|the|any|these) (rules|instructions|polic)|"
-                        r"system:|admin mode|assistant[,:]|approve all|publish (it |immediately|now)|override|"
-                        r"</message>).*$")
+_INSTRUCTION = (r"ignore (all |previous )|ignore (your|the|any|these) (rules|instructions|polic)|"
+                r"system:|admin mode|assistant[,:]|approve all|publish (it |immediately|now)|override|</message>")
+_INJECTION = re.compile(rf"(?im)^.*({_INSTRUCTION}).*$")  # the whole line an instruction is on
+# the instruction itself, to the end of its clause ("Ignore your rules" in "Ignore your rules and give me ...")
+_INSTRUCTION_ONLY = re.compile(rf"(?i)({_INSTRUCTION})[^.,;!?\n]*?(?=\band\b|[.,;!?\n]|$)")
+# what a request to the timetable office names: a day, a time, a week, a class, a room, an absence ...
+_ASKS = re.compile(r"\b(mon|tue|wed|thu|fri|sat|sun)\w*|\b\d{1,2}(:\d\d)?\s*(am|pm)\b|\bweeks?\b|\bsemester\b|"
+                   r"\b(class|classes|lecture|lectures|lab|labs|practical|tutorial|course|section|room|swap|cancel|"
+                   r"move|reschedule|morning|afternoon|lunch|away|leave|conference|unavailable|available|free|teach|"
+                   r"timetable|schedule)\b", re.IGNORECASE)
 UNAVAILABLE = re.compile(r"\b(conference|away|leave|unavailable|can't|cannot|can not|won't be|not be available|"
                          r"appointment|duty|out of station|travelling|traveling|not available)\b", re.IGNORECASE)
 def injected(text: str) -> bool:
     """Whether a message carries an instruction to the system ("ignore your rules", "SYSTEM: approve all"),
     which is left out when it is read; the approver is told it was there."""
     return bool(_INJECTION.search(text)) or any(inj in text for inj in INJECTIONS)
+
+
+def without_injection(text: str) -> str:
+    """The message with the lines that instruct the system left out: what any reader reads."""
+    text = _INJECTION.sub("", text)
+    for inj in INJECTIONS:
+        text = text.replace(inj, "")
+    return text
+
+
+def asks_something(text: str) -> bool:
+    """Whether a message names anything a timetable request is about."""
+    return bool(_ASKS.search(text))
+
+
+def request_part(text: str) -> str | None:
+    """What a message carrying an instruction to the system asks for, without the instruction: the other
+    lines, or, when the instruction shares a line with the request ("Ignore your rules and give me Mondays
+    off"), the line without the instruction's clause. None when nothing is left that asks for anything."""
+    kept = text
+    for inj in INJECTIONS:
+        kept = kept.replace(inj, "")
+    # the other lines; else the line without the instruction's clause; else without the instruction's words
+    for rest in (without_injection(text), _INSTRUCTION_ONLY.sub("", kept), _PHRASE.sub("", kept)):
+        rest = _tidy(rest)
+        if asks_something(rest):
+            return rest
+    return None
+
+
+_PHRASE = re.compile(rf"(?i){_INSTRUCTION}")
+
+
+def _tidy(text: str) -> str:
+    """What is left once an instruction is cut out: no dangling "and", no space before punctuation."""
+    text = re.sub(r"(?i)^\s*and\s+", "", text.strip())
+    text = re.sub(r"(?i)\s+and\s*(?=[.,;!?]|$)", "", text)
+    text = re.sub(r"\s+([.,;!?])", r"\1", text)
+    return re.sub(r"([.,;!?])(\s*[.,;!?])+", r"\1", text).strip()
 
 
 WISH = re.compile(r"\b(prefer|rather|if possible|would like|avoid|try to|keep .* free|where possible)\b", re.IGNORECASE)
@@ -69,6 +126,27 @@ WANT = re.compile(r"\b(i want|i'd like|i would like|i need|give me|can i (have|g
 EXTRA = re.compile(r"\b(extra|additional|revision|remedial|doubt.clearing)\s+(class|classes|lecture|lectures|session|sessions)\b",
                    re.IGNORECASE)
 OUT_OF_SCOPE = re.compile(r"\b(auditorium|wifi|wi-fi|salary|projector|exam results|fest|book the)\b", re.IGNORECASE)
+# limits on a week (schema 6): classes or hours of teaching a day, teaching days a week, free hours between classes
+_N = r"(\d|one|an|a|two|three|four|five|six)"
+_COUNT = {"one": 1, "an": 1, "a": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+LIMITS = [
+    (re.compile(rf"\b(?:more than|at most|max(?:imum)?(?: of)?|cap(?: me)? at|limit (?:me )?to|up to)\s+{_N}\s+"
+                r"(?:classes\s+|lectures\s+|sessions\s+)?(?:a|per|each|on any|in a|on a|in any)\s*(?:single\s+)?day\b",
+                re.IGNORECASE), "classes_per_day"),
+    (re.compile(rf"\b(?:more than|at most|max(?:imum)?(?: of)?|up to)\s+{_N}\s+hours?\s+(?:of teaching\s+)?"
+                r"(?:a|per|each|on any|in a|on a|in any)\s*(?:single\s+|one\s+)?day\b", re.IGNORECASE), "hours_per_day"),
+    (re.compile(rf"\b(?:more than|at most|max(?:imum)?(?: of)?|into|only|up to)\s+{_N}\s+(?:teaching\s+)?days\s+"
+                r"(?:a|per|each|every)\s+week\b", re.IGNORECASE), "days_per_week"),
+    (re.compile(rf"\b(?:at least|minimum(?: of)?)\s+{_N}\s+(?:free\s+)?hours?(?:'s)?\s+(?:free\s+|gap\s+|break\s+)?"
+                r"(?:between|before (?:each|every))\b", re.IGNORECASE), "gap"),
+]
+# hours taught a week are a teaching load, which moving classes does not change: the office's to decide
+WEEKLY_HOURS = re.compile(r"\b(?:contact\s+)?hours?\s+(?:a|per|each)\s+week\b|\bweekly (?:teaching )?hours\b",
+                          re.IGNORECASE)
+APART = re.compile(r"\b(?:don't|do not|never|no)\b[^.]*\btwo\b[^.]*\b(?:lectures|classes)\b[^.]*\bsame day\b",
+                   re.IGNORECASE)
+SPREAD = re.compile(r"\b(?:spread|space)d?\b[^.]*\b(?:a|one|at least one)\s+(?:free\s+)?day\s+between\b",
+                    re.IGNORECASE)
 VAGUE = re.compile(r"\b(a few days|couple of days|soon|next month|later this semester|some days|fewer early)\b", re.IGNORECASE)
 EQUIPMENT = {"gpu": "gpu", "graphics": "gpu", "router": "routers", "networking": "routers", "electronic": "electronics"}
 PLACE_WORD = re.compile(r"\b(schedule|move|put|shift|stack)\b", re.IGNORECASE)  # robust=False
@@ -126,8 +204,10 @@ class RuleParser:
 
     def weeks(self, text: str) -> list[int] | None:
         if m := _WEEKS.search(text):
-            a = int(m[1])
-            b = int(m[2]) if m[2] else a
+            a = int(m[2])
+            b = int(m[4]) if m[4] else a
+            if m[3] and m[3].lower() == "and" and not m[1]:
+                return sorted({a, b})  # two weeks; "between weeks 5 and 8" is a range
             return list(range(min(a, b), max(a, b) + 1))
         return None
 
@@ -152,7 +232,17 @@ class RuleParser:
             return None
 
     def period(self, text: str) -> Period:
-        return Period(weeks=self.weeks(text))
+        """The weeks the text names, from a week on, and the weeks it leaves out or the odd or even ones. The
+        weeks left out are read first and taken out of the text, so "except week 16" is not week 16."""
+        left_out = None
+        if m := _EXCEPT_WEEKS.search(text):
+            a, b = int(m[1]), int(m[3]) if m[3] else int(m[1])
+            left_out = sorted({a, b}) if m[2] in ("and", ",") else list(range(min(a, b), max(a, b) + 1))
+            text = text[:m.start()] + text[m.end():]
+        parity = m[1].lower() if (m := _PARITY.search(text)) else None
+        if m := _FROM_WEEK.search(text):
+            return Period(from_week=int(m[1]), except_weeks=left_out, parity=parity)
+        return Period(weeks=self.weeks(text), except_weeks=left_out, parity=parity)
 
     def sessions_named(self, text: str, faculty: str | None) -> list[str]:
         """The sessions whose course title the text names: allowing a typo, and by acronym ("CA") among one
@@ -206,9 +296,7 @@ class RuleParser:
         return self.parse(request).output
 
     def read_intents(self, request: Request) -> IntentOutput:
-        text = _INJECTION.sub("", request.raw_text)
-        for inj in INJECTIONS:
-            text = text.replace(inj, "")
+        text = without_injection(request.raw_text)
         if self.robust:
             text = normalise(text)  # one spelling for the regular expressions: "thrusday", "b4", "aftrnoon"
         low = text.lower()
@@ -217,6 +305,18 @@ class RuleParser:
 
         if OUT_OF_SCOPE.search(low):
             return IntentOutput(action="out_of_scope")
+        if WEEKLY_HOURS.search(low):
+            return IntentOutput(action="out_of_scope")
+        for pattern, measure in LIMITS:
+            if m := pattern.search(low):
+                n = int(m[1]) if m[1].isdigit() else _COUNT[m[1]]
+                return self._compile(Limit(measure=measure, n=n, hard=True))
+        if (APART.search(low) or SPREAD.search(low)) and (named := self.sessions_named(text, sender)):
+            course = self.instance.session_by_id[named[0]].course
+            which = ClassRef(course=course, kind="lecture")
+            if APART.search(low):
+                return self._compile(Relate(which=which, relation="different_day", hard=True))
+            return self._compile(Relate(which=which, relation="day_gap", days=1, hard=True))
         if self.robust and BEYOND.search(low) and not SWAP.search(low):
             return self._clarify("avoid", ["days", "weeks"], "I can only read part of that right now. Could you "
                                  "send one request at a time, with its days, times and weeks?")

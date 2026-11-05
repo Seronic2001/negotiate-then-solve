@@ -19,15 +19,20 @@ export function freeFor(all: TimetableEntry[], e: TimetableEntry, cells: string[
   return !cells.some((c) => taken.has(c));
 }
 
-/** Whether ``day`` of ``week`` is already over (before today). */
+/** The day the department is on: the server's (the demo department stays on a fixed day), else the browser's. */
+export function dayOf(cal: { today?: string } | null | undefined): Date {
+  const d = cal?.today ? new Date(`${cal.today}T00:00:00`) : new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Whether ``day`` of ``week`` is already over (before the department's today). */
 export function dayPassed(cal: CalendarView | null, week: number | null, day: string): boolean {
   const w = week && cal ? cal.weeks[week - 1] : null;
   if (!w || !cal) return false;
   const at = new Date(`${w.monday}T00:00:00`);
   at.setDate(at.getDate() + cal.days.indexOf(day));
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return at < today;
+  return at < dayOf(cal);
 }
 
 /** Whether class ``e`` may start at (``day``, ``slot``) in ``week``: inside the day, not over lunch, not on a day
@@ -69,7 +74,5 @@ export function startWeek(cal: CalendarView): number {
   const w = cal.weeks[cal.current_week - 1];
   const friday = w ? new Date(`${w.monday}T00:00:00`) : null;
   friday?.setDate(friday.getDate() + cal.days.length - 1);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return friday && friday < today && cal.current_week < cal.weeks.length ? cal.current_week + 1 : cal.current_week;
+  return friday && friday < dayOf(cal) && cal.current_week < cal.weeks.length ? cal.current_week + 1 : cal.current_week;
 }

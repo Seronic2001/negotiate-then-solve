@@ -79,6 +79,12 @@ def same(instance: Instance, pred: dict, gold: dict) -> bool:
             and all(pred[k] == gold[k] for k in ("swaps", "extras", "cancels", "clubs", "clashes")))
 
 
+def soften(out: IntentOutput) -> IntentOutput:
+    """``out`` with every requirement read as a wish: what it asks for, apart from how firmly."""
+    return out.model_copy(update={"intents": [i.model_copy(update={"hard": False}) if hasattr(i, "hard") else i
+                                              for i in out.intents]})
+
+
 def dump(out: IntentOutput) -> dict:
     """``out`` as JSON without its defaults, but with each intent's kind (a default too)."""
     d = out.model_dump(mode="json", exclude_defaults=True)
@@ -137,13 +143,21 @@ def score(rows: list[dict], instance: Instance, reader: Reader, workers: int = 1
                         if reader.kind == "gold" or not checks else
                         checked_compile(instance, request, pred_out, timetable=timetable, current_week=week,
                                         notes=notes, strict=reader.kind == "rule"))
-            notes = compiled.notes
+            notes, read = compiled.notes, compiled.output
             pred = outcome(instance, compiled)
         except (LLMError, ValueError) as e:  # an invalid or cut-off answer is a wrong answer
-            pred_out, error, notes = None, f"{type(e).__name__}: {str(e)[:120]}", []
+            pred_out, read, error, notes = None, None, f"{type(e).__name__}: {str(e)[:120]}", []
             pred = {"action": "invalid", "constraints": [], "swaps": [], "extras": [], "cancels": [], "clubs": [],
                     "clashes": []}
         hit = same(instance, pred, gold)
+        # wrong only in how firm it is: the same request once both readings are wishes
+        firm_only = False
+        if not hit and read is not None and pred["action"] == gold["action"] == "compile":
+            try:
+                firm_only = same(instance, *(outcome(instance, compile_intents(
+                    instance, request, soften(o), timetable=timetable, current_week=week)) for o in (read, gold_out)))
+            except (LLMError, ValueError):
+                pass
         literal = pred_out is not None and json.loads(pred_out.model_dump_json(exclude_defaults=True)) == \
             json.loads(gold_out.model_dump_json(exclude_defaults=True))
         tp, n_pred, n_gold = atom_counts(pred["constraints"], gold["constraints"], instance)
@@ -157,6 +171,7 @@ def score(rows: list[dict], instance: Instance, reader: Reader, workers: int = 1
                 # wrong without saying so: acted on (or refused) a reading that does not do what the gold does
                 c["silent_wrong"] += not hit and pred["action"] not in ("clarify", "invalid")
                 c["asked"] += not hit and pred["action"] == "clarify"
+                c["firm_only"] += firm_only
                 c["checked"] += bool(notes)
             atoms[0] += tp
             atoms[1] += n_pred
@@ -164,7 +179,8 @@ def score(rows: list[dict], instance: Instance, reader: Reader, workers: int = 1
             if pred["action"] != gold["action"]:
                 confusion[f"{gold['action']}->{pred['action']}"] += 1
             out_rows.append({"id": row["id"], "kind": row["kind"], "source": row["source"], "match": hit,
-                             "gold_action": gold["action"], "pred_action": pred["action"], "error": error,
+                             "firm_only": firm_only, "gold_action": gold["action"],
+                             "pred_action": pred["action"], "error": error,
                              "text": row["request"]["raw_text"][:200],
                              "pred": dump(pred_out) if pred_out else None, "gold": dump(gold_out),
                              "notes": notes})
@@ -181,6 +197,7 @@ def score(rows: list[dict], instance: Instance, reader: Reader, workers: int = 1
         return {"n": n, "action_accuracy": round(c["action"] / n, 3), "outcome_match": round(c["match"] / n, 3),
                 "literal_match": round(c["literal"] / n, 3), "invalid": c["invalid"],
                 "silent_wrong": round(c["silent_wrong"] / n, 3), "asked_instead": round(c["asked"] / n, 3),
+                "firmness_only": round(c["firm_only"] / n, 3),
                 "checked": c["checked"]}
 
     total = sum(by_source.values(), Counter())

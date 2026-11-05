@@ -92,3 +92,25 @@ def test_the_web_app_gives_the_parser_and_the_policy_check_their_own_adapters(se
     assert w.model_link.up is True and "nts-policy" in w.models["policy"]
     clients = w.model_link.client
     assert _task(clients, "policy").adapter == "nts-policy" and _task(clients, "compile").adapter == "nts-intents"
+
+
+def test_requests_are_read_as_intents_with_a_registry(monkeypatch, tmp_path):
+    """The app and the evaluations read requests the same way: an intents adapter is never asked for the
+    compiler format because NTS_INTENTS was left unset."""
+    from core.generator import generate_department
+    from language.adapters import reads_intents, registry, request_reader
+    from language.compiler import CompilerParser
+    from language.intent_compiler import IntentCompilerParser
+
+    f = tmp_path / "adapters.toml"
+    f.write_text('base = "B"\n[adapters]\nnts-intents-v6 = ["compile"]\n', encoding="utf-8")
+    reg = registry(f)
+    monkeypatch.delenv("NTS_INTENTS", raising=False)
+    assert reads_intents(reg) and not reads_intents(None)
+    inst = generate_department(seed=0)
+    assert isinstance(request_reader(inst, object(), reg), IntentCompilerParser)
+    assert isinstance(request_reader(inst, object(), None), CompilerParser)
+    monkeypatch.setenv("NTS_INTENTS", "0")
+    assert isinstance(request_reader(inst, object(), reg), CompilerParser)
+    monkeypatch.setenv("NTS_INTENTS", "1")
+    assert isinstance(request_reader(inst, object(), None), IntentCompilerParser)

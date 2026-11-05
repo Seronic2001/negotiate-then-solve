@@ -78,6 +78,16 @@ def _slots(slots: list[int]) -> str:
     return "at " + ", ".join(hour(s) for s in slots)
 
 
+def _runs(weeks: list[int]) -> str:
+    """Sorted weeks as runs: "4-7 and 9-16", "14 and 16" (a gap is never read as a range)."""
+    runs, start = [], weeks[0]
+    for prev, w in zip(weeks, weeks[1:] + [None]):
+        if w != prev + 1 if w is not None else True:
+            runs.append(str(start) if start == prev else f"{start}-{prev}")
+            start = w
+    return runs[0] if len(runs) == 1 else ", ".join(runs[:-1]) + " and " + runs[-1]
+
+
 def _when(instance: Instance, c: Constraint) -> str:
     parts = []
     if c.when.days:
@@ -88,7 +98,7 @@ def _when(instance: Instance, c: Constraint) -> str:
         parts.append("in the afternoon" if sorted(c.when.slots) == afternoon else _slots(c.when.slots))
     if c.when.weeks:
         w = sorted(c.when.weeks)
-        parts.append(f"in week {w[0]}" if len(w) == 1 else f"in weeks {w[0]}-{w[-1]}")
+        parts.append(f"in week {w[0]}" if len(w) == 1 else f"in weeks {_runs(w)}")
     return " ".join(parts)
 
 
@@ -133,9 +143,60 @@ def _body(instance: Instance, c: Constraint, you: str | None = None) -> str:
         verb = "need" if own else "needs"
         body = f"{who} {verb} {what} in a room with {need}" if c.room and c.room.equipment else \
             f"{who} {verb} {what} in {need}"
+    elif c.type == ConstraintType.LOAD:
+        verb = ("need" if own else "needs") if c.hard else "would like"
+        body = (f"{who} {verb} at least {c.limit} free hour{'s' * (c.limit != 1)} between two classes"
+                if c.measure == "gap" else f"{who} {verb} no more than {c.limit} " + {
+                    "classes_per_day": "classes a day", "hours_per_day": "hours of teaching a day",
+                    "days_per_week": "teaching days a week"}[c.measure])
+    elif c.type == ConstraintType.RELATE:
+        body = _relation(instance, c, who, own)
+    elif c.type in (ConstraintType.ANY_OF, ConstraintType.RANKED):
+        parts = [_option(_body(instance, m, you), who) for m in c.members or []]
+        body = (f"{who} would like, in order of preference: " + "; else ".join(parts)
+                if c.type == ConstraintType.RANKED else f"{who} {('need' if own else 'needs') if c.hard else 'would like'}"
+                f" one of: " + "; or ".join(parts))
     else:
         body = f"No one may teach more than {c.limit} hours in a row"
     return body.strip()
+
+
+def _option(body: str, who: str) -> str:
+    """A choice's member without the speaker and verb the choice already says ("needs X on Tuesday": X on
+    Tuesday)."""
+    body = body.removeprefix(f"{who} ")
+    for verb in ("needs ", "need ", "would like "):
+        if body.startswith(verb):
+            return body.removeprefix(verb)
+    return body[0].lower() + body[1:]
+
+
+def _classes(instance: Instance, sids: Iterable[str]) -> str:
+    """Sessions in words: "the Algorithms lectures" when they are one course's of one kind, else each."""
+    ss = [instance.session_by_id[s] for s in sids if s in instance.session_by_id]
+    if len(ss) > 1 and len({(s.course, s.kind) for s in ss}) == 1:
+        return f"the {instance.course_title(ss[0].course)} {ss[0].kind.value}s"
+    return " and ".join(session_name(instance, s.id) for s in ss)
+
+
+_TOGETHER = {"same_day": "on the same day", "different_day": "on different days", "same_hour": "at the same hour",
+             "same_room": "in the same room"}
+_AGAINST = {"same_day": "on the same day as", "different_day": "on a different day from", "right_after": "right after",
+            "after": "after, on the same day,", "same_hour": "at the same hour as", "same_room": "in the same room as"}
+
+
+def _relation(instance: Instance, c: Constraint, who: str, own: bool) -> str:
+    verb = ("need" if own else "needs") if c.hard else "would like"
+    mine = _classes(instance, c.sessions or [])
+    if c.relation == "day_gap":
+        apart = f"at least {c.amount or 1} free day{'s' * ((c.amount or 1) != 1)} apart"
+        if c.others is None:
+            return f"{who} {verb} {mine} {'not ' * c.negate}{apart}"
+        return f"{who} {verb} {mine} {'not ' * c.negate}{apart} from {_classes(instance, c.others)}"
+    if c.others is None:
+        return f"{who} {verb} {mine} {'not ' * c.negate}{_TOGETHER.get(c.relation, c.relation)}"
+    against = ("one of " if c.any_other else "") + _classes(instance, c.others)
+    return f"{who} {verb} {mine} {'not ' * c.negate}{_AGAINST[c.relation]} {against}"
 
 
 def describe(instance: Instance, c: Constraint) -> str:

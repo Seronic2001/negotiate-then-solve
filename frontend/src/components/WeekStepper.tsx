@@ -12,16 +12,19 @@ const fmt = (d: Date, month = true) => d.toLocaleDateString(undefined, month ? {
 
 /** Moving between the semester's weeks: arrows (and the arrow keys), a strip of week numbers to
  * jump with, back to this week, and the semester timetable (``week`` null). */
-export function WeekStepper({ cal, week, onChange, compact = false }: {
+export function WeekStepper({ cal, week, onChange, compact = false, mine = false }: {
   cal: CalendarView;
   week: number | null;
   onChange: (w: number | null) => void;
+  /** the grid shows the person's own classes: a week is marked when theirs change in it, not anyone's */
+  mine?: boolean;
   /** Just the week number, without the "This week" and "Semester" buttons (the page offers the semester
    * view itself): the dates are in the grid's day headings, the current week is marked in the strip, and
    * the bar keeps its width whichever week is shown. */
   compact?: boolean;
 }) {
   const n = cal.weeks.length;
+  const marked = (x: CalendarView["weeks"][number]) => (mine ? !!(x.mine_changed ?? x.own_changes) : x.own_changes);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -84,7 +87,7 @@ export function WeekStepper({ cal, week, onChange, compact = false }: {
             <button
               key={x.week}
               onClick={() => onChange(x.week)}
-              title={`Week ${x.week} · ${fmt(at(x.monday))}${now ? " · this week" : ""}${x.own_changes ? " · has changes of its own" : ""}`}
+              title={`Week ${x.week} · ${fmt(at(x.monday))}${now ? " · this week" : ""}${marked(x) ? (mine ? " · your classes change this week" : " · has changes of its own") : ""}`}
               className={clsx(
                 "relative grid h-7 w-6 place-items-center rounded text-[11.5px] tabular-nums transition-colors",
                 selected ? "bg-brand font-semibold text-white" : now ? "font-semibold text-brand ring-1 ring-brand/60" : "hover:bg-panel-2",
@@ -92,7 +95,7 @@ export function WeekStepper({ cal, week, onChange, compact = false }: {
               )}
             >
               {x.week}
-              {x.own_changes && <span className={clsx("absolute bottom-0.5 size-1 rounded-full", selected ? "bg-white" : "bg-warn")} />}
+              {marked(x) && <span className={clsx("absolute bottom-0.5 size-1 rounded-full", selected ? "bg-white" : "bg-warn")} />}
             </button>
           );
         })}

@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { changedWeeks, groupWeeks, versionsLabel, weeksLabel } from "../lib/weeks";
 import { AlertTriangle, ArrowLeft, Cpu, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -164,6 +165,13 @@ function Withdraw({ c, onDone }: { c: Detail; onDone: (msg: string) => void }) {
   );
 }
 
+/** "weeks 10–12, versions 35–37": what a change covers, every week of the request. */
+function changeSpan(c: Detail): string {
+  const ws = changedWeeks(c.proposal);
+  const weeks = ws.some((w) => w.week != null) ? `${weeksLabel(ws.map((w) => w.week))}, ` : "";
+  return `${weeks}${versionsLabel(ws.map((w) => w.version))}`;
+}
+
 function outcomeText(c: Detail): string | null {
   if (c.extra?.placement)
     return `An extra ${c.extra.label} class fits on ${c.extra.placement.text}, week ${c.extra.week}. It was placed in a free hour, so no other class moves.`;
@@ -179,7 +187,7 @@ function outcomeText(c: Detail): string | null {
   if (o.step === 2) return "Fitted into the timetable directly; some preferences could not be kept and their owners were told.";
   const dropped = (c.proposal?.diff ?? []).filter((d) => d.faculty === c.sender && !d.after).length;
   if (c.makeup === false && dropped)
-    return `Your ${dropped === 1 ? "class" : `${dropped} classes`} while you are away ${dropped === 1 ? "is" : "are"} cancelled for that week: no make-up class was asked for.`;
+    return `Your ${dropped === 1 ? "class" : `${dropped} classes`} while you are away ${dropped === 1 ? "is" : "are"} cancelled in ${weeksLabel(changedWeeks(c.proposal).map((w) => w.week))}: no make-up class was asked for.`;
   // classes of other teachers the solver moved to make room: no constraint given up, but not "nobody"
   const others = [...new Set((c.proposal?.diff ?? []).filter((d) => d.faculty && d.faculty !== c.sender).map((d) => d.faculty_name ?? d.faculty))];
   if (others.length)
@@ -216,6 +224,8 @@ function AgreedNote({ c }: { c: Detail }) {
 function Summary({ c }: { c: Detail }) {
   const f = c.fairness;
   const outcome = outcomeText(c);
+  // the people a change reached; the sender has the reply itself
+  const told = Object.entries(c.notices).filter(([who]) => who !== c.sender);
   const { user } = useAuth();
   // the sender answers the question in the form (which shows it); everyone else just reads it
   const answering = c.status === "clarification_requested" && user?.id === c.sender;
@@ -233,13 +243,15 @@ function Summary({ c }: { c: Detail }) {
           ) : (
             <p className="text-[13.5px] text-ink-3">Still working on it…</p>
           )}
-          {Object.keys(c.notices).length > 0 && (
+          {told.length > 0 && (
             <div className="mt-5">
-              <Label>Also told (only people affected)</Label>
-              <ul className="space-y-1.5">
-                {Object.entries(c.notices).map(([who, text]) => (
-                  <li key={who} className="text-[13px] text-ink-2">
-                    <span className="font-mono text-[12px] text-ink-3">{who}</span> {text}
+              <Label>Also told</Label>
+              <ul className="space-y-2">
+                {told.map(([who, text]) => (
+                  <li key={who} className="text-[13px] leading-relaxed text-ink-2">
+                    <span className="font-medium text-ink">{c.notice_names?.[who] ?? who}</span>
+                    <span className="text-ink-3"> · </span>
+                    {text}
                   </li>
                 ))}
               </ul>
@@ -274,10 +286,26 @@ function Summary({ c }: { c: Detail }) {
 
       <Card className="lg:col-span-2">
         <CardHeader
-          title={c.proposal ? `Change to the timetable (version ${c.proposal.version}${c.proposal.week ? `, week ${c.proposal.week}` : ""})` : "Change to the timetable"}
-          subtitle={c.proposal ? "Classes that move, compared with the version it builds on" : undefined}
+          title={c.proposal ? `Change to the timetable (${changeSpan(c)})` : "Change to the timetable"}
+          subtitle={c.proposal ? "Classes that move, compared with each week's timetable it builds on" : undefined}
         />
-        <div className="px-5 pb-4 pt-2">{c.proposal ? <DiffTable rows={c.proposal.diff} /> : <p className="py-2 text-[13.5px] text-ink-3">No change to the timetable.</p>}</div>
+        <div className="space-y-4 px-5 pb-4 pt-2">
+          {c.proposal ? (
+            groupWeeks(changedWeeks(c.proposal)).map((g, i, all) => (
+              <div key={g.versions.join()}>
+                {all.length > 1 && (
+                  <p className="pt-2 text-[12px] font-medium uppercase tracking-wide text-ink-3">
+                    {weeksLabel(g.weeks)} · {versionsLabel(g.versions)}
+                  </p>
+                )}
+                <DiffTable rows={g.diff} weeks={g.weeks.some((w) => w != null) ? weeksLabel(g.weeks) : undefined} />
+                {i < all.length - 1 && <div className="mt-2 border-t border-line" />}
+              </div>
+            ))
+          ) : (
+            <p className="py-2 text-[13.5px] text-ink-3">No change to the timetable.</p>
+          )}
+        </div>
       </Card>
     </div>
   );

@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { chatExamples } from "../lib/examples";
 import { useApi } from "../lib/hooks";
+import { PREFS, usePref } from "../lib/prefs";
 import type { CalendarView, ConfirmAs, InstanceView } from "../lib/types";
 import { useWorkspace, type LookupMessage } from "../lib/workspace";
 
@@ -34,7 +35,8 @@ export function ChatPanel({ inst, cal, actions }: {
   const { data: messages, refresh, loading } = useApi(() => api.chat(), [], 4000);
   const { data: mine, refresh: refreshMine } = useApi(() => api.cases("mine"), [], 4000);
   const [text, setText] = useState("");
-  const [makeup, setMakeup] = useState(false);
+  const [makeupDefault] = usePref(PREFS.makeupDefault);
+  const [makeup, setMakeup] = useState(makeupDefault); // ticked to start with if chosen on the Settings page
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [examples, setExamples] = useState(false);
@@ -98,6 +100,7 @@ export function ChatPanel({ inst, cal, actions }: {
     });
   };
   const confirm = (n: number, as: ConfirmAs) => void run(() => api.chatConfirm(n, as));
+  const asQuestion = (n: number) => void run(() => api.chatAsQuestion(n));
   const clear = () => {
     if (window.confirm("Clear the chat? Your requests stay in the Requests tab.")) void run(() => api.chatClear());
   };
@@ -106,7 +109,7 @@ export function ChatPanel({ inst, cal, actions }: {
     setExamples(false);
     box.current?.focus();
   };
-  const x: ChatContext = { inst, cal, busy: sending, onConfirm: confirm, cases };
+  const x: ChatContext = { inst, cal, busy: sending, onConfirm: confirm, onAsQuestion: asQuestion, cases };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -171,8 +174,8 @@ function Welcome({ hasExamples, open, onExamples }: { hasExamples: boolean; open
     <div className="space-y-2 py-2">
       <p className="text-[14px] font-medium">What would you like to know or change?</p>
       <p className="text-[12px] text-ink-3">
-        Ask about the timetable or the rules, or make a request. A request is sent only after you confirm it. Click a class on
-        the timetable to cancel, move or swap it.
+        Ask about the timetable or the rules, or make a request: a request is sent straight away, and if it was meant as a
+        question, the ? on its card answers it instead. Click a class on the timetable to cancel, move or swap it.
       </p>
       {hasExamples && (
         <button onClick={onExamples} onMouseDown={(e) => e.stopPropagation()} className="flex items-center gap-1 text-[12px] font-medium text-brand hover:underline">

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, BellRing, Bot, CalendarClock, CalendarDays, Check, CheckCheck, Clock3, FileText, Inbox as InboxIcon, MessageSquareDashed, MessagesSquare, ShieldAlert, Undo2, X } from "lucide-react";
+import { ArrowRight, BadgeCheck, BellRing, Gavel, MessageSquareReply, Bot, CalendarClock, CalendarDays, Check, CheckCheck, Clock3, FileText, Inbox as InboxIcon, MessageSquareDashed, MessagesSquare, ShieldAlert, Undo2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ClarifyForm } from "../components/Clarify";
@@ -12,14 +12,47 @@ import { Badge, Button, Card, CardHeader, Collapse, EmptyState, LiveDot, PageHea
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
-import { ago } from "../lib/meta";
+import { ago, PLAIN_STATUS } from "../lib/meta";
 import { study as studyApi } from "../lib/study";
-import type { FeedItem, InboxItem } from "../lib/types";
+import type { FeedItem, InboxItem, Status } from "../lib/types";
 import { useStudySession } from "../components/StudyBanner";
 import { RatingForm } from "../components/Rating";
+import { Withdraw } from "../components/RequestThread";
 
 const KIND_ICON = { negotiation: MessagesSquare, change: CalendarClock, request: FileText, action: BellRing, alert: ShieldAlert } as const;
 const KIND_LABEL = { negotiation: "Negotiation", change: "Timetable change", request: "Your request", action: "Waiting on you", alert: "Refused request" } as const;
+/** What waits on the person, in a word or two: the row's tag and icon say what kind of item it is, so the
+ * row's main line can be the message itself (the heading, "A change is waiting for your approval", stays
+ * as the row's tooltip). */
+const ACTION_TAG = { approve: "To approve", reply: "To answer", decide: "To decide" } as const;
+const ACTION_ICON = { approve: BadgeCheck, reply: MessageSquareReply, decide: Gavel } as const;
+function tagOf(i: FeedItem): string {
+  const report = i.title.startsWith("A report");
+  if (i.answered) return report ? "Report · answered" : i.kind === "alert" ? "Refused · answered" : "Answered";
+  if (i.kind === "action" && report) return "Report to look into";
+  if (i.kind === "action") return i.action ? ACTION_TAG[i.action] : "Waiting on you";
+  if (i.kind === "alert") return "Refused";
+  if (i.kind === "negotiation") return i.title;
+  if (i.kind === "request") return i.status && PLAIN_STATUS[i.status as Status] ? `Your request · ${PLAIN_STATUS[i.status as Status].label}` : "Your request";
+  return KIND_LABEL[i.kind];
+}
+/** The row's main line: what the sender wrote for something to act on, else what the item says. */
+/** Each kind of message has its own colour, so the list reads at a glance without a heading per row. */
+type Hue = "brand" | "violet" | "warn" | "teal" | "ok" | "bad" | "info";
+const HUE: Record<Hue, { text: string; bg: string }> = {
+  brand: { text: "text-brand", bg: "bg-brand/12" },
+  violet: { text: "text-violet", bg: "bg-violet/12" },
+  warn: { text: "text-warn", bg: "bg-warn/15" },
+  teal: { text: "text-teal", bg: "bg-teal/12" },
+  ok: { text: "text-ok", bg: "bg-ok/12" },
+  bad: { text: "text-bad", bg: "bg-bad/12" },
+  info: { text: "text-info", bg: "bg-info/12" },
+};
+function hueOf(i: FeedItem): Hue {
+  if (i.kind === "action") return i.action === "approve" ? "brand" : i.action === "decide" ? "warn" : "violet";
+  return ({ negotiation: "teal", change: "ok", alert: "bad", request: "info" } as const)[i.kind];
+}
+const lineOf = (i: FeedItem) => ((i.kind === "action" || i.kind === "alert") && i.request) || i.text || i.request || i.title;
 const ACTION_LINK = { approve: [null, "Open the request"], reply: [null, "Reply"], decide: [null, "Decide"] } as const;
 
 /** The inbox is also where the office approves, decides and replies: "Needs you" lists what waits on the
@@ -29,17 +62,41 @@ export default function Inbox() {
   const { data, refresh } = useApi(() => api.feed(), [], 2000);
   const { data: inst } = useApi(() => api.instance(), []);
   const { data: auto, refresh: refreshAuto } = useApi(() => api.autopilot(), []);
-  const [params] = useSearchParams();
-  const [sel, setSel] = useState<string | null>(null);
-  const [view, setView] = useState<"all" | "needs" | "unread">(params.get("view") === "needs" ? "needs" : "all");
+  // the tab and the open item live in the address (?view=needs&item=forward:R-00011), so a refresh, the back
+  // button or a shared link comes back to the same place
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("view");
+  const view: "all" | "needs" | "unread" = asked === "needs" || asked === "unread" ? asked : "all";
+  const sel = params.get("item");
+  const place = (next: { view?: typeof view; item?: string | null }) =>
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        if (next.view !== undefined) (next.view === "all" ? q.delete("view") : q.set("view", next.view));
+        if (next.item !== undefined) (next.item ? q.set("item", next.item) : q.delete("item"));
+        return q;
+      },
+      { replace: true },
+    );
+  const setSel = (item: string | null) => place({ item });
   const [toast, setToast] = useState<string | null>(null);
   const teaches = ["hod", "faculty", "guest_faculty"].includes(user?.role ?? "");
 
-  const all = data ?? [];
-  const items = all.filter((i) => (view === "needs" ? i.needs_you : view === "unread" ? i.unread : true));
+  // the unread items read while the Unread tab is open stay in its list until the tab changes: opening one
+  // reads it, and it should not vanish from under the reader (nor take the first item's place on its own)
+  const [readHere, setReadHere] = useState<Set<string>>(new Set());
+  useEffect(() => setReadHere(new Set()), [view]);
   useEffect(() => {
-    if (!sel && items.length) setSel(items[0].id);
-  }, [items, sel]);
+    if (view === "unread" && sel) setReadHere((r) => (r.has(sel) ? r : new Set(r).add(sel)));
+  }, [view, sel]);
+
+  const all = data ?? [];
+  const unread = (i: (typeof all)[number]) => i.unread && !i.needs_you; // what needs you is counted there
+  const items = all.filter((i) => (view === "needs" ? i.needs_you : view === "unread" ? unread(i) || readHere.has(i.id) : true));
+  // open the first item, except on Unread, where opening it would read it at once: there the reader picks
+  useEffect(() => {
+    if (!sel && items.length && view !== "unread") setSel(items[0].id);
+  }, [items, sel, view]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = all.find((i) => i.id === sel) ?? null;
 
   // opening an item reads it
@@ -93,44 +150,46 @@ export default function Inbox() {
               tabs={[
                 { id: "all", label: "All" },
                 { id: "needs", label: "Needs you", count: all.filter((i) => i.needs_you).length },
-                { id: "unread", label: "Unread", count: all.filter((i) => i.unread && !i.needs_you).length },
+                { id: "unread", label: "Unread", count: all.filter(unread).length },
               ]}
               value={view}
               onChange={(v) => {
-                setView(v);
-                setSel(null);
+                place({ view: v, item: null });
               }}
             />
           </div>
           <div className="max-h-[680px] divide-y divide-line overflow-y-auto">
             {items.map((i) => {
-              const Icon = KIND_ICON[i.kind];
+              const Icon = (i.kind === "action" && i.action && ACTION_ICON[i.action]) || KIND_ICON[i.kind];
+              const hue = HUE[hueOf(i)];
               return (
                 <button
                   key={i.id}
                   onClick={() => setSel(i.id)}
+                  title={i.title}
                   className={clsx("relative flex w-full gap-3 px-4 py-3 text-left", sel === i.id ? "bg-panel-2" : "hover:bg-panel-2/50")}
                 >
                   {sel === i.id && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
                   <span
+                    aria-label={i.title}
                     className={clsx(
-                      "grid size-[30px] shrink-0 place-items-center rounded-full",
-                      i.needs_you ? "bg-warn/15 text-warn" : i.kind === "change" ? "bg-info/15 text-info" : "bg-panel-2 text-ink-3",
+                      "mt-0.5 grid size-[30px] shrink-0 place-items-center rounded-full",
+                      hue.bg,
+                      hue.text,
                     )}
                   >
                     <Icon size={15} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className={clsx("truncate text-[13.5px]", i.unread ? "font-semibold" : "font-medium text-ink-2")}>{i.title}</p>
-                      {i.needs_you ? <LiveDot tone="warn" /> : i.unread && <span className="size-2 shrink-0 rounded-full bg-brand" />}
-                      <span className="ml-auto shrink-0 text-[11px] text-ink-3">{ago(i.at)}</span>
+                    <p className={clsx("line-clamp-2 text-[13.5px] leading-snug", i.unread ? "font-semibold text-ink" : "text-ink-2")}>{lineOf(i)}</p>
+                    <div className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-3">
+                      <span className={clsx("shrink-0 font-medium", hue.text)}>{tagOf(i)}</span>
+                      {i.from_name && i.kind !== "negotiation" && <span className="min-w-0 truncate">· {i.from_name}</span>}
+                      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                        {i.needs_you ? <LiveDot tone="warn" /> : i.unread && <span className="size-2 rounded-full bg-brand" />}
+                        {ago(i.at)}
+                      </span>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-3">{i.text || i.request}</p>
-                    <p className="mt-1 text-[12px] text-ink-3">
-                      {KIND_LABEL[i.kind]}
-                      {i.from_name ? ` · ${i.from_name}` : ""}
-                    </p>
                   </div>
                 </button>
               );
@@ -157,7 +216,7 @@ export default function Inbox() {
                   slots={inst.slots}
                   onDone={done}
                 />
-              ) : (current.kind === "action" || (current.kind === "alert" && current.action)) && current.case ? (
+              ) : (current.kind === "action" || (current.kind === "alert" && (current.action || current.answered))) && current.case ? (
                 <ActionPane item={current} onDone={done} />
               ) : (
                 <Notice item={current} onDone={done} />
@@ -178,7 +237,7 @@ export default function Inbox() {
 /** Something waiting on the person, acted on in place: a change to approve, an escalation to decide, a
  * message passed to the office to answer. */
 function ActionPane({ item, onDone }: { item: FeedItem; onDone: (msg: string) => Promise<void> }) {
-  const { data: c, refresh } = useApi(() => api.case(item.case!), [item.case]);
+  const { data: c, refresh } = useApi(() => api.case(item.case!), [item.case, item.n]); // n: someone else acted on it
   if (!c) return <Skeleton className="h-64" />;
   const settled = async (msg: string) => {
     await refresh();
@@ -189,7 +248,7 @@ function ActionPane({ item, onDone }: { item: FeedItem; onDone: (msg: string) =>
       <ApprovalCard c={c} onDone={settled} compact />
     ) : item.action === "decide" && c.status === "escalated" && c.outcome?.escalation ? (
       <EscalationPanel c={c} onDecided={(msg) => void settled(msg)} />
-    ) : item.action === "reply" && (c.forwarded_to || c.status === "refused") ? (
+    ) : (item.action === "reply" || item.answered) && (c.forwarded_to || c.status === "refused") ? (
       <ForwardedPanel c={c} onHandled={(msg) => void settled(msg)} />
     ) : (
       <Notice item={item} onDone={onDone} />
@@ -207,6 +266,9 @@ function ActionPane({ item, onDone }: { item: FeedItem; onDone: (msg: string) =>
 /** A notice, a request update or something to act on: what it says, and where to go from it. */
 function Notice({ item, onDone }: { item: FeedItem; onDone: (msg: string) => Promise<void> }) {
   const link = item.action ? ACTION_LINK[item.action] : null;
+  // news of the person's own request: they may take it back while nothing it asked for is published
+  const own = item.kind === "request" && !!item.case;
+  const { data: c, refresh } = useApi(() => (own ? api.case(item.case!) : Promise.resolve(null)), [item.case, item.n, own]);
   return (
     <Card>
       <CardHeader
@@ -243,6 +305,17 @@ function Notice({ item, onDone }: { item: FeedItem; onDone: (msg: string) => Pro
             <Link to={`/requests/${item.case}`}>
               <Button variant="ghost">Open request {item.case}</Button>
             </Link>
+          )}
+          {own && c?.can_withdraw && (
+            <span className="ml-auto">
+              <Withdraw
+                id={c.id}
+                onDone={() => {
+                  void refresh();
+                  void onDone(`You withdrew ${c.id}; the timetable is as it was before it.`);
+                }}
+              />
+            </span>
           )}
           {item.kind === "change" && (
             <Link to="/timetable">

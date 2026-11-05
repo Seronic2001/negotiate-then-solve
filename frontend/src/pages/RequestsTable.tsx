@@ -1,10 +1,13 @@
-import { ExternalLink, Plus, Search, Trash2, Undo2 } from "lucide-react";
+import { ArrowRight, ExternalLink, Gavel, Plus, Search, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { RequestBuilder } from "../components/RequestBuilder";
 import { Button, Skeleton, StatusBadge, Tabs } from "../components/ui";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
+import { ago } from "../lib/meta";
+import { decidesOn, effectiveStatus, partsRunning } from "../lib/requests";
 import type { CaseSummary, Status } from "../lib/types";
 
 /** Requests that have run their course: they can be taken off the list (as web.app.FINISHED). */
@@ -13,14 +16,17 @@ const FINISHED = new Set<Status>(["published", "refused", "denied", "answered", 
 type Show = "all" | "waiting" | "progress" | "done";
 
 /** Where a request stands for its sender: waiting on their answer, still under way, or run its course. */
-const stage = (r: CaseSummary): Exclude<Show, "all"> =>
-  r.waits_on_you || r.status === "clarification_requested" ? "waiting" : FINISHED.has(r.status) ? "done" : "progress";
+const stage = (r: CaseSummary, byId?: Map<string, CaseSummary>): Exclude<Show, "all"> => {
+  const status = byId ? effectiveStatus(r, byId) : r.status; // a split message stands where its parts do
+  return r.waits_on_you || status === "clarification_requested" ? "waiting" : FINISHED.has(status) ? "done" : "progress";
+};
 
 /** The Requests tab of faculty and class representatives (CHAT-PLAN step 6): their requests as a table, newest
  * first: the number, what was asked, the status, and quick actions (Open, Withdraw where allowed, Delete from
  * list once finished). New requests are made in the chat; /requests/R-id opens one as a conversation. */
 export default function RequestsTable() {
   const navigate = useNavigate();
+  const { can } = useAuth(); // the office sees the pipeline's step names, everyone else plain statuses
   const { data, loading, refresh } = useApi(() => api.cases("mine"), [], 5000);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -28,8 +34,9 @@ export default function RequestsTable() {
   const [building, setBuilding] = useState(false); // the New request builder is open
   const [show, setShow] = useState<Show>("all");
   const found = (data ?? []).filter((r) => !q || `${r.id} ${r.text}`.toLowerCase().includes(q.toLowerCase()));
-  const rows = found.filter((r) => show === "all" || stage(r) === show);
-  const count = (x: Show) => found.filter((r) => stage(r) === x).length;
+  const byId = new Map((data ?? []).map((r) => [r.id, r] as const));
+  const rows = found.filter((r) => show === "all" || stage(r, byId) === show);
+  const count = (x: Show) => found.filter((r) => stage(r, byId) === x).length;
 
   const act = async (r: CaseSummary, what: "withdraw" | "hide") => {
     if (what === "withdraw" && !window.confirm(`Withdraw ${r.id}? Everything it set in motion is undone.`)) return;
@@ -50,6 +57,11 @@ export default function RequestsTable() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[17px] font-semibold">Requests</h1>
         <div className="flex items-center gap-2">
+          {can("see_all") && (
+            <Link to="/requests?details=1" className="mr-1 text-[12.5px] text-ink-3 hover:text-brand hover:underline" title="Every request in the department, where it stands">
+              All department requests
+            </Link>
+          )}
           <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-panel px-2.5">
             <Search size={13} className="text-ink-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a request" className="w-40 bg-transparent text-[13px] outline-none placeholder:text-ink-3" />
@@ -69,6 +81,7 @@ export default function RequestsTable() {
         value={show}
         onChange={setShow}
       />
+      {can("see_all") && <NeedsDecision />}
       {error && <p className="text-[12.5px] text-bad">{error}</p>}
 
       {loading && !data ? (
@@ -104,7 +117,8 @@ export default function RequestsTable() {
                       <p className="text-[11.5px] text-ink-3">{new Date(r.received_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      <StatusBadge status={r.status} live={r.running} />
+                      <StatusBadge status={effectiveStatus(r, byId)} live={r.running || partsRunning(r, byId)} plain={!can("approve")} />
+                      {!!r.parts && r.parts.length > 1 && <p className="mt-0.5 text-[11.5px] text-ink-3">{r.parts.length} requests</p>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -133,6 +147,49 @@ export default function RequestsTable() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** The head of department and the Dean: their Requests page is their own requests (the HoD teaches); on top of it,
+ * only the requests that wait on their decision (escalations sent to them), each opening on its decision page. */
+function NeedsDecision() {
+  const { user } = useAuth();
+  const { data } = useApi(() => api.cases("all"), [], 5000);
+  const waiting = (data ?? []).filter((c) => decidesOn(c, user));
+  if (!data) return null;
+  if (!waiting.length)
+    return (
+      <p className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-[12.5px] text-ink-3">
+        <Gavel size={14} /> Nothing waits on your decision.
+      </p>
+    );
+  return (
+    <div className="overflow-hidden rounded-lg border border-warn/40">
+      <p className="flex items-center gap-2 border-b border-warn/30 bg-warn/5 px-3 py-2 text-[12.5px] font-medium text-warn">
+        <Gavel size={14} /> Needs your decision · {waiting.length}
+        <span className="font-normal text-ink-3">Colleagues' requests sent to you</span>
+      </p>
+      <ul className="divide-y divide-line">
+        {waiting.map((c) => (
+          <li key={c.id}>
+            <Link to={`/requests/${c.id}?details=1`} className="group flex items-center gap-3 px-3 py-2.5 hover:bg-panel-2/50">
+              <span className="font-mono text-[12px] text-brand">{c.id}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px]" title={c.text}>
+                  {c.text}
+                </span>
+                <span className="block text-[11.5px] text-ink-3">
+                  {c.sender_name} · {ago(c.received_at)}
+                </span>
+              </span>
+              <span className="flex items-center gap-1 rounded-md bg-warn/15 px-2 py-1 text-[12px] font-medium text-warn">
+                Decide <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

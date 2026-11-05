@@ -1,22 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "./api";
 import { useApi } from "./hooks";
-import { startWeek } from "./scheduling";
+import { dayOf, startWeek } from "./scheduling";
 
-/** The institute, its calendar and a week to show: the week opens on this one (or the next at the weekend),
+/** The institute, its calendar and a week to show: the week opens on this one (or the next at the weekend; the
+ * department's today, lib/scheduling.dayOf), or the one in ?week= with ``inUrl``;
  * ``dates`` are its days' dates for the grid's headings, and ``dayName``/``slotLabel`` name days and hours. */
-export function useWeek() {
+export function useWeek({ inUrl = false }: { inUrl?: boolean } = {}) {
   const { data: inst } = useApi(() => api.instance(), []);
   const { data: cal } = useApi(() => api.calendar(), []);
-  const [week, setWeek] = useState<number | null>(null); // null until the calendar is in
+  const [params, setParams] = useSearchParams();
+  // with ``inUrl``, the week shown is kept in ?week= so a refresh stays on it; null until the calendar is in
+  const [week, setWeek] = useState<number | null>(() => (inUrl ? Number(params.get("week")) || null : null));
   useEffect(() => {
     if (cal && week === null) setWeek(startWeek(cal));
   }, [cal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!inUrl || week === null || Number(params.get("week")) === week) return;
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        q.set("week", String(week));
+        return q;
+      },
+      { replace: true },
+    );
+  }, [week]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dates = useMemo(() => {
     const w = week ? cal?.weeks[week - 1] : null;
     if (!w || !cal) return undefined;
-    const today = new Date().toDateString();
+    const today = dayOf(cal).toDateString();
     return Object.fromEntries(
       cal.days.map((d, i) => {
         const at = new Date(`${w.monday}T00:00:00`);

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { type ReactNode } from "react";
-import { STATUS, TIER, TONE_CLASS, type Tone } from "../../lib/meta";
+import { PLAIN_STATUS, STATUS, TIER, TONE_CLASS, type Tone } from "../../lib/meta";
 import type { Status } from "../../lib/types";
 
 export function Badge({ tone = "muted", children, className, dot }: { tone?: Tone; children: ReactNode; className?: string; dot?: boolean }) {
@@ -13,13 +13,15 @@ export function Badge({ tone = "muted", children, className, dot }: { tone?: Ton
   );
 }
 
-export function StatusBadge({ status, live }: { status: Status; live?: boolean }) {
+/** ``plain``: the status in the sender's words (PLAIN_STATUS) rather than the pipeline step's name. */
+export function StatusBadge({ status, live, plain }: { status: Status; live?: boolean; plain?: boolean }) {
   const s = STATUS[status] ?? STATUS.received;
+  const p = plain ? (PLAIN_STATUS[status] ?? PLAIN_STATUS.received) : s;
   const Icon = s.icon;
   return (
-    <Badge tone={s.tone}>
-      {live ? <LiveDot tone={s.tone} /> : <Icon size={12} />}
-      {s.label}
+    <Badge tone={p.tone}>
+      {live ? <LiveDot tone={p.tone} /> : <Icon size={12} />}
+      {p.label}
     </Badge>
   );
 }

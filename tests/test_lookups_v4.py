@@ -122,9 +122,9 @@ def test_in_the_chat_each_part_is_read_in_its_own_words(monkeypatch):
                                           "and please move my Data Structures lecture to Thursday."},
                headers={"X-User": menon(w)})
     _, answer, rule, card = r.json()
-    assert answer["kind"] == "lookup" and rule["kind"] == "rule" and card["kind"] == "confirm"
+    assert answer["kind"] == "lookup" and rule["kind"] == "rule" and card["kind"] == "request"  # sent at once
     assert "P-ONLINE" in [x["id"] for x in rule["rules"]]  # the rule question alone, not the whole message
-    assert card["text"] == "please move my Data Structures lecture to Thursday"
+    assert card["request_text"] == "please move my Data Structures lecture to Thursday"
 
 
 # -- v3's training rows in v4 -----------------------------------------------------------------------------------

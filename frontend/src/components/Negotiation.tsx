@@ -196,7 +196,18 @@ export function MessageBubble({ m, reply }: { m: MessageView; reply?: { decision
   );
 }
 
-export function DiffTable({ rows }: { rows: DiffRow[] }) {
+const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** A row's place in the week (its time before the change, else after), for listing in time order. */
+const byTime = (a: DiffRow, b: DiffRow) => {
+  const at = (r: DiffRow) => r.before ?? r.after;
+  const pa = at(a), pb = at(b);
+  return (pa ? DAY_ORDER.indexOf(pa.day.slice(0, 3)) * 100 + (pa.slot ?? 0) : 1e4) - (pb ? DAY_ORDER.indexOf(pb.day.slice(0, 3)) * 100 + (pb.slot ?? 0) : 1e4);
+};
+/** "the Computer Networks lecture (C-013-L1)" -> "Computer Networks lecture": the code is shown on its own. */
+const className = (name: string) => name.replace(/^the /, "").replace(/\s*\([A-Z]-[\w-]+\)$/, "");
+
+/** ``weeks``: which weeks the change is for ("weeks 10–12"), said on a cancelled class; "this week" by default. */
+export function DiffTable({ rows, weeks }: { rows: DiffRow[]; weeks?: string }) {
   if (!rows.length) {
     return (
       <p className="flex items-center gap-2 py-4 text-sm text-ink-3">
@@ -217,10 +228,13 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
+          {[...rows].sort(byTime).map((r, i) => (
             <tr key={r.session} data-index={i} className="border-b border-line/60">
               <td className="py-2.5 pr-3">
-                <p className="font-medium">{r.session_name.replace(/^the /, "")}</p>
+                <p className="font-medium">
+                  {className(r.session_name)}
+                  <span className="ml-1.5 font-mono text-[11px] font-normal text-ink-3">{r.session}</span>
+                </p>
               </td>
               <td className="py-2.5 pr-3 text-ink-2">{r.faculty_name}</td>
               <td className={clsx("whitespace-nowrap py-2.5 pr-3 text-ink-3", r.before && "line-through decoration-bad/50")}>
@@ -230,7 +244,7 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
                 <ArrowRight size={14} />
               </td>
               <td className={clsx("whitespace-nowrap py-2.5 font-medium", r.after || !r.before ? "text-ok" : "text-bad")}>
-                {r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : r.before ? "Cancelled this week" : "—"}
+                {r.after ? `${r.after.day} ${r.after.time} · ${r.after.room}` : r.before ? `Cancelled ${weeks ? `in ${weeks}` : "this week"}` : "—"}
                 {r.extra && !r.before && <span className="ml-2 text-[12px] font-normal text-ink-3">extra class, this week only</span>}
               </td>
             </tr>

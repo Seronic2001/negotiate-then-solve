@@ -147,6 +147,9 @@ def local_world(monkeypatch):
     w.parser_mode = "local"  # as if served with a model; the parsers stay the offline ones
     w.model_link = _down()
     me = next(f.id for f in w.instance.faculty if f.name == "Dr. Menon")
+    # if the timetable offers the sender a choice of times, their simulator picks one: these tests are about
+    # when a request is read, not about anyone's answer
+    w.autopilot[me], w.autopilot_delay = True, 0
     return w, me
 
 
@@ -221,3 +224,48 @@ def test_the_summary_flags_a_stand_in_reading_only_when_there_is_a_model(local_w
     assert s["reader"] == "rules" and s["stand_in"] and s["injection"]  # the offline parsers stand in here
     w.parser_mode = "offline"
     assert not _summary(w, r, w.orch.cases[r.id])["stand_in"]
+
+
+class _Gone:
+    """A request reader whose server goes away during the call."""
+
+    def parse(self, request):
+        raise ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host")
+
+
+def test_the_reader_going_away_mid_call_raises_only_where_a_request_may_wait():
+    from web.fallback import WAIT_FOR_MODEL, ModelAway
+
+    class Rules:
+        def parse(self, request):
+            return "rules reading"
+
+    f = Fallback(ModelLink(lambda: object()), lambda c: _Gone(), Rules(), "parser")
+    WAIT_FOR_MODEL.on = False
+    assert f.parse(1) == "rules reading"  # as before: the stand-in reads it
+    f = Fallback(ModelLink(lambda: object()), lambda c: _Gone(), Rules(), "parser")
+    WAIT_FOR_MODEL.on = True
+    try:
+        with pytest.raises(ModelAway):
+            f.parse(1)
+        with pytest.raises(ModelAway):  # and while the link is down after it
+            f.parse(1)
+        policy = Fallback(ModelLink(lambda: object()), lambda c: _Gone(), Rules(), "policy")
+        assert policy.parse(1) == "rules reading"  # only the request reader waits
+    finally:
+        WAIT_FOR_MODEL.on = False
+
+
+def test_a_change_is_held_when_the_model_goes_away_while_reading_it(local_world):
+    from language.rule_parser import RuleParser
+
+    w, me = local_world
+    w.model_link = ModelLink(lambda: object())  # up when the request arrives
+    w.orch.parser = Fallback(w.model_link, lambda c: _Gone(), RuleParser(w.instance), "parser")
+    r = w.intake.from_portal(me, "I want Mondays off for the whole semester.")
+    w.submit(r, wait=True)
+    assert r.id in w.held and w.orch.cases[r.id].status.value == "received"  # read by nobody yet
+    assert "held" in [e["kind"] for e in w.store.events(r.id)]
+    q = w.intake.from_portal(me, "Is it allowed to hold a class during the lunch hour?")
+    w.submit(q, wait=True)  # a rule question goes to the stand-in, as before
+    assert q.id not in w.held and w.orch.cases[q.id].status.value == "answered"

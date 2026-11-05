@@ -8,8 +8,9 @@ The suites are the frozen test split (``data/compiler-intents/test.jsonl``) and 
 ``data/suites`` that ``training.dataset`` wrote: held-out wordings of each generator (``firmness``,
 ``moves``, ``periods``, ``multi``, ``clubs``), the test split rewritten with typos and noise
 (``test-typo``, ``test-noisy``) and, when people have labelled messages, ``human``. Each is scored as
-``evaluation.intents`` scores (outcome match, silently wrong, asked instead). One line per run is appended
-to ``runs/leaderboard.jsonl`` with the model, the data manifest's fingerprints (which suites it was scored
+``evaluation.intents`` scores (outcome match, silently wrong, asked instead, and wrong only in how firm the
+request was read: at its edges firmness is a labelling convention, so it is kept apart from what was asked).
+One line per run is appended to ``runs/leaderboard.jsonl`` with the model, the data manifest's fingerprints (which suites it was scored
 on, exactly) and every suite's summary; ``--show`` prints the leaderboard.
 """
 
@@ -26,7 +27,7 @@ from language.adapters import add_args, local_client, registry
 from .intents import Reader, score
 
 LEADERBOARD = Path("runs/leaderboard.jsonl")
-COLUMNS = ("outcome_match", "silent_wrong", "asked_instead")
+COLUMNS = ("outcome_match", "silent_wrong", "asked_instead", "firmness_only")
 
 
 def suites(data: Path, extra: Path) -> dict[str, Path]:
@@ -87,7 +88,8 @@ def main() -> None:
     result = {"parser": name, "note": args.note, "at": time.strftime("%Y-%m-%d %H:%M"),
               "data": {"recipe": manifest.get("recipe"), "code": manifest.get("code")}, "suites": {}}
     print(f"{name}")
-    print(f"  {'suite':12} {'n':>5} {'match':>7} {'silent':>7} {'asked':>7}")
+    print(f"  {'suite':12} {'n':>5} {'match':>7} {'silent':>7} {'asked':>7} {'firm':>7}"
+          "   (firm: wrong only in how firm)")
     for suite, path in suites(args.data, args.suites).items():
         if wanted and suite not in wanted:
             continue
@@ -96,7 +98,7 @@ def main() -> None:
         result["suites"][suite] = {k: s[k] for k in ("n", *COLUMNS, "action_accuracy", "invalid")} | {
             "fingerprint": manifest.get("fingerprints", {}).get(suite)}
         print(f"  {suite:12} {s['n']:>5} {s['outcome_match']:>7.1%} {s['silent_wrong']:>7.1%} "
-              f"{s['asked_instead']:>7.1%}", flush=True)
+              f"{s['asked_instead']:>7.1%} {s['firmness_only']:>7.1%}", flush=True)
     LEADERBOARD.parent.mkdir(parents=True, exist_ok=True)
     with LEADERBOARD.open("a", encoding="utf-8") as f:
         f.write(json.dumps(result) + "\n")

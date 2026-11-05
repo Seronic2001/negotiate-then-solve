@@ -22,10 +22,13 @@ export interface Workspace {
   answer: { m: LookupMessage; key: number } | null;
   openDetails: (caseId: string) => void;
   openRule: (ruleId: string) => void;
+  /** Show a week on the timetable beside the chat (a timetable change's card); ``key`` changes each time. */
+  goToWeek: (week: number) => void;
+  weekAsked: { week: number; key: number } | null;
 }
 
 const noop = () => {};
-const Ctx = createContext<Workspace>({ mention: null, name: noop, chatTick: 0, refreshChat: noop, showAnswer: noop, answer: null, openDetails: noop, openRule: noop });
+const Ctx = createContext<Workspace>({ mention: null, name: noop, chatTick: 0, refreshChat: noop, showAnswer: noop, answer: null, openDetails: noop, openRule: noop, goToWeek: noop, weekAsked: null });
 
 export const useWorkspace = () => useContext(Ctx);
 
@@ -36,13 +39,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [rule, setRule] = useState<string | null>(null);
   const [answer, setAnswer] = useState<Workspace["answer"]>(null);
   const showAnswer = useCallback((m: LookupMessage) => setAnswer((a) => ({ m, key: (a?.key ?? 0) + 1 })), []);
+  const [weekAsked, setWeekAsked] = useState<Workspace["weekAsked"]>(null);
+  const goToWeek = useCallback((week: number) => setWeekAsked((x) => ({ week, key: (x?.key ?? 0) + 1 })), []);
   const name = useCallback((text: string) => setMention((m) => ({ text, key: (m?.key ?? 0) + 1 })), []);
   const refreshChat = useCallback(() => setChatTick((n) => n + 1), []);
   const closeDetails = useCallback(() => setDetails(null), []);
   const closeRule = useCallback(() => setRule(null), []);
   const value = useMemo<Workspace>(
-    () => ({ mention, name, chatTick, refreshChat, showAnswer, answer, openDetails: setDetails, openRule: setRule }),
-    [mention, name, chatTick, refreshChat, showAnswer, answer],
+    () => ({ mention, name, chatTick, refreshChat, showAnswer, answer, openDetails: setDetails, openRule: setRule, goToWeek, weekAsked }),
+    [mention, name, chatTick, refreshChat, showAnswer, answer, goToWeek, weekAsked],
   );
   return (
     <Ctx.Provider value={value}>

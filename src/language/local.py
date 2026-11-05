@@ -41,6 +41,28 @@ from pydantic import BaseModel, ValidationError
 
 from .llm import InvalidOutput, LLMError, Usage
 
+# calls in flight to one server from this process, across every client of it (NTS_LOCAL_CONCURRENCY, default 4:
+# the GPU server's slots). Beyond it a call waits here, not in the server's queue, where the wait counted
+# against its timeout and an evaluation's workers or a busy app timed out each other's calls.
+_SLOTS: dict[str, threading.BoundedSemaphore] = {}
+_SLOTS_LOCK = threading.Lock()
+
+
+def _slots(base_url: str) -> threading.BoundedSemaphore:
+    with _SLOTS_LOCK:
+        if base_url not in _SLOTS:
+            _SLOTS[base_url] = threading.BoundedSemaphore(max(1, int(os.environ.get("NTS_LOCAL_CONCURRENCY", "4"))))
+        return _SLOTS[base_url]
+
+_RETRY_WAITS = (2.0, 4.0, 8.0, 16.0)  # seconds before each new try of a dropped connection
+_SHARED_CONTEXT = 8192  # tokens the server's slots share (llama-server -c); a call needing more never fits
+
+
+def _fits_alone(payload: dict) -> bool:
+    """Whether a call could fit the server's context with nothing beside it (about four characters a token)."""
+    chars = sum(len(m.get("content") or "") for m in payload.get("messages", []))
+    return chars // 4 + payload.get("max_tokens", 0) < _SHARED_CONTEXT
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -94,18 +116,32 @@ class LocalClient:
         self._lock = threading.Lock()
 
     def _request(self, path: str, payload: dict | None = None, *, root: bool = False) -> dict:
-        """``path`` under the API (``/v1``), or under the server's root with ``root`` (``/lora-adapters``)."""
+        """``path`` under the API (``/v1``), or under the server's root with ``root`` (``/lora-adapters``).
+        A dropped or refused connection (the server restarting, a blip on the network) is tried again after
+        2, 4, 8 and 16 s before it fails; a timeout is not, as the server is busy and another call adds to it.
+        Nor is a full context, unless it is the one the server's parallel slots share: calls running beside
+        this one filled it, and it is free again once they end."""
         data = json.dumps(payload).encode() if payload is not None else None
         base = self.base_url.removesuffix("/v1") if root else self.base_url
         req = urllib.request.Request(f"{base}{path}", data=data,
                                      headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read())
-        except urllib.error.HTTPError as e:
-            raise LLMError(f"local server {e.code}: {e.read()[:300]!r}") from e
-        except (urllib.error.URLError, TimeoutError) as e:
-            raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+        for wait in (*_RETRY_WAITS, None):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    return json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                body = e.read()[:300]
+                if wait is None or not (e.code == 500 and b"Context size has been exceeded" in body
+                                        and payload is not None and _fits_alone(payload)):
+                    raise LLMError(f"local server {e.code}: {body!r}") from e
+                time.sleep(wait)
+            except (urllib.error.URLError, ConnectionError) as e:
+                if wait is None or not isinstance(getattr(e, "reason", e), ConnectionError):
+                    raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+                time.sleep(wait)
+            except TimeoutError as e:
+                raise LLMError(f"local server not reachable at {self.base_url}: {e}") from e
+        raise AssertionError("unreachable")
 
     def _served_model(self) -> str:
         ids = [m["id"] for m in self._request("/models").get("data", [])]
@@ -175,9 +211,10 @@ class LocalClient:
             payload["model"] = self.server_model
         if self.lora is not None:
             payload["lora"] = self.lora
-        started = time.monotonic()
-        resp = self._request("/chat/completions", payload)
-        latency = time.monotonic() - started
+        with _slots(self.base_url):  # waiting for a slot does not count against the timeout
+            started = time.monotonic()
+            resp = self._request("/chat/completions", payload)
+            latency = time.monotonic() - started
         try:
             text = resp["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as e:

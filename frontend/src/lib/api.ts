@@ -35,21 +35,55 @@ import type {
 const USER_KEY = "nts.user";
 const WORLD_KEY = "nts.world";
 
-/** The world (department) this browser works in; sent with every request as X-World. */
-export function currentWorld(): string {
+/* Who is signed in, and in which world, is kept per tab (sessionStorage), so several tabs can be open
+ * side by side as different people. localStorage keeps the last choice, so a new tab starts there; a
+ * duplicated tab copies its tab's choice. */
+const memory: Record<string, string | null> = {};
+
+function tabGet(key: string): string | null {
+  if (key in memory) return memory[key];
   try {
-    return localStorage.getItem(WORLD_KEY) || "demo";
+    const v = sessionStorage.getItem(key) ?? localStorage.getItem(key);
+    if (v !== null) sessionStorage.setItem(key, v); // fixed for this tab from now on
+    return (memory[key] = v);
   } catch {
-    return "demo";
+    return null;
   }
 }
 
-export function setCurrentWorld(id: string): void {
-  try {
-    localStorage.setItem(WORLD_KEY, id);
-  } catch {
-    /* the choice lasts until reload */
+function tabSet(key: string, v: string | null): void {
+  memory[key] = v;
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      if (v) store().setItem(key, v);
+      else store().removeItem(key);
+    } catch {
+      /* storage unavailable: the choice lasts until reload */
+    }
   }
+}
+
+// ?world=<id> opens this tab in that world (with ?as=, see auth.tsx)
+try {
+  const w = new URLSearchParams(window.location.search).get("world");
+  if (w) tabSet(WORLD_KEY, w);
+} catch {
+  /* no URL to read */
+}
+
+/** The world (department) this tab works in; sent with every request as X-World. */
+export function currentWorld(): string {
+  return tabGet(WORLD_KEY) || "demo";
+}
+
+export function setCurrentWorld(id: string): void {
+  tabSet(WORLD_KEY, id);
+}
+
+/** A link that opens a new tab signed in as ``person``, in this tab's world. */
+export function tabLinkAs(person: string): string {
+  const q = new URLSearchParams({ as: person, world: currentWorld() });
+  return `${window.location.origin}/?${q}`;
 }
 
 export interface WorldRow {
@@ -76,20 +110,11 @@ export class ApiError extends Error {
 }
 
 export function currentUserId(): string | null {
-  try {
-    return localStorage.getItem(USER_KEY);
-  } catch {
-    return null;
-  }
+  return tabGet(USER_KEY);
 }
 
 export function setCurrentUserId(id: string | null): void {
-  try {
-    if (id) localStorage.setItem(USER_KEY, id);
-    else localStorage.removeItem(USER_KEY);
-  } catch {
-    /* storage unavailable: the session lasts until reload */
-  }
+  tabSet(USER_KEY, id);
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -130,6 +155,8 @@ export const api = {
   chatSend: (text: string, makeup = false) => post<ChatMessage[]>("/chat", { text, makeup }),
   /** The answer to "send this as a request?" (message ``n``); returns the new messages. */
   chatConfirm: (n: number, as: ConfirmAs) => post<ChatMessage[]>("/chat/confirm", { n, as }),
+  /** A request the chat sent, taken back and answered as a timetable question instead. */
+  chatAsQuestion: (n: number) => post<ChatMessage[]>("/chat/as-question", { n }),
   chatClear: () => call<{ cleared: number }>("/chat", { method: "DELETE" }),
   submit: (text: string, makeup = false) => post<{ id: string }>("/requests", { text, makeup }),
   /** A request made with clicks: ``text`` is what people read, ``intent`` what the pipeline acts on (no parser). */
@@ -157,7 +184,8 @@ export const api = {
   autopilot: () => call<Record<string, boolean>>("/autopilot"),
   setAutopilot: (person: string, on: boolean) => post<Record<string, boolean>>("/autopilot", { person, on }),
   approvals: () => call<CaseDetail[]>("/approvals"),
-  approve: (id: string) => post<{ version: number; notified: Record<string, string> }>(`/approvals/${id}/approve`),
+  /** ``version`` is null for a requirement the timetable already met: confirmed, nothing published. */
+  approve: (id: string) => post<{ version: number | null; notified: Record<string, string> }>(`/approvals/${id}/approve`),
   reject: (id: string, reason: string) => post<{ status: string }>(`/approvals/${id}/reject`, { reason }),
   /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
   decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),
@@ -169,7 +197,9 @@ export const api = {
   /** "Delete from list": one of your own finished requests off your list (it stays in the records). */
   hide: (id: string) => post<{ id: string; hidden: boolean }>(`/cases/${id}/hide`, {}),
   versions: () => call<VersionRow[]>("/versions"),
-  calendar: () => call<CalendarView>("/calendar"),
+  /** ``of``: whose weeks ``mine_changed`` marks (a teacher, a section or a room the page shows); the person's own without */
+  calendar: (of?: { teacher?: string; group?: string; room?: string }) =>
+    call<CalendarView>(`/calendar${of && Object.values(of).some(Boolean) ? `?${new URLSearchParams(Object.entries(of).filter(([, v]) => v) as [string, string][])}` : ""}`),
   weeklyChanges: () => call<WeeklyChange[]>("/weekly-changes"),
   timetable: (opts: { version?: number; week?: number | null } = {}) => {
     const q = new URLSearchParams();

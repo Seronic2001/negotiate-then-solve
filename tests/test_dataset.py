@@ -15,7 +15,7 @@ from training import quality
 from training.dataset import build, fingerprint, load_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
-LATEST = ROOT / "data" / "recipes" / "intents-v6.toml"  # the newest recipe: its frozen test split is the current one
+LATEST = ROOT / "data" / "recipes" / "intents-v8.toml"  # the newest recipe: its frozen test split is the current one
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +83,8 @@ def test_the_build_passes_every_gate_and_keeps_the_test_split(built):
     assert not any(result["failures"].values()), quality.dump_failures(result["failures"])
     m = result["manifest"]
     assert m["fingerprints"]["test"] == load_recipe(LATEST)["frozen"]["test"]
-    assert {"firmness", "moves", "periods", "multi", "clubs", "test-noisy"} <= set(splits)
+    assert {"firmness", "moves", "periods", "multi", "clubs", "test-noisy", "exceptions", "only_times",
+            "compound"} <= set(splits)
     assert all(r["schema"] == SCHEMA_VERSION for rows in splits.values() for r in rows)
     twins = [r for r in splits["train"] if r.get("origin") == "augment"]
     assert twins and all(r["parent_text"] != r["request"]["raw_text"] for r in twins)

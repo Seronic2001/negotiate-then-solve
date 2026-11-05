@@ -7,8 +7,6 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ChevronsUpDown,
-  FileUp,
   Hammer,
   FlaskConical,
   Home,
@@ -28,13 +26,15 @@ import {
   Waypoints,
   X,
   type LucideIcon,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, tabLinkAs } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi, useHotkey } from "../lib/hooks";
-import { ROLE_LABEL, STATUS, TIMETABLE_HOME } from "../lib/meta";
+import { PREFS, usePref } from "../lib/prefs";
+import { PLAIN_STATUS, REQUESTS_AS_CHATS, ROLE_LABEL, STATUS, TIMETABLE_HOME, WORKSPACE_HOME } from "../lib/meta";
 import { useTheme } from "../lib/theme";
 import type { Overview, View } from "../lib/types";
 import { StudyBanner } from "./StudyBanner";
@@ -54,8 +54,6 @@ export const NAV: NavItem[] = [
   { to: "/", label: "Home", icon: Home, group: "main", view: "home" },
   { to: "/inbox", label: "Inbox", icon: Inbox, group: "main", view: "inbox", badge: "inbox" },
   { to: "/requests", label: "Requests", icon: ListChecks, group: "main", view: "requests", badge: "requests" },
-  { to: "/documents", label: "Policy documents", icon: FileUp, group: "main", view: "documents" },
-  { to: "/settings", label: "Settings", icon: Settings, group: "main", view: "settings" },
   { to: "/semester", label: "Semester plan", icon: Hammer, group: "semester", view: "semester" },
   { to: "/preferences", label: "Semester preferences", icon: SlidersHorizontal, group: "semester", view: "prefs" },
   { to: "/clubs", label: "Club activities", icon: Music, group: "semester", view: "clubs" },
@@ -69,11 +67,13 @@ export const NAV: NavItem[] = [
   { to: "/human-study", label: "Human study", icon: ClipboardCheck, group: "research", view: "study" },
 ];
 
-const COLLAPSED_KEY = "nts.sidebar.collapsed";
+/** Settings: at the bottom of the sidebar, above the account, for everyone (each person's own choices; the
+ * coordinator's choices for everyone are a section of it). */
+const SETTINGS: NavItem = { to: "/settings", label: "Settings", icon: Settings, group: "main", view: "settings" };
 
 /** What the timetable-home roles keep in view (their timetable, their requests as chats, the handbook);
  * the rest of their pages sit under "More". */
-const ESSENTIAL = ["/", "/requests", "/timetable", "/policy"];
+const ESSENTIAL = ["/", "/requests", "/policy"];
 
 const GROUPS: { id: NavItem["group"]; label?: string }[] = [
   { id: "main" },
@@ -86,39 +86,31 @@ export function Shell({ children }: { children: ReactNode }) {
   const { user, sees } = useAuth();
   const [palette, setPalette] = useState(false);
   const [drawer, setDrawer] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(COLLAPSED_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [collapsed, setCollapsed] = usePref(PREFS.sidebarCollapsed); // also on the Settings page
   const location = useLocation();
   const { data: ov } = useApi(() => api.overview(), [user?.id], 4000);
   useHotkey("k", () => setPalette((p) => !p));
   useHotkey("b", () => toggle());
   useEffect(() => setDrawer(false), [location.pathname]);
 
-  const toggle = () =>
-    setCollapsed((c) => {
-      try {
-        localStorage.setItem(COLLAPSED_KEY, c ? "0" : "1");
-      } catch {
-        /* the choice just isn't remembered */
-      }
-      return !c;
-    });
+  const toggle = () => setCollapsed(!collapsed);
 
   // the timetable-home roles read and answer everything in the home panel, so the Inbox is not in their menu
-  const items = NAV.filter((n) => sees(n.view) && !(n.to === "/inbox" && user && TIMETABLE_HOME.includes(user.role)));
+  // the office reads everyone's semester preferences in the semester plan, so not as a page of its own
+  const items = NAV.filter(
+    (n) =>
+      sees(n.view) &&
+      !(n.to === "/inbox" && user && TIMETABLE_HOME.includes(user.role)) &&
+      !(n.to === "/preferences" && user?.role === "coordinator"),
+  );
   // the timetable home, the requests chat and the request workspace (every role's New request) fill the
   // window, so their panels keep their proportions at any zoom
   const fullscreen =
     !!user &&
-    (location.pathname === "/timetable" ||
-      (location.pathname === "/" && new URLSearchParams(location.search).get("tab") === "workspace") ||
-      (TIMETABLE_HOME.includes(user.role) &&
-        (location.pathname === "/" || (location.pathname.startsWith("/requests") && !new URLSearchParams(location.search).has("details")))));
+    (location.pathname === "/new" ||
+      location.pathname === "/timetable" ||
+      (WORKSPACE_HOME.includes(user.role) && location.pathname === "/") ||
+      (REQUESTS_AS_CHATS.includes(user.role) && location.pathname.startsWith("/requests") && !new URLSearchParams(location.search).has("details")));
   const onSearch = () => setPalette(true);
 
   return (
@@ -173,7 +165,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} items={items} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} items={[...items, SETTINGS]} />
     </div>
   );
 }
@@ -199,6 +191,11 @@ function Sidebar({
   useEffect(() => {
     if (inMore) setMore(true);
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inResearch = items.some((i) => i.group === "research" && location.pathname.startsWith(i.to));
+  // shown when chosen (here or on the Settings page), and while one of its pages is open
+  const [researchShown, setResearchShown] = usePref(PREFS.researchShown);
+  const research = researchShown || inResearch;
+  const showResearch = () => setResearchShown(!research);
   const badge = (b?: NavItem["badge"]) => (b === "inbox" ? ov?.my_inbox : b === "requests" ? ov?.my_waiting : b === "approvals" ? (ov?.pending_approvals ?? 0) + (ov?.my_decisions ?? 0) + (ov?.my_forwarded ?? 0) : 0) ?? 0;
   const navLink = (n: NavItem) => {
     const active = n.to === "/" ? location.pathname === "/" : location.pathname.startsWith(n.to);
@@ -226,7 +223,13 @@ function Sidebar({
       </NavLink>
     );
   };
-  const status = ov?.seeding ? "Loading demo history…" : ov?.published_version != null ? `Timetable v${ov.published_version} published` : "Connecting…";
+  // the newest published version (a one-week change counts), and the semester's when it is older
+  const latest = ov?.latest_version ?? ov?.published_version ?? null;
+  const status = ov?.seeding
+    ? "Loading demo history…"
+    : latest != null
+      ? `Timetable v${latest} published${ov?.published_version != null && ov.published_version !== latest ? ` (the latest change, for one week; the semester timetable is v${ov.published_version})` : ""}`
+      : "Connecting…";
 
   return (
     <div className="flex h-full flex-col">
@@ -243,7 +246,7 @@ function Sidebar({
       <div className={clsx("space-y-1.5", collapsed ? "px-2" : "px-3")}>
         {sees("new") && !minimal && (
           <button
-            onClick={() => navigate("/?tab=workspace")}
+            onClick={() => navigate("/new")}
             title={collapsed ? "New request" : undefined}
             aria-label="New request"
             className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-brand text-[13px] font-medium text-panel hover:bg-brand/90"
@@ -294,47 +297,63 @@ function Sidebar({
           GROUPS.map((g) => {
             const list = items.filter((i) => i.group === g.id);
             if (!list.length) return null;
-            // the research pages fold away under "More" (opened by a click, or by opening one of them)
-            const folds = g.id === "research" && !collapsed;
-            const open = !folds || more || list.some((i) => location.pathname.startsWith(i.to));
+            if (g.id === "research")
+              // the project's own tools (graph, health, experiments, study) stay out of the daily menu until asked for
+              return (
+                <div key={g.id}>
+                  {collapsed ? (
+                    <div className="mx-2 mb-2 border-t border-line" />
+                  ) : (
+                    <button
+                      onClick={showResearch}
+                      aria-expanded={research}
+                      className="mb-1 flex w-full items-center gap-1 px-2.5 text-[11px] font-medium text-ink-3 hover:text-ink"
+                    >
+                      <ChevronRight size={12} className={clsx("transition-transform", research && "rotate-90")} /> {g.label}
+                    </button>
+                  )}
+                  {(research || collapsed) && list.map(navLink)}
+                </div>
+              );
             return (
               <div key={g.id}>
-                {collapsed ? (
-                  g.label && <div className="mx-2 mb-2 border-t border-line" />
-                ) : folds ? (
-                  <button onClick={() => setMore(!more)} aria-expanded={open} className="mb-1 flex w-full items-center gap-1 px-2.5 text-[11px] font-medium text-ink-3 hover:text-ink">
-                    <ChevronRight size={12} className={clsx("transition-transform", open && "rotate-90")} /> More: {g.label}
-                  </button>
-                ) : (
-                  g.label && <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>
-                )}
-                {open && list.map(navLink)}
+                {g.label && (collapsed ? <div className="mx-2 mb-2 border-t border-line" /> : <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>)}
+                {list.map(navLink)}
               </div>
             );
           })
         )}
       </nav>
 
-      <div className={clsx("border-t border-line py-3", collapsed ? "px-2" : "px-3")}>
-        {collapsed ? (
-          <p className="mb-2 flex justify-center" title={status}>
-            <LiveDot tone={ov?.seeding ? "warn" : "ok"} pulse={!!ov?.seeding} />
-          </p>
-        ) : (
-          <p className="mb-2 flex items-center gap-2 px-2.5 text-[11.5px] text-ink-3">
-            <LiveDot tone={ov?.seeding ? "warn" : "ok"} pulse={!!ov?.seeding} />
-            {status}
-          </p>
-        )}
-        {!collapsed && ov?.model && ov.model.up !== null && (
-          <p
-            className={clsx("-mt-1 mb-2 flex items-center gap-2 px-2.5 text-[11.5px]", ov.model.up ? "text-ink-3" : "text-warn")}
-            title={ov.model.up ? "Requests and replies are read by the model" : `The model server is not answering, so the rule-based stand-ins read requests and replies until it is back. ${ov.model.error ?? ""}`}
-          >
-            <LiveDot tone={ov.model.up ? "ok" : "warn"} />
-            {ov.model.up ? (ov.model.mode === "gemini" ? "Gemini connected" : "Fine-tuned model connected") : "Model offline · using rules"}
-          </p>
-        )}
+      <div className={clsx("border-t border-line py-2", collapsed ? "px-2" : "px-3")}>
+        {(() => {
+          const model = ov?.model && ov.model.up !== null ? ov.model : null;
+          const modelText = model
+            ? model.up
+              ? model.mode === "gemini" ? "Gemini" : "Fine-tuned model"
+              : `Model offline${model.held ? ` · ${model.held} waiting` : ""}`
+            : null;
+          const modelTip = model
+            ? model.up
+              ? "Requests and replies are read by the model"
+              : `The model server is not answering. Requests that would change the timetable wait for it, for ${model.hold_minutes ?? 10} minutes at most before the rule-based reader takes them; questions about the rules, messages for other offices and replies are read by the rules now. ${model.error ?? ""}`
+            : undefined;
+          const tip = [status, modelTip].filter(Boolean).join(" · ");
+          const tone = ov?.seeding || (model && !model.up) ? "warn" : "ok";
+          return collapsed ? (
+            <p className="mb-1 flex justify-center py-1" title={tip}>
+              <LiveDot tone={tone} pulse={!!ov?.seeding} />
+            </p>
+          ) : (
+            <p className={clsx("mb-1 flex items-center gap-1.5 truncate px-1.5 text-[11px]", model && !model.up ? "text-warn" : "text-ink-3")} title={tip}>
+              <LiveDot tone={tone} pulse={!!ov?.seeding} />
+              <span className="truncate">
+                {ov?.seeding ? "Loading demo history…" : latest != null ? `Timetable v${latest}` : "Connecting…"}
+                {modelText && ` · ${modelText}`}
+              </span>
+            </p>
+          );
+        })()}
         <Account collapsed={collapsed} />
       </div>
     </div>
@@ -358,24 +377,33 @@ function Account({ collapsed = false }: { collapsed?: boolean }) {
   if (!user) return null;
 
   return (
-    <div className={clsx("relative flex items-center gap-1", collapsed && "flex-col")} data-account>
+    <div className={clsx("relative flex items-center gap-0.5", collapsed && "flex-col")} data-account>
       <button
         onClick={() => setOpen(!open)}
         title={collapsed ? `${user.name} · ${ROLE_LABEL[user.role]}` : undefined}
-        className={clsx("flex min-w-0 items-center gap-2.5 rounded-md py-1.5 text-left hover:bg-panel-2", collapsed ? "px-1" : "flex-1 px-1.5")}
+        className={clsx("flex min-w-0 items-center gap-2 rounded-md py-1 text-left hover:bg-panel-2", collapsed ? "px-1" : "flex-1 px-1")}
       >
-        <Avatar name={user.name} id={user.id} size={28} />
+        <Avatar name={user.name} id={user.id} size={26} />
         {!collapsed && (
           <>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium leading-tight">{user.name}</p>
               <p className="truncate text-[11.5px] leading-tight text-ink-3">{ROLE_LABEL[user.role]}</p>
             </div>
-            <ChevronsUpDown size={14} className="shrink-0 text-ink-3" />
           </>
         )}
       </button>
-      <button onClick={toggle} className="grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink" title={theme === "dark" ? "Light theme" : "Dark theme"}>
+      <NavLink
+        to="/settings"
+        title="Settings"
+        aria-label="Settings"
+        className={({ isActive }) =>
+          clsx("grid size-7 shrink-0 place-items-center rounded-md hover:bg-panel-2 hover:text-ink", isActive ? "bg-panel-2 text-brand" : "text-ink-3")
+        }
+      >
+        <Settings size={15} />
+      </NavLink>
+      <button onClick={toggle} className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink" title={theme === "dark" ? "Light theme" : "Dark theme"}>
         {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
       </button>
       <AnimatePresence>
@@ -390,24 +418,35 @@ function Account({ collapsed = false }: { collapsed?: boolean }) {
               collapsed ? "bottom-0 left-full ml-2" : "bottom-12 left-0",
             )}
           >
-            <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Switch person (demo sign-in)</p>
+            <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Switch person (demo sign-in) · each tab keeps its own</p>
             <div className="max-h-72 overflow-y-auto p-1">
               {data?.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={async () => {
-                    await signIn(p.id);
-                    setOpen(false);
-                    navigate("/");
-                  }}
-                  className={clsx("flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-panel-2", p.id === user.id && "bg-panel-2")}
-                >
-                  <Avatar name={p.name} id={p.id} size={24} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px]">{p.name}</p>
-                    <p className="truncate text-[11px] text-ink-3">{ROLE_LABEL[p.role]}</p>
-                  </div>
-                </button>
+                <div key={p.id} className={clsx("group flex items-center rounded-md hover:bg-panel-2", p.id === user.id && "bg-panel-2")}>
+                  <button
+                    onClick={async () => {
+                      await signIn(p.id);
+                      setOpen(false);
+                      navigate("/");
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left"
+                  >
+                    <Avatar name={p.name} id={p.id} size={24} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px]">{p.name}</p>
+                      <p className="truncate text-[11px] text-ink-3">{ROLE_LABEL[p.role]}</p>
+                    </div>
+                  </button>
+                  <a
+                    href={tabLinkAs(p.id)}
+                    target="_blank"
+                    rel="noopener"
+                    onClick={() => setOpen(false)}
+                    title={`Open a new tab as ${p.name}; this tab stays as ${user.name}`}
+                    className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-ink-3 opacity-0 hover:bg-panel hover:text-ink focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
               ))}
               <button
                 onClick={() => {
@@ -447,9 +486,9 @@ function CommandPalette({ open, onClose, items }: { open: boolean; onClose: () =
     const cs = (cases ?? [])
       .filter((c) => !ql || `${c.id} ${c.text} ${c.sender_name}`.toLowerCase().includes(ql))
       .slice(0, 8)
-      .map((c) => ({ key: c.id, label: c.text, hint: STATUS[c.status].label, icon: STATUS[c.status].icon, go: `/requests/${c.id}` }));
+      .map((c) => ({ key: c.id, label: c.text, hint: (can("approve") ? STATUS : PLAIN_STATUS)[c.status].label, icon: STATUS[c.status].icon, go: `/requests/${c.id}` }));
     return [...pages, ...cs];
-  }, [q, items, cases]);
+  }, [q, items, cases]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setSel(0);

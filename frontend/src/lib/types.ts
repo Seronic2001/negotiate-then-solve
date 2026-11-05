@@ -72,6 +72,8 @@ export interface CaseSummary {
   injection?: boolean;
   /** Read by the rules though the app runs with a model: worth checking before approving. */
   stand_in?: boolean;
+  /** a message of several requests: the requests it was split into (its own status only says it was split) */
+  parts?: string[] | null;
 }
 
 export interface ConstraintView {
@@ -97,6 +99,7 @@ export interface PlacementView {
   room: string;
   text: string;
   time: string;
+  room_name?: string;
 }
 
 export interface OfferView {
@@ -169,7 +172,20 @@ export interface FeedItem {
   unread: boolean;
   version?: number | null;
   action?: "approve" | "decide" | "reply";
+  /** A message the office has answered or acted on (its item stays, no longer waiting). */
+  answered?: boolean;
   message?: InboxItem;
+  /** A change to this person's timetable, class by class and week by week. */
+  change?: ChangeView | null;
+}
+
+/** What a published change did to one person's classes (the viewer's own, or their section's). */
+export interface ChangeView {
+  /** "Information Security practical cancelled", "2 classes moved". */
+  title: string;
+  weeks: { week: number | null; rows: (DiffRow & { name: string })[] }[];
+  /** Why, where anyone may know it ("Lab 3 is closed"); null when the reason is the sender's own. */
+  reason: string | null;
 }
 
 export interface DiffRow {
@@ -185,6 +201,12 @@ export interface DiffRow {
 }
 
 export interface CaseDetail extends CaseSummary {
+  /** What was read from the message, one sentence per intent. */
+  understood?: string[];
+  /** What the message says that the reading does not use (a day, a time, a week, a requirement read as a wish). */
+  unused?: string[];
+  /** The requests a message of several parts was split into. */
+  parts?: string[];
   routing: {
     request_type: string;
     type_p: number;
@@ -229,6 +251,10 @@ export interface CaseDetail extends CaseSummary {
       to_name: string;
       reason: string;
       text: string;
+      /** An exception to a rule (outside teaching hours): the rule, what was asked for, what granting does. */
+      rule: { id: string; number: string; title: string; text: string } | null;
+      asked: string;
+      grant: string;
       /** What granting would set aside (physical facts never are). */
       set_aside: ConstraintView[];
       /** Why granting would not help; null when it can be granted. */
@@ -237,7 +263,14 @@ export interface CaseDetail extends CaseSummary {
     solver: null | { status: string; wall_time: number; moved: number | null; soft_violations: Record<string, number> };
   };
   /** builds_on: an earlier change still waiting for approval that this one is built on (approved first). */
-  proposal: null | { version: number; week: number | null; diff: DiffRow[]; builds_on?: string | null };
+  /** more: a request over several weeks has a change for each further week, published when this one is approved. */
+  proposal: null | {
+    version: number;
+    week: number | null;
+    diff: DiffRow[];
+    builds_on?: string | null;
+    more?: { version: number; week: number | null; cancelled: string[]; diff: DiffRow[] }[];
+  };
   fairness: { gini_before?: number; gini_after?: number; conceded?: string[]; preferences_lost?: string[] };
   /** How a person with the authority settled its escalation. */
   decision?: null | { by: string; by_name: string; granted: boolean; note: string; set_aside?: string[] };
@@ -253,6 +286,8 @@ export interface CaseDetail extends CaseSummary {
   extra?: null | { template: string | null; week: number | null; session?: string; label?: string; placement: PlacementView | null };
   reply: string;
   notices: Record<string, string>;
+  /** who each notice went to, by name */
+  notice_names?: Record<string, string>;
   inbox: InboxItem[];
   events: EventRow[];
 }
@@ -267,14 +302,19 @@ export interface Overview {
   my_decisions?: number;
   my_forwarded?: number;
   my_inbox: number;
+  /** unread and not waiting on the person (the Inbox's Unread tab) */
+  my_unread?: number;
   /** requests waiting on this person's answer (the Requests tab's count) */
   my_waiting?: number;
   published_version: number | null;
+  /** the newest published version, a one-week change included (published_version: the semester's) */
+  latest_version?: number | null;
   gini: number;
   negotiations: { agreed: number; escalated: number; feasible: number; mean_rounds: number | null };
   recent: EventRow[];
   models: { parser: string; policy: string };
-  model?: { up: boolean | null; error: string | null; since: number; mode: string } | null; // null: offline mode
+  /** null: offline mode. ``held``: requests waiting for the model while it is away, each for ``hold_minutes`` at most. */
+  model?: { up: boolean | null; error: string | null; since: number; mode: string; held?: number; hold_minutes?: number } | null;
   sessions: number;
   faculty: number;
   rooms: number;
@@ -325,7 +365,23 @@ export interface Timetable {
   entries: TimetableEntry[];
   changed: string[];
   weeks: number[]; // weeks with their own changes
-  cancelled: { session: string; session_name: string; faculty_name: string; groups: string[] }[]; // not held this week
+  /** not held this week: where each would have been (``day``, ``slot``) and why ("Dr. Das is away") */
+  cancelled: {
+    session: string; session_name: string; faculty_name: string; groups: string[];
+    title?: string; kind?: string; day?: string | null; slot?: number | null; duration?: number;
+    reason?: "away" | "asked" | "closed" | null; why?: string | null;
+    faculty?: string; course?: string; room?: string | null; room_name?: string | null;
+  }[];
+  /** a week with changes of its own: the classes not in their usual place, from where to where */
+  moved?: {
+    session: string; title: string; kind: string; groups: string[]; faculty_name: string | null; faculty?: string | null; course?: string | null;
+    from: { day: string; slot: number; time: string; room: string; room_name: string } | null;
+    to: { day: string; slot: number; time: string; room: string; room_name: string } | null;
+  }[];
+  /** the requests behind the week's changes */
+  because?: { case: string; text: string; by: string }[];
+  /** Rooms closed in this week (whole week when days/slots are null), with the request that closed them. */
+  closed?: { room: string; room_name: string; days: string[] | null; slots: number[] | null; request: string | null; text: string | null }[];
 }
 
 export interface WeeklyChange {
@@ -344,10 +400,14 @@ export interface CalendarView {
   days: string[];
   day_names: Record<string, string>;
   current_week: number;
+  /** The day the department is on (the demo department: a fixed day), as YYYY-MM-DD. */
+  today?: string;
   weeks: {
     week: number;
     monday: string;
     own_changes: boolean;
+    /** a class of the signed-in person's is moved, not held or added that week (their own timetable's mark) */
+    mine_changed?: boolean;
     class_days: string[];
     cancelled_days: string[];
     classes: { day: string; slot: number; time: string; room: string; session: string; title: string; kind: string; cancelled: boolean }[];
@@ -396,9 +456,32 @@ export interface Ledger {
   stakeholders: { id: string; name: string; credit: number; concessions: number }[];
 }
 
+export interface GraphNode {
+  id: string;
+  kind: "stakeholder" | "constraint" | "session" | "room" | "group" | "request" | "rule" | "change" | string;
+  label: string;
+  title: string;
+  details: [string, string][];
+  role?: string;
+  tier?: number;
+  hard?: boolean;
+  credit?: number;
+  given?: number;
+}
+
+export interface GraphConflict {
+  case: string | null;
+  round: number | null;
+  constraints: string[];
+  request: string | null;
+  sender: string | null;
+  status: string | null;
+}
+
 export interface GraphData {
-  nodes: { id: string; kind: string; label: string; role?: string; type?: string; tier?: number; balance?: number }[];
+  nodes: GraphNode[];
   edges: { source: string; target: string; rel: string }[];
+  conflicts: GraphConflict[];
 }
 
 export interface Rule {
@@ -434,17 +517,18 @@ export interface Transparency {
   weights: Record<string, number>;
   role_authority: Record<string, number>;
   justification: Record<string, number>;
+  lifecycle: { name: string; text: string }[];
   ladder: { step: number; name: string; text: string }[];
-  negotiation: Record<string, number>;
+  negotiation: Record<string, number | string | null>;
   system_one: { trained_on?: number; val_action_accuracy?: number; tau?: number };
-  models: { parser: string; policy: string };
+  models: Record<string, string> & { parser: string; policy: string };
   safety: string[];
 }
 
 export interface Observability {
   uptime_s: number;
-  models: { parser: string; policy: string };
-  llm: { model: string; used_today: number; rpd: number | null; rpm: number | null; cached_responses: number }[];
+  models: Record<string, string> & { parser: string; policy: string };
+  llm: { model: string; used_today: number; rpd: number | null; rpm: number | null; cached_responses: number; counting?: boolean }[];
   stages: Record<string, { n: number; p50: number | null; p95: number | null; max: number | null }>;
   solver: { n: number; p50: number | null; p95: number | null };
   routing: { counts: Record<string, number>; tau: number; system_one_latency_ms_p50: number | null; fast_path_share: number | null };
@@ -453,6 +537,26 @@ export interface Observability {
   errors: EventRow[];
   safety: { refused: number; denied: number; unapproved_publishes: number; leaks: number };
   threads_running: number;
+  health: Health;
+}
+
+export interface HealthCheck {
+  level: "bad" | "warn" | "info" | "ok";
+  area: string;
+  title: string;
+  detail: string;
+  next: string | null;
+  cases: string[];
+}
+
+export interface Health {
+  checks: HealthCheck[];
+  outcomes: Record<string, number>;
+  total: number;
+  reading: { readers: Record<string, number>; asked: number; unused: number; injected: number; split: number; received: number };
+  negotiation: { negotiated: number; agreed: number; escalated: number; first_round: number; mean_rounds: number | null; messages: number; no_reply: number; declined: number };
+  approvals: { waiting: number; oldest_minutes: number | null };
+  model: { up: boolean | null; error: string | null; since: number | null; outages: number; held: number } | null;
 }
 
 export interface NegotiationSummary {
@@ -772,9 +876,13 @@ export type ChatMessage =
   | (ChatBase & { role: "assistant"; kind: "rule"; answer: string; rules: { id: string; title: string }[] })
   /** "send this as a request?": nothing sent until answered (POST /api/chat/confirm). */
   | (ChatBase & { role: "assistant"; kind: "confirm"; text: string; makeup?: boolean | null; answered?: ConfirmAs; part?: boolean })
-  /** a request, once sent: its number (what happens next is on its page) */
-  | (ChatBase & { role: "assistant"; kind: "request"; case: string })
-  | (ChatBase & { role: "assistant"; kind: "other"; text: string });
+  /** a request, sent at once: its number (what happens next is on its page), what was asked (``request_text``),
+   *  ``part``: the request part of a message whose questions were answered; ``reread``: taken back and answered as a
+   *  question instead (POST /api/chat/as-question) */
+  | (ChatBase & { role: "assistant"; kind: "request"; case: string; request_text?: string; part?: boolean; reread?: "question" })
+  | (ChatBase & { role: "assistant"; kind: "other"; text: string })
+  /** someone's change reached this person's timetable (published): what it means for them, the weeks it is for */
+  | (ChatBase & { role: "assistant"; kind: "change"; text: string; case: string; weeks: number[]; from_name?: string });
 
 export type ConfirmAs = "request" | "question" | "cancel";
 

@@ -1,6 +1,8 @@
 import clsx from "clsx";
-import { ArrowLeft, Eraser, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Eraser, Send, Undo2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { requestExamples } from "../lib/examples";
@@ -9,15 +11,31 @@ import type { AskAnswer, InboxItem } from "../lib/types";
 import { ColleagueThread, groupOf, type Conversation } from "./Conversations";
 import { RequestThread } from "./RequestThread";
 import { ReplyBubble, YouBubble } from "./thread/Bubble";
-import { Chips, Composer, MakeupToggle } from "./thread/Composer";
 import { Button, Skeleton } from "./ui";
 
 /** Which conversation is open, its details, and what the composer under it does: answer the open request's
  * question, reply to options sent to this person, or (otherwise) write a new request. Starting to write
  * swaps the open thread for a blank new request, with a way back to it. */
-export function useConversation(convs: Conversation[], refresh: () => void, { autoOpen = true }: { autoOpen?: boolean } = {}) {
+export function useConversation(
+  convs: Conversation[],
+  refresh: () => void,
+  { autoOpen = true, urlKey }: { autoOpen?: boolean; /** keep the open conversation in ?<urlKey>= across a refresh */ urlKey?: string } = {},
+) {
   const { user } = useAuth();
-  const [selected, setSelected] = useState<string | null>(null); // a case id, or "other:…"
+  const [params, setParams] = useSearchParams();
+  const [selected, setSelected] = useState<string | null>(() => (urlKey ? params.get(urlKey) : null)); // a case id, or "other:…"
+  useEffect(() => {
+    if (!urlKey || (params.get(urlKey) ?? null) === selected) return;
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        if (selected) q.set(urlKey, selected);
+        else q.delete(urlKey);
+        return q;
+      },
+      { replace: true },
+    );
+  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picked, setPicked] = useState(false); // the person chose (or asked for a new request): don't choose for them
   const [back, setBack] = useState<string | null>(null); // the thread to go back to from a new request
   useEffect(() => {
@@ -95,15 +113,14 @@ export interface WhenHint {
 
 /** The open conversation and the composer under it. With nothing open, the composer is the full new-request
  * page: examples to start from, the week and days shown on the timetable to add, Undo and Clear. */
-export function ConversationPane({ s, convs, attachments, when, wide = false, onAnswer, answerOnly = false }: {
+export function ConversationPane({ s, convs, attachments, when, wide = false, composerIn, onAnswer }: {
   s: ConversationState;
   convs: Conversation[];
   attachments?: Attachments;
   when?: WhenHint;
   wide?: boolean;
-  /** Only to answer the open request (a question back, options): no new requests here (they are made in the
-   * chat, with its confirm step); without anything to answer, no input box. */
-  answerOnly?: boolean;
+  /** Draw the message box here instead of under the conversation (a layout on trial: the box under the timetable). */
+  composerIn?: HTMLElement | null;
   /** A timetable question was answered (e.g. to shade the free hours on the timetable). */
   onAnswer?: (a: AskAnswer) => void;
 }) {
@@ -132,6 +149,12 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
   const teaches = !!user && ["faculty", "hod", "guest_faculty"].includes(user.role);
   const [reading, setReading] = useState<{ text: string; reading: string } | null>(null); // how a reply was read
   const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || !composerIn) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text, composerIn]);
   useEffect(() => setReading(null), [s.selected, text]);
   const attached = attachments?.items ?? [];
   // timetable questions answered in this session, kept until the page reloads (questions are not requests)
@@ -198,8 +221,10 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
     }
   };
 
+  const [allExamples, setAllExamples] = useState(false);
   const composing = !s.selected && !s.answering && !s.replying; // a new request: the full composer
   const examples = composing ? requestExamples(user, inst) : [];
+  const shownExamples = allExamples ? examples : examples.slice(0, 3);
   /** Add a phrase ("in week 7", "on Tuesday in week 7") to the end of the text, or take it out again. */
   const has = (phrase: string) => text.toLowerCase().includes(phrase.toLowerCase());
   const togglePhrase = (phrase: string) => {
@@ -208,6 +233,11 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
     box.current?.focus();
   };
   const column = wide ? "mx-auto w-full max-w-3xl" : "";
+  const docked = !!composerIn; // the box on its own under the timetable: one line that grows as you type
+  const makeupToggle = teaches && !s.answering && !s.replying;
+  const makeupTip = "If you are away in some weeks: on, the classes you miss move to other times that week; off, they are cancelled";
+  const chip = "rounded-full border px-2.5 py-1 text-[11.5px] transition-colors";
+  const place = (box: ReactNode) => (composerIn ? createPortal(box, composerIn) : box);
   return (
     <>
       <div className="flex-1 overflow-y-auto p-4">
@@ -219,7 +249,7 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
           ) : s.shown ? (
             <RequestThread c={s.shown} onChanged={s.changed} />
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {answers.length > 0 && (
                 <div className="space-y-3">
                   {answers.map((x, i) => (
@@ -240,17 +270,17 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                     <span className="truncate">Back to: {backTitle}</span>
                   </button>
                 )}
-                <p className="text-[15px] font-medium">New request</p>
-                <p className="text-[12.5px] leading-relaxed text-ink-3">
-                  Write it the way you would write to the timetable office: an absence, a class to move, a question about the rules, or
-                  a question about the timetable (“when is Dr. Iyer free this week?”).
-                  Click a class on the timetable to cancel, move or swap it, or to name it here.
+                <p className="text-[14px] font-medium">New request</p>
+                <p
+                  className="text-[12.5px] leading-snug text-ink-3"
+                  title="An absence, a class to move, a question about the rules or about the timetable (“when is Dr. Iyer free this week?”). Click a class on the timetable to cancel, move or swap it, or to name it here."
+                >
+                  Write as you would to the timetable office, or click a class on the timetable.
                 </p>
               </div>
               {when && (
-                <div>
-                  <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-3">When · the week on the timetable</p>
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="mr-0.5 text-[11.5px] text-ink-3">Add:</span>
                     {[{ phrase: `in week ${when.week}`, label: `Week ${when.week}` }, ...when.days.map((d) => ({ phrase: `on ${d.name} in week ${when.week}`, label: d.date ? `${d.name.slice(0, 3)} ${d.date}` : d.name }))].map(
                       ({ phrase, label }) => (
                         <button
@@ -258,7 +288,7 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                           onClick={() => togglePhrase(phrase)}
                           title={has(phrase) ? "Take it out of the request" : `Add “${phrase}”`}
                           className={clsx(
-                            "rounded-md border px-2 py-1 text-[12px] transition-colors",
+                            "rounded-full border px-2 py-0.5 text-[11.5px] transition-colors",
                             has(phrase) ? "border-brand bg-brand/10 text-brand" : "border-line hover:bg-panel-2",
                           )}
                         >
@@ -266,21 +296,25 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                         </button>
                       ),
                     )}
-                  </div>
                 </div>
               )}
               {examples.length > 0 && (
                 <div>
-                  <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-3">Start from an example</p>
-                  <ul className="space-y-1">
-                    {examples.map((ex) => (
+                  <p className="mb-1 text-[11.5px] text-ink-3">Examples</p>
+                  <ul className="space-y-0.5">
+                    {shownExamples.map((ex) => (
                       <li key={ex}>
-                        <button onClick={() => edit(ex)} className="text-left text-[13px] leading-snug text-ink-2 hover:text-brand">
+                        <button onClick={() => edit(ex)} title={ex} className="block w-full truncate text-left text-[12.5px] text-ink-2 hover:text-brand">
                           “{ex}”
                         </button>
                       </li>
                     ))}
                   </ul>
+                  {examples.length > 3 && (
+                    <button onClick={() => setAllExamples((v) => !v)} className="mt-1 text-[11.5px] text-ink-3 hover:text-ink">
+                      {allExamples ? "Fewer" : `${examples.length - 3} more`}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -288,8 +322,8 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
         </div>
       </div>
 
-      {(!answerOnly || s.answering || s.replying) && (
-      <div className="border-t border-line p-3">
+      {place(
+      <div className={docked ? "" : "border-t border-line p-3"}>
         <div className={column}>
           {s.replying && !reading && <p className="mb-2 text-[12px] text-brand">Pick an option above, or reply in your own words.</p>}
           {reading && (
@@ -315,28 +349,66 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
               </button>
             </p>
           )}
-          <Composer
-            value={text}
-            onChange={setText}
-            onSend={() => void send()}
-            sending={sending}
-            inputRef={box}
-            onFocus={s.startNew}
-            rows={composing ? 4 : 2}
-            placeholder={
-              s.answering
-                ? "Your answer…"
-                : s.replying
-                  ? "e.g. “B works” or “Friday after 2 pm would suit me”"
-                  : attached.length
-                    ? "What should happen to these classes?"
-                    : s.selected
-                      ? "Start a new request…"
-                      : "Ask or request something…"
-            }
-            above={attachments && <Chips items={attached} onRemove={attachments.remove} />}
-            footerLeft={
-              composing && (
+          {attached.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {attached.map((a) => (
+                <span key={a.key} className="flex items-center gap-1 rounded border border-brand/40 bg-brand/10 py-0.5 pl-1.5 pr-1 text-[11.5px]">
+                  {a.label}
+                  <button onClick={() => attachments!.remove(a.key)} className="text-ink-3 hover:text-ink" aria-label={`Remove ${a.label}`}>
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div
+            className={clsx(
+              "flex gap-2 border border-line bg-panel focus-within:border-brand/60",
+              docked ? "items-center rounded-xl py-1.5 pl-4 pr-1.5 shadow-sm" : "items-end rounded-lg px-3 py-2",
+            )}
+          >
+            <textarea
+              ref={box}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              onFocus={s.startNew}
+              rows={docked ? 1 : composing ? 3 : 2}
+              title="Enter to send · Shift+Enter for a new line"
+              placeholder={
+                s.answering
+                  ? "Your answer…"
+                  : s.replying
+                    ? "e.g. “B works” or “Friday after 2 pm would suit me”"
+                    : attached.length
+                      ? "What should happen to these classes?"
+                      : s.selected
+                        ? "Start a new request…"
+                        : docked
+                          ? "Ask or request something, or click a class to cancel, reschedule or swap it…"
+                          : "Ask or request something…"
+              }
+              className={clsx(
+                "max-h-40 flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed outline-none placeholder:text-ink-3",
+                docked && "py-1",
+              )}
+            />
+            {docked && makeupToggle && (
+              <label className={clsx(chip, "shrink-0 cursor-pointer", makeup ? "border-brand bg-brand/10 text-brand" : "border-line text-ink-3 hover:bg-panel-2")} title={makeupTip}>
+                <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} className="sr-only" />
+                Make-up classes{makeup ? " on" : ""}
+              </label>
+            )}
+            <Button variant="primary" size="sm" icon={Send} loading={sending} disabled={!text.trim()} onClick={send} aria-label="Send" />
+          </div>
+          <div className={clsx("flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-3", docked ? "mt-1 px-2 empty:hidden" : "mt-1.5")}>
+            <p className="flex items-center gap-2">
+              {composing && (text || history.length > 0) && (
                 <>
                   <button onClick={undo} disabled={!history.length} className="flex items-center gap-0.5 hover:text-ink disabled:opacity-40" title="Undo the last example, week or clear">
                     <Undo2 size={11} /> Undo
@@ -345,11 +417,16 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                     <Eraser size={11} /> Clear
                   </button>
                 </>
-              )
-            }
-            footerRight={teaches && !s.answering && !s.replying && <MakeupToggle checked={makeup} onChange={setMakeup} />}
-            error={error}
-          />
+              )}
+            </p>
+            {!docked && makeupToggle && (
+              <label className="flex cursor-pointer items-center gap-1.5" title={makeupTip}>
+                <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} className="accent-brand" />
+                Hold make-up classes
+              </label>
+            )}
+          </div>
+          {error && <p className="mt-1 text-[12.5px] text-bad">{error}</p>}
         </div>
       </div>
       )}

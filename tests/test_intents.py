@@ -117,14 +117,65 @@ def test_weeks_outside_the_semester_are_a_question(instance, period, current):
         weeks(instance, period, current)
 
 
+@pytest.mark.parametrize("period, current, expected", [
+    # "from now on, except week 16" in week 13; with nothing else named, a standing request starts now
+    (Period(relative="rest_of_semester", except_weeks=[16]), 13, [13, 14, 15]),
+    (Period(except_weeks=[15]), 13, [13, 14, 16]),
+    (Period(from_week=3, to_week=6, except_weeks=[4, 5]), None, [3, 6]),
+    (Period(parity="even"), 11, [12, 14, 16]),
+    (Period(parity="odd"), None, [1, 3, 5, 7, 9, 11, 13, 15]),
+    (Period(from_week=9, parity="odd", except_weeks=[13]), None, [9, 11, 15]),
+])
+def test_weeks_left_out_and_odd_or_even_weeks(instance, period, current, expected):
+    assert weeks(instance, period, current) == expected
+    assert not period.is_recurring
+
+
+def test_a_period_with_nothing_left_is_a_question(instance):
+    with pytest.raises(Unresolved):
+        weeks(instance, Period(weeks=[4], except_weeks=[4]), None)
+
+
+def test_the_rule_reader_reads_weeks_left_out_and_parity(instance):
+    rules = RuleParser(instance)
+    assert rules.period("I can't teach on Wednesdays from now on, except in week 16.") == Period(except_weeks=[16])
+    assert rules.period("I'm away in weeks 5-8 apart from week 7.") == Period(weeks=[5, 6, 7, 8], except_weeks=[7])
+    assert rules.period("On even weeks no Friday afternoons.") == Period(parity="even")
+    assert rules.period("From week 10 I can only teach Monday to Wednesday.") == Period(from_week=10)
+    assert rules.period("From week 6 to week 9 no Monday classes.") == Period(weeks=[6, 7, 8, 9])
+
+
+def test_the_rule_reader_reads_limits_and_lectures_kept_apart(cse):
+    from language.intents import Limit, Relate
+
+    rules = RuleParser(cse)
+    read = lambda text: rules.read_intents(_said("F-104", text))  # noqa: E731
+    assert read("No more than two classes a day for me, please.").intents == [
+        Limit(measure="classes_per_day", n=2, hard=True)]
+    assert read("I'd like to teach on at most 3 days a week.").intents[0].measure == "days_per_week"
+    assert read("Leave at least an hour free between any two of my classes.").intents[0].measure == "gap"
+    assert read("Please keep my total teaching under ten hours a week.").action == "out_of_scope"
+    apart = read("Please don't put two Algorithms lectures on the same day.").intents[0]
+    assert isinstance(apart, Relate) and apart.relation == "different_day" and apart.which.kind == "lecture"
+
+
+def test_a_schema_4_reading_is_a_schema_5_reading():
+    from language.migrations import migrate
+
+    old = {"action": "compile", "intents": [{"kind": "unavailable", "period": {"relative": "rest_of_semester"}}]}
+    assert migrate(old, 4) == old
+    assert IntentOutput.model_validate(old).intents[0].period.except_weeks is None
+
+
 # -- constraint intents ----------------------------------------------------------------
 
 
 def test_personal_intents_default_to_the_sender(instance, teacher):
-    c = compile_(instance, teacher,
+    c = compile_intents(instance, request(teacher, text="I'm away at a conference on Tuesday of week 7."), IntentOutput(
+        action="compile", intents=[
                  Unavailable(time=TimeSpec(days=["Tue"]), period=Period(weeks=[7]), justification="stated"),
                  Avoid(time=TimeSpec(before="10:00")),
-                 Only(time=TimeSpec(days=["Mon", "Tue", "Wed", "Thu"]), hard=True))
+                 Only(time=TimeSpec(days=["Mon", "Tue", "Wed", "Thu"]), hard=True)]))
     unav, avoid, only = c.result.constraints
     assert c.result.action == ExpectedAction.COMPILE and c.question is None
     assert (unav.type, unav.hard, unav.tier, unav.scope.faculty) == (ConstraintType.UNAVAILABLE, True,
@@ -224,6 +275,34 @@ def test_load_limit(instance, teacher):
     assert avoid.id != limit.id
 
 
+def test_a_load_limit_is_the_senders(instance, teacher):
+    """Whose hours are limited is not the reader's to say: an answer that names a course (an older schema's
+    "who") still limits the sender's hours."""
+    out = IntentOutput.model_validate({"action": "compile", "intents": [
+        {"kind": "load_limit", "who": {"kind": "course", "id": "Dr. Somebody"}, "max_consecutive": 3}]})
+    c = compile_intents(instance, request(teacher, text="Please keep my runs to 3."), out)
+    assert c.question is None and [(x.limit, x.scope.faculty) for x in c.result.constraints] == [(3, teacher)]
+
+
+@pytest.mark.parametrize("text, hard, expected", [
+    ("No teaching on Mondays, treat this as a hard rule.", True, (ConstraintType.AVOID, Tier.OPERATIONAL)),
+    ("I'm at a conference on Monday, so I can't teach then.", True,
+     (ConstraintType.UNAVAILABLE, Tier.VERIFIED_UNAVAILABILITY)),
+    ("I have a standing meeting on Mondays; no classes then please.", True,
+     (ConstraintType.UNAVAILABLE, Tier.VERIFIED_UNAVAILABILITY)),
+    ("I'd rather not teach on Mondays, I can't focus.", False, (ConstraintType.AVOID, Tier.PREFERENCE)),
+])
+def test_the_wording_not_the_reader_decides_an_unavailability(instance, teacher, text, hard, expected):
+    for read in (Unavailable(time=TimeSpec(days=["Mon"])), Avoid(time=TimeSpec(days=["Mon"]), hard=True)):
+        if not hard:
+            read = Avoid(time=TimeSpec(days=["Mon"]))
+        c = compile_intents(instance, request(teacher, text=text), IntentOutput(action="compile", intents=[read]))
+        (got,) = c.result.constraints
+        assert (got.type, got.tier) == expected and got.hard == hard
+        assert c.result.output.request_type == ("unavailability" if expected[0] == ConstraintType.UNAVAILABLE
+                                                       else "preference")
+
+
 # -- intents with their own flows ------------------------------------------------------
 
 
@@ -269,6 +348,25 @@ def test_cancel(instance, teacher):
                                            period=Period(relative="next_week")), timetable=tt, current_week=4)
     (ref,) = c.cancels
     assert (ref.session, ref.weeks) == (s.id, [5])
+
+
+def test_cancelling_classes_in_the_plural_cancels_every_one_they_fit(instance, teacher):
+    """"Cancel my <course> lectures in weeks 15-16" is every one of them; "my <course> lecture" without a day
+    or time is still asked about."""
+    tt = timetable(instance)
+    mine = [s for s in instance.sessions if s.faculty == teacher and s.kind.value == "lecture"]
+    course = next(c for c in {s.course for s in mine} if sum(s.course == c for s in mine) > 1)
+    wanted = sorted(s.id for s in mine if s.course == course)
+    ask = Cancel(which=ClassRef(course=course, kind="lecture"), period=Period(from_week=15, to_week=16))
+
+    def run(text):
+        return compile_intents(instance, request(teacher, text=text), IntentOutput(action="compile", intents=[ask]),
+                               timetable=tt, current_week=14)
+
+    c = run("Cancel my lectures of that course from week 15 to 16")
+    assert sorted(r.session for r in c.cancels) == wanted and all(r.weeks == [15, 16] for r in c.cancels)
+    c = run("Cancel my lecture of that course in weeks 15-16")
+    assert not c.cancels and c.missing == ["session"]
 
 
 def test_routed_actions_carry_no_intents(instance, teacher):
@@ -337,6 +435,40 @@ def test_course_ids_are_checked_against_the_message(cse):
     out = IntentOutput(action="compile", intents=[ExtraClass(which=ClassRef(course="C-031"),
                                                              period=Period(weeks=[5]))])
     assert ground_references(cse, _said("F-102", "An extra CG class in week 5."), out) == out
+
+
+def test_a_title_another_reference_names_does_not_stand_in_for_an_abbreviated_one(cse):
+    from language.intents import ground_references
+
+    # F-105 teaches Discrete Mathematics (C-024) and Software Engineering (C-091); Section 2 also takes a
+    # Software Engineering (C-023). The named title is the move's, so the abbreviated practical keeps its course.
+    req = _said("F-105", "Three small things: the Monday 11 am Software Engineering lecture would be better on "
+                         "Thursday at the same time; the Discrete Maths practical needs a lab with electronics "
+                         "benches; and I'm away on Friday of week 12.")
+    out = IntentOutput(action="compile", intents=[
+        Move(which=ClassRef(course="C-023", day="Mon", time="11:00"), to=TimeSpec(days=["Thu"], at=["11:00"])),
+        NeedsRoom(which=ClassRef(course="C-024", kind="practical"), equipment=["electronics"])])
+    assert ground_references(cse, req, out).intents[1].which.course == "C-024"
+    timetable = {"C-091-L1": Placement(day="Mon", slot=2, room="R-101"),
+                 "C-024-P": Placement(day="Fri", slot=6, room="L-1")}
+    c = compile_intents(cse, req, out, timetable=timetable)
+    assert c.question is None and {x.scope.session for x in c.result.constraints} == {"C-091-L1", "C-024-P"}
+    # alone, the abbreviated reference is still corrected to the one title the message names
+    alone = IntentOutput(action="compile", intents=[out.intents[1]])
+    assert ground_references(cse, _said("F-105", "The Software Engineering practical needs electronics benches."),
+                             alone).intents[0].which.course == "C-023"
+
+
+def test_an_absence_beside_an_extra_class_keeps_its_constraints(cse):
+    # the old format keeps only the extra class's investigation; a scorer comparing readings must see the absence
+    req = _said("F-104", "I'm away on Wednesday of week 6; add an extra Linear Algebra class on the Friday instead.")
+    out = IntentOutput(action="compile", intents=[
+        Unavailable(time=TimeSpec(days=["Wed"]), period=Period(weeks=[6])),
+        ExtraClass(which=ClassRef(course="C-104"), period=Period(weeks=[6]), time=TimeSpec(days=["Fri"]))])
+    c = compile_intents(cse, req, out)
+    assert c.result.action == ExpectedAction.INVESTIGATE and len(c.extras) == 1
+    assert [(x.type, x.when.days, x.when.weeks) for x in c.result.constraints] == [
+        (ConstraintType.UNAVAILABLE, ["Wed"], [6])]
 
 
 def test_a_course_taught_to_two_sections_asks_which(cse):
@@ -416,3 +548,48 @@ def test_a_fine_tuned_reader_gets_a_short_prompt_and_gemini_the_whole_vocabulary
     read_answer(zero, "...")
     assert tuned.system == INTENT_PROMPT and zero.system == INTENT_INSTRUCTIONS
     assert len(INTENT_PROMPT) * 5 < len(INTENT_INSTRUCTIONS)
+
+
+@pytest.mark.parametrize("text, intents, notes", [
+    ("Away Tuesday and Wednesday of week 15; make-up classes, but not on Friday.",
+     [Unavailable(time=TimeSpec(days=["Tue", "Wed"]), period=Period(weeks=[15]))], ["Friday"]),
+    ("From week 15 onwards I can only teach in the afternoons.",
+     [Only(time=TimeSpec(part="afternoon"), period=Period(from_week=15))], ['"only"']),
+    ("Please move my Computer Graphics lecture on Wednesday at 2 pm to Friday morning.",
+     [Move(which=ClassRef(course="C-041", kind="lecture", day="Wed", time="14:00"),
+           to=TimeSpec(days=["Fri"], part="morning"))], []),
+    ("I'm away from week 15 to week 16.", [Unavailable(period=Period(from_week=15, to_week=16))], []),
+    ("I'm away in weeks 15 and 16.", [Unavailable(period=Period(weeks=[15]))], ["week 16"]),
+    ("If possible no classes before 10 am on Wednesdays.", [Avoid(time=TimeSpec(days=["Wed"], before="10:00"))], []),
+])
+def test_what_a_message_says_and_its_reading_does_not_use_is_noted(text, intents, notes):
+    from language.intents import unaccounted
+
+    got = unaccounted(text, IntentOutput(action="compile", intents=intents))
+    assert len(got) == len(notes) and all(n in g for n, g in zip(notes, got, strict=True))
+
+
+def test_an_intent_reads_back_as_a_sentence(instance, teacher):
+    from language.intents import say
+
+    s = next(s for s in instance.sessions if s.faculty == teacher)
+    title = instance.course_title(s.course)
+    assert say(instance, Cancel(which=ClassRef(session=s.id), period=Period(from_week=15, to_week=16)), teacher) == \
+        f"Cancel my {title} {s.kind.value} from week 15 to week 16."
+    assert say(instance, Avoid(time=TimeSpec(days=["Wed"], before="10:00"), hard=True), teacher) == \
+        "Do not schedule my classes on Wednesday before 10 am."
+
+
+def test_the_office_names_a_class_by_what_it_is_whoever_teaches_it(instance):
+    """The timetable office teaches nothing: "move the Algorithms lecture on Monday at 9" is anyone's class
+    that fits, found by its day and time; a teacher's own reference still means their own classes."""
+    tt = timetable(instance)
+    s = next(s for s in instance.sessions if s.kind.value == "lecture")
+    at = tt[s.id]
+    ref = ClassRef(course=s.course, kind="lecture", day=at.day, time=f"{9 + at.slot:02d}:00")
+    c = compile_(instance, "C-TT", Move(which=ref, to=TimeSpec(days=["Fri"], part="afternoon")),
+                 role=Role.COORDINATOR, timetable=tt)
+    assert c.question is None and [p.scope.session for p in c.result.constraints] == [s.id]
+    other = next(f.id for f in instance.faculty if f.id != s.faculty and any(x.faculty == f.id for x in instance.sessions))
+    c = compile_(instance, other, Move(which=ref, to=TimeSpec(days=["Fri"])), timetable=tt)
+    assert c.missing == ["session"] and "could not find" in c.question

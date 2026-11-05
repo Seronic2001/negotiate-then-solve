@@ -32,10 +32,20 @@ class ConstraintType(str, Enum):
     AVOID = "avoid"
     REQUIRE_ROOM = "require_room"
     MAX_CONSECUTIVE = "max_consecutive"
+    LOAD = "load"  # a measure of someone's week kept within ``limit``: classes a day, days a week, a gap
+    RELATE = "relate"  # classes placed relative to others: the same day, right after, a day apart
+    ANY_OF = "any_of"  # at least one of ``members`` holds
+    RANKED = "ranked"  # ``members`` in order of preference: the first if it can be, else the next (soft)
 
 
 # Types that can be soft; unavailability and hour limits are always hard.
-SOFT_TYPES = frozenset({ConstraintType.PREFER, ConstraintType.AVOID, ConstraintType.REQUIRE_ROOM})
+SOFT_TYPES = frozenset({ConstraintType.PREFER, ConstraintType.AVOID, ConstraintType.REQUIRE_ROOM,
+                        ConstraintType.LOAD, ConstraintType.RELATE, ConstraintType.ANY_OF, ConstraintType.RANKED})
+# What a load limit measures: classes started and hours taught in a day, the days taught in a week, and the
+# free hours between two classes on a day (a lower limit; the others are upper limits)
+MEASURES = ("classes_per_day", "hours_per_day", "days_per_week", "gap")
+# How a relate constraint places its sessions against the others (``core.semantics.relation_holds``)
+RELATIONS = ("same_day", "different_day", "right_after", "after", "day_gap", "same_hour", "same_room")
 
 
 class Justification(str, Enum):
@@ -121,6 +131,14 @@ class Constraint(BaseModel):
     source: Source = Field(default_factory=Source)
     valid: Validity = Field(default_factory=Validity)
     weight: float | None = None
+    measure: str | None = None  # load: one of MEASURES
+    sessions: list[str] | None = None  # relate: the classes it places
+    others: list[str] | None = None  # relate: the classes they are placed against; None: each other
+    relation: str | None = None  # relate: one of RELATIONS
+    amount: int | None = None  # relate day_gap: the free days between
+    any_other: bool = False  # relate: against one of the others, not each of them
+    negate: bool = False  # relate: the relation must not hold ("not right after a practical")
+    members: list[Constraint] | None = None  # any_of, ranked: the constraints chosen between, in order
 
     @model_validator(mode="after")
     def _consistent(self) -> Constraint:
@@ -134,6 +152,14 @@ class Constraint(BaseModel):
             raise ValueError("require_room needs a room requirement")
         if self.type == ConstraintType.MAX_CONSECUTIVE and not self.limit:
             raise ValueError("max_consecutive needs a positive limit")
+        if self.type == ConstraintType.LOAD and (self.measure not in MEASURES or not self.limit):
+            raise ValueError(f"load needs a measure ({', '.join(MEASURES)}) and a positive limit")
+        if self.type == ConstraintType.RELATE and (not self.sessions or self.relation not in RELATIONS):
+            raise ValueError(f"relate needs sessions and a relation ({', '.join(RELATIONS)})")
+        if self.type in (ConstraintType.ANY_OF, ConstraintType.RANKED) and len(self.members or []) < 2:
+            raise ValueError(f"{self.type.value} needs at least two members")
+        if self.type == ConstraintType.RANKED and self.hard:
+            raise ValueError("ranked choices are soft: the first if it can be, else the next")
         return self
 
     def active_in(self, week: int | None) -> bool:
@@ -141,13 +167,18 @@ class Constraint(BaseModel):
 
         ``week=None`` is the semester-wide base timetable, which only carries
         permanent constraints; a specific week also carries the constraints
-        whose validity window covers it.
+        whose validity window covers it. A choice between constraints applies when one of them does.
         """
+        if self.members:
+            return any(m.active_in(week) for m in self.members)
         if week is None:
             return self.valid.is_permanent and self.when.weeks is None
         if not self.valid.covers(week):
             return False
         return self.when.weeks is None or week in self.when.weeks
+
+
+Constraint.model_rebuild()  # ``members`` are constraints
 
 
 # ---------------------------------------------------------------------------
@@ -197,12 +228,14 @@ TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
     _S.RECEIVED: frozenset({_S.CLASSIFIED}),
     _S.CLASSIFIED: frozenset({_S.POLICY_CHECKED, _S.REFUSED, _S.ANSWERED, _S.FORWARDED}),
     _S.POLICY_CHECKED: frozenset({_S.COMPILED, _S.DENIED, _S.ESCALATED, _S.CLARIFICATION}),
-    _S.COMPILED: frozenset({_S.SOLVED, _S.CLARIFICATION}),
+    # answered: a request that could not be met went ahead as its fallback (Orchestrator._fall_back)
+    _S.COMPILED: frozenset({_S.SOLVED, _S.CLARIFICATION, _S.ANSWERED}),
     _S.CLARIFICATION: frozenset({_S.RECEIVED, _S.WITHDRAWN}),
-    _S.SOLVED: frozenset({_S.FAIRNESS_AUDITED, _S.NEGOTIATING}),
-    _S.NEGOTIATING: frozenset({_S.FAIRNESS_AUDITED, _S.ESCALATED}),
+    _S.SOLVED: frozenset({_S.FAIRNESS_AUDITED, _S.NEGOTIATING, _S.ANSWERED}),
+    _S.NEGOTIATING: frozenset({_S.FAIRNESS_AUDITED, _S.ESCALATED, _S.ANSWERED}),
     _S.FAIRNESS_AUDITED: frozenset({_S.AWAITING_APPROVAL, _S.PUBLISHED}),  # nothing moved: nothing to approve
-    _S.AWAITING_APPROVAL: frozenset({_S.PUBLISHED, _S.NEGOTIATING, _S.WITHDRAWN}),
+    # declined: a requirement that moved nothing, which the office did not confirm (Orchestrator.reject)
+    _S.AWAITING_APPROVAL: frozenset({_S.PUBLISHED, _S.NEGOTIATING, _S.WITHDRAWN, _S.DENIED}),
     _S.REFUSED: frozenset(),
     _S.DENIED: frozenset(),
     _S.PUBLISHED: frozenset({_S.WITHDRAWN}),  # only one that moved nothing (Orchestrator.withdrawable)

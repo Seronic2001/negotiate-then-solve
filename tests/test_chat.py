@@ -44,42 +44,72 @@ def confirm(c, person, n, as_):
     return r
 
 
-def test_a_request_is_sent_only_once_confirmed(client):
+def as_question(c, person, n):
+    return c.post("/api/chat/as-question", json={"n": n}, headers={"X-User": person})
+
+
+def old_confirm(world, person, text):
+    """A "send this as a request?" card from before requests were sent at once, still in someone's chat."""
+    return world.store.add_chat(person, "assistant", "confirm", {"text": text, "makeup": False, "reader": "regex"})
+
+
+def test_a_request_is_sent_at_once(client):
     c, world = client
     me = faculty(world, "Dr. Menon")
     before = len(world.store.requests())
     text = "I am at a conference on Monday of week 15, please cancel my classes that day."
-    _, ask = send(c, me, text)
-    assert ask["kind"] == "confirm" and ask["text"] == text
-    assert len(world.store.requests()) == before  # nothing sent yet
-    card = confirm(c, me, ask["n"], "request").json()[0]
-    assert card["kind"] == "request" and world.store.request(card["case"]).sender_id == me
+    _, card = send(c, me, text)
+    assert card["kind"] == "request" and card["request_text"] == text and not card.get("part")
+    assert len(world.store.requests()) == before + 1 and world.store.request(card["case"]).sender_id == me
     assert "status" not in card  # only the number: what happens next is on the request's page
-    assert confirm(c, me, ask["n"], "request").status_code == 409  # answered once
 
 
-def test_it_is_a_question_reads_it_again_without_the_request_words(client):
+def test_its_a_question_takes_the_request_back_and_answers_it(client):
+    import time
+
     c, world = client
     me = faculty(world, "Dr. Menon")
-    _, ask = send(c, me, "please tell me my free slots this week")  # "please": request words
-    assert ask["kind"] == "confirm"
-    replies = confirm(c, me, ask["n"], "question").json()
-    assert replies[0]["kind"] in ("lookup", "other")  # offline the regex still sees "please"; online the model reads it
-    assert c.get("/api/chat", headers={"X-User": me}).json()[-2]["answered"] == "question"
+    _, card = send(c, me, "please tell me my free slots this week")  # "please": request words, so it was sent
+    assert card["kind"] == "request"
+    replies = as_question(c, me, card["n"]).json()
+    if replies[0]["kind"] == "lookup":  # read as a question without the request words: the request taken back
+        assert replies[0]["answer"].startswith("You are free on")
+        assert world.store.chat_message(me, card["n"])["reread"] == "question"
+        end = time.time() + 30
+        while world.orch.cases[card["case"]].status.value != "withdrawn" and time.time() < end:
+            time.sleep(0.2)
+        assert world.orch.cases[card["case"]].status.value == "withdrawn"
+        assert as_question(c, me, card["n"]).status_code == 409  # once
+    else:  # not readable as a question: the request stays as it is
+        assert replies[0]["kind"] == "other" and "stays" in replies[0]["text"]
 
 
-def test_cancel_drops_it(client):
+def test_a_request_that_is_no_question_stays_a_request(client):
+    c, world = client
+    me = faculty(world, "Dr. Menon")
+    _, card = send(c, me, "Please move my Wednesday lecture to Thursday in week 15.")
+    replies = as_question(c, me, card["n"]).json()
+    assert replies[0]["kind"] == "other" and "stays" in replies[0]["text"]
+    assert "reread" not in world.store.chat_message(me, card["n"])
+
+
+def test_only_your_own_card_can_be_read_as_a_question(client):
+    c, world = client
+    _, card = send(c, faculty(world, "Dr. Menon"), "Please cancel my Friday class in week 15.")
+    assert as_question(c, faculty(world, "Dr. Rao"), card["n"]).status_code == 404
+
+
+def test_an_old_confirm_card_still_answers(client):
     c, world = client
     me = faculty(world, "Dr. Menon")
     before = len(world.store.requests())
-    _, ask = send(c, me, "Please move my Wednesday lecture to Thursday in week 15.")
+    ask = old_confirm(world, me, "Please move my Wednesday lecture to Thursday in week 15.")
     assert confirm(c, me, ask["n"], "cancel").json() == [] and len(world.store.requests()) == before
-
-
-def test_only_your_own_confirm_can_be_answered(client):
-    c, world = client
-    _, ask = send(c, faculty(world, "Dr. Menon"), "Please cancel my Friday class in week 15.")
-    assert confirm(c, faculty(world, "Dr. Rao"), ask["n"], "request").status_code == 404
+    ask = old_confirm(world, me, "Please cancel my Tuesday class in week 15.")
+    card = confirm(c, me, ask["n"], "request").json()[0]
+    assert card["kind"] == "request" and len(world.store.requests()) == before + 1
+    assert confirm(c, me, ask["n"], "request").status_code == 409  # answered once
+    assert confirm(c, faculty(world, "Dr. Rao"), ask["n"], "request").status_code == 404  # only your own
 
 
 def test_a_rule_question_is_answered_with_its_rules_and_no_request(client):
@@ -118,10 +148,9 @@ def test_nobody_sees_anyone_elses_chat(client):
 def test_clearing_the_chat_keeps_the_requests(client):
     c, world = client
     me = faculty(world, "Dr. Das")
-    _, ask = send(c, me, "Please cancel my classes on Tuesday of week 15, I am away.")
-    card = confirm(c, me, ask["n"], "request").json()[0]
+    _, card = send(c, me, "Please cancel my classes on Tuesday of week 15, I am away.")  # sent at once
     r = c.delete("/api/chat", headers={"X-User": me})
-    assert r.json()["cleared"] == 3 and chat(c, me) == []
+    assert r.json()["cleared"] == 2 and chat(c, me) == []
     assert world.store.request(card["case"]) is not None
 
 
@@ -229,10 +258,8 @@ def test_a_follow_up_is_read_as_it_was_made_to_stand(client, monkeypatch):
     assert seen[-1][-2:][0] == "when am I free on Monday?"  # the chat before it, as turns
     mine, reply = send(c, me, "is that room free?")
     assert "read_as" not in mine and (reply["kind"], reply["text"]) == ("other", "Which room do you mean?")
-    _, ask = send(c, me, "move my DS lecture there")
-    assert ask["kind"] == "confirm" and ask["text"] == "move my DS lecture to Friday 9 am"  # sent as read
-    card = confirm(c, me, ask["n"], "request").json()[0]
-    assert card["request_text"] == "move my DS lecture to Friday 9 am"
+    _, card = send(c, me, "move my DS lecture there")
+    assert card["kind"] == "request" and card["request_text"] == "move my DS lecture to Friday 9 am"  # sent as read
 
 
 def test_memory_is_off_offline(client):
@@ -246,8 +273,7 @@ def test_yes_typed_to_send_as_request_sends_it(client, monkeypatch):
     c, world = client
     me = faculty(world, "Dr. Pillai")
     text = "please cancel my classes on Monday of week 15, I am at a conference"
-    _, ask = send(c, me, text)
-    assert ask["kind"] == "confirm"
+    ask = old_confirm(world, me, text)  # a "send this as a request?" from before requests were sent at once
     monkeypatch.setattr(world, "followup", lambda t, s, h: Rewritten(text, changed=True) if t == "yes" else None)
     before = len(world.store.requests())
     mine, card = send(c, me, "yes")

@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { ago, EVENT_LABEL } from "../lib/meta";
 import type { CaseDetail, DiffRow, EventRow, InboxItem } from "../lib/types";
+import { changedWeeks, groupWeeks, weeksLabel } from "../lib/weeks";
 import { OfferCard } from "./Negotiation";
 import { ReplyBubble, StepList, Tag, YouBubble } from "./thread/Bubble";
 import { Button, LiveDot } from "./ui";
@@ -116,8 +117,10 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
  * for, and how far it has got. Shown in the conversation, since a change for one week (or several) does
  * not fit on a one-week timetable. */
 function Change({ c, me }: { c: CaseDetail; me?: string }) {
-  const rows = c.proposal?.diff ?? [];
-  if (!rows.length || ["denied", "refused", "withdrawn"].includes(c.status)) return null;
+  // every week of the request (an absence in weeks 10-12 changes each), weeks that change the same way together
+  const groups = groupWeeks(changedWeeks(c.proposal)).filter((g) => g.diff.length);
+  if (!groups.length || ["denied", "refused", "withdrawn"].includes(c.status)) return null;
+  const all = groups.flatMap((g) => g.weeks);
   const state =
     c.status === "published"
       ? `In the timetable · version ${c.proposal!.version}`
@@ -131,29 +134,41 @@ function Change({ c, me }: { c: CaseDetail; me?: string }) {
     <div className="max-w-[92%] rounded-lg border border-line">
       <div className="flex items-baseline justify-between gap-3 border-b border-line px-3 py-2">
         <p className="text-[12.5px] font-medium">Requested change</p>
-        <p className="text-[11.5px] text-ink-3">{c.proposal!.week ? `Week ${c.proposal!.week} only` : "Every week"}</p>
+        <p className="text-[11.5px] text-ink-3">
+          {all.some((w) => w != null) ? `${weeksLabel(all).replace(/^w/, "W")} only` : "Every week"}
+        </p>
       </div>
-      <ul className="divide-y divide-line/60">
-        {rows.map((r) => (
-          <li key={r.session} className="px-3 py-2">
-            <p className="truncate text-[13px] font-medium">
-              {r.session_name.replace(/^(the|my) /, "").replace(/\s*\([A-Z]-[\w-]+\)$/, "")}
-              {r.faculty && r.faculty !== me && <span className="font-normal text-ink-3"> · {r.faculty_name}</span>}
-            </p>
-            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px]">
-              <span className={clsx("text-ink-3", r.before && "line-through decoration-bad/50")}>{r.before ? where(r.before) : "new"}</span>
-              <ArrowRight size={12} className="shrink-0 text-ink-3" />
-              <span className={r.after ? "font-medium text-ok" : "font-medium text-bad"}>{r.after ? where(r.after) : "not held (make-up owed)"}</span>
-            </p>
-          </li>
-        ))}
-      </ul>
+      {groups.map((g) => (
+        <div key={g.versions.join()}>
+          {groups.length > 1 && (
+            <p className="border-b border-line/60 px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-ink-3">{weeksLabel(g.weeks)}</p>
+          )}
+          <ul className="divide-y divide-line/60">
+            {g.diff.map((r) => (
+              <li key={r.session} className="px-3 py-2">
+                <p className="truncate text-[13px] font-medium">
+                  {r.session_name.replace(/^(the|my) /, "").replace(/\s*\([A-Z]-[\w-]+\)$/, "")}
+                  {r.faculty && r.faculty !== me && <span className="font-normal text-ink-3"> · {r.faculty_name}</span>}
+                </p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+                  <span className={clsx("text-ink-3", r.before && "line-through decoration-bad/50")}>{r.before ? where(r.before) : "new"}</span>
+                  <ArrowRight size={12} className="shrink-0 text-ink-3" />
+                  <span className={r.after ? "font-medium text-ok" : "font-medium text-bad"}>
+                    {r.after ? where(r.after) : g.weeks.some((w) => w != null) ? `not held in ${weeksLabel(g.weeks)}` : "not held (make-up owed)"}
+                  </span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       <p className="border-t border-line px-3 py-1.5 text-[11.5px] text-ink-3">{state}</p>
     </div>
   );
 }
 
-function Withdraw({ id, onDone }: { id: string; onDone: () => void }) {
+/** Take a request back (with a confirm): offered to its sender wherever the request is shown. */
+export function Withdraw({ id, onDone }: { id: string; onDone: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

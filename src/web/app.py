@@ -22,11 +22,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextlib
 import json
 import os
 import re
 import threading
+import time
 from collections import Counter
+from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -43,16 +46,17 @@ from agents.memory import turns_of
 from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
-from agents.questions import REQUEST, Answerer
+from agents.questions import REQUEST
 from agents.views import free_hours_of, view_of
-from core.graph import add_conflict, build_graph
+from core.graph import add_conflict, add_constraint, build_graph
 from core.instance import Session
-from core.schemas import DAYS, Placement, Request, RequestStatus, Tier
+from core.schemas import DAYS, ConstraintType, Placement, Request, RequestStatus, Role, Tier
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour
 from language.intents import IntentOutput, Unresolved
 from language.intents import weeks as period_weeks
 from language.llm import FREE_TIER, LLMError
+from language.parsing import STUDENTS_REPORT
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 from pipeline.store import EXTRA_PREFIX
@@ -85,8 +89,9 @@ TIER_EXAMPLES = {0: "No double-booking; room capacity; lab equipment", 1: "Max 3
 def _placement(w: World, p: Placement | None) -> dict | None:
     if p is None:
         return None
+    room = w.instance.room_by_id.get(p.room)
     return {"day": p.day, "slot": p.slot, "room": p.room, "text": placement_text(w.instance, p),
-            "time": hour(p.slot)}
+            "time": hour(p.slot), "room_name": room.name if room else p.room}
 
 
 def _constraint(w: World, c) -> dict:
@@ -148,7 +153,10 @@ def _summary(w: World, r: Request, case: Case | None) -> dict:
             "reader": case.routing.get("reader") if case else None,
             "injection": bool(case and case.routing.get("injection")),
             # read by the rules though the app runs with a model (offline, the rules read everything)
-            "stand_in": bool(case and case.routing.get("reader") == "rules" and w.parser_mode in ("gemini", "local"))}
+            "stand_in": bool(case and case.routing.get("reader") == "rules" and w.parser_mode in ("gemini", "local")),
+            # a message of several requests: the requests it was split into (its own status, "answered", only says
+            # it was split; where it stands is theirs)
+            "parts": list(case.parts) if case and case.parts else None}
 
 
 def _case_detail(w: World, case: Case) -> dict:
@@ -162,6 +170,8 @@ def _case_detail(w: World, case: Case) -> dict:
         "output": p.output.model_dump() if p.output else None,
         # as recorded (a class named on the wrong day retargeted to the one on that day), else as read
         "constraints": [_constraint(w, c) for c in (case.constraints or p.constraints)]}
+    # what was read from the message, in words, and what in it the reading does not use
+    d["understood"], d["unused"], d["parts"] = case.understood, case.unused, case.parts
     pol = case.policy
     d["policy"] = None if pol is None else {
         "verdict": pol.verdict.value, "cited": [{"id": i, "cite": next(r.cite() for r in w.rules if r.id == i)}
@@ -185,6 +195,8 @@ def _case_detail(w: World, case: Case) -> dict:
             "escalation": None if o.escalation is None else {"to": o.escalation.to, "to_name": w.name_of(
                 o.escalation.to) if o.escalation.to in inst.faculty_by_id else o.escalation.to,
                 "reason": plain(o.escalation.reason), "text": plain(o.escalation.text),
+                "rule": next((_rule_view(r) for r in w.rules if r.id == o.escalation.rule), None),
+                "asked": plain(o.escalation.asked), "grant": plain(o.escalation.grant),
                 # what granting would set aside, and why it cannot be granted (None: it can)
                 "set_aside": [_constraint(w, c) for c in w.orch.overrides(case)],
                 "cannot_grant": w.orch.cannot_grant(case)},
@@ -196,7 +208,11 @@ def _case_detail(w: World, case: Case) -> dict:
         under = w.orch.builds_on(case)  # an earlier change still waiting: it is approved first
         d["proposal"] = {"version": case.proposal.version, "week": case.proposal.week,
                          "diff": _diff(w, before.assignment if before else {}, case.proposal.assignment),
-                         "builds_on": under.id if under else None}
+                         "builds_on": under.id if under else None,
+                         # a request over several weeks: the change for each further week, approved with it
+                         "more": [{"version": v.version, "week": v.week, "cancelled": v.cancelled,
+                                   "diff": _diff(w, (w.store.version(v.parent).assignment if v.parent else {}),
+                                                 v.assignment)} for v in case.more]}
     else:
         d["proposal"] = None
     d["fairness"] = case.fairness
@@ -207,6 +223,7 @@ def _case_detail(w: World, case: Case) -> dict:
     d["answer"] = None if case.handled is None else {**case.handled, "by_name": w.name_of(case.handled["by"])}
     d["reply"] = plain(case.reply)
     d["notices"] = {k: plain(v) for k, v in case.notices.items()}
+    d["notice_names"] = {k: w.name_of(k) for k in case.notices}  # who each notice went to, by name
     d["inbox"] = [_inbox_item(w, i) for i in w.inbox.items.values() if i.case_id == case.id]
     d["events"] = w.store.events(case.id)
     return d
@@ -262,6 +279,59 @@ _REQUEST_TITLE = {
 }
 
 
+def _mine(w: World, me: str, row: dict) -> bool:
+    """A changed class that is this person's: theirs to teach, or their section's (class representatives)."""
+    return row["faculty"] == me or (me.startswith("ST-") and me.removeprefix("ST-") in row["groups"])
+
+
+def _class_name(row: dict) -> str:
+    """The class without its code: "Information Security practical"."""
+    name = re.sub(r" \([A-Z]-[\w-]+\)$", "", row["session_name"]).removeprefix("the ").removeprefix("extra ")
+    return name[:1].upper() + name[1:]
+
+
+def _my_change(w: World, me: str, case: Case, version: int | None) -> dict | None:
+    """What a published change did to this person's classes, week by week: each class before and after
+    (after None: cancelled that week; before None: an extra class), the reason anyone may see, and a short
+    title ("Information Security practical cancelled", "2 classes moved")."""
+    v = w.store.version(version) if version is not None else None
+    if v is None:
+        return None
+    weeks = []
+    for x in [v] + [w.store.version(m.version) for m in case.more]:
+        if x is None:
+            continue
+        parent = w.store.version(x.parent) if x.parent else None
+        rows = [r | {"name": _class_name(r)} for r in _diff(w, parent.assignment if parent else {}, x.assignment)
+                if _mine(w, me, r)]
+        if rows:
+            weeks.append({"week": x.week, "rows": rows})
+    if not weeks:
+        return None
+    rows = [r for wk in weeks for r in wk["rows"]]
+    cancelled = sum(r["after"] is None for r in rows)
+    added = sum(r["before"] is None for r in rows)
+    if len(rows) == 1:
+        r = rows[0]
+        title = f"Extra {r['name']}" if added else f"{r['name']} {'cancelled' if cancelled else 'moved'}"
+    elif cancelled == len(rows):
+        title = f"{len(rows)} classes cancelled"
+    elif added == len(rows):
+        title = f"{len(rows)} extra classes"
+    elif not cancelled and not added:
+        title = f"{len(rows)} classes moved"
+    else:
+        title = f"{len(rows)} classes changed"
+    why = re.search(r"because ([^.;]+)", case.notices.get(me, ""))
+    return {"title": title, "weeks": weeks, "reason": plain(why.group(1)) if why else None}
+
+
+def _first_sentence(text: str) -> str:
+    """The first sentence of a notice, without class codes: "Week 12: the Information Security practical is cancelled"."""
+    head = re.split(r"(?<=[a-z0-9)])\.\s", text.strip(), maxsplit=1)[0].rstrip(".")
+    return re.sub(r" \([A-Z]-[\w-]+\)", "", head)
+
+
 def _event_time(at: str) -> str:
     """Events are logged in local time; inbox items are compared in UTC."""
     return datetime.fromisoformat(at).astimezone(UTC).isoformat()
@@ -289,20 +359,18 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
                     "status": case.status.value if case else None, "request": case.request.raw_text if case else None,
                     "needs_you": needs_you, "unread": needs_you or seen.get(key, 0) < n, **more})
 
+    # only messages addressed to ``u``; the office follows other people's negotiations under All requests
     for i in w.inbox.items.values():
-        if i.to != me and me != COORDINATOR:
+        if i.to != me:
             continue
-        mine, n = i.to == me, 2 if i.reply else 1
+        n = 2 if i.reply else 1
         case = w.orch.cases.get(i.case_id) if i.case_id else None
         item = _inbox_item(w, i)
         choice = i.message.explanation_mode == "choice"
         add(f"msg:{i.id}", n, "negotiation", case,
-            ("Choose a time for your request" if choice else "A clash with your timetable") if mine else
-            (f"A time for {w.name_of(i.to)} to choose" if choice else f"Negotiation with {w.name_of(i.to)}"),
-            i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=mine and i.reply is None,
+            "Choose a time for your request" if choice else "A clash with your timetable",
+            i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=i.reply is None,
             message=item)
-        if not mine:
-            out[-1]["unread"] = False  # the office follows these; they are not addressed to it
 
     for case in w.orch.cases.values():
         ev = last.get(case.id)
@@ -314,17 +382,24 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         # someone else's request changed my timetable (or what I gave way for was withdrawn)
         if not own and me in case.notices and done is not None:
             withdrawn = done["kind"] == S.WITHDRAWN.value
-            add(f"change:{case.id}", done["n"], "change", case,
-                "A change you agreed to no longer applies" if withdrawn else "Your timetable has changed",
-                case.notices[me], _event_time(done["at"]),
-                sender=case.request.sender_id if withdrawn else done.get("approver") or COORDINATOR,
-                version=done.get("version"))
+            # students are told what changed for their section, not what a teacher asked for or why; nor is any
+            # teacher told what a colleague wrote (a reason is private): only the office and the heads read it
+            student = u["role"] == Role.STUDENT.value
+            private = u["role"] not in OVERSIGHT
+            change = None if withdrawn else _my_change(w, me, case, done.get("version"))
+            title = ("A change you agreed to no longer applies" if withdrawn else change["title"] if change else
+                     _first_sentence(plain(case.notices[me])) if student else "Your timetable has changed")
+            add(f"change:{case.id}", done["n"], "change", case, title, case.notices[me], _event_time(done["at"]),
+                sender=case.request.sender_id if withdrawn and not student else done.get("approver") or COORDINATOR,
+                version=done.get("version"), change=change, **({"request": None} if student or private else {}))
         if own:
             status = case.status
             if status == S.PUBLISHED:
                 version = done.get("version") if done else None
                 if version is None:
-                    title = "Nothing was changed" if done and done.get("unmet") else "Your request already fits the timetable"
+                    title = ("Nothing was changed" if done and done.get("unmet") else
+                             "Your request was confirmed" if done and done.get("record_only") else
+                             "Your request already fits the timetable")
                     text = case.reply
                 else:
                     who = w.name_of(done.get("approver") or COORDINATOR)
@@ -341,12 +416,8 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
             elif status in _REQUEST_TITLE and case.reply:
                 add(f"req:{case.id}", n, "request", case, _REQUEST_TITLE[status], case.reply, at,
                     sender=(case.decision or {}).get("by") or COORDINATOR, needs_you=status == S.CLARIFICATION)
-        # a refused request's reply says the coordinator has been informed: this is that notice
-        if me == COORDINATOR and not own and case.status == S.REFUSED:
-            add(f"refused:{case.id}", n, "alert", case, "A request was refused",
-                f"Stopped before it reached the timetable: {case.parse.refusal}." if case.parse and case.parse.refusal
-                else "Stopped before it reached the timetable.", at, sender=case.request.sender_id,
-                **({"action": "reply"} if case.handled is None else {}))  # the office may still answer it
+        report = case.request.role == Role.STUDENT and case.status in (S.FORWARDED, S.REFUSED) and (
+            case.status == S.FORWARDED or (case.parse is not None and case.parse.refusal == STUDENTS_REPORT))
         # waiting on me
         if me == COORDINATOR and case.status == S.AWAITING_APPROVAL:
             add(f"approve:{case.id}", n, "action", case, "A change is waiting for your approval", case.request.raw_text,
@@ -354,10 +425,25 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         if case.status == S.ESCALATED and decides(u, case):
             add(f"decide:{case.id}", n, "action", case, "Escalated to you for a decision", case.request.raw_text, at,
                 sender=case.request.sender_id, needs_you=True, action="decide")
-        if handles(u, case):
-            add(f"forward:{case.id}", n, "action", case, "A message passed to you for a reply", case.request.raw_text,
-                at, sender=case.request.sender_id, needs_you=True, action="reply")
+        # a message for the office to answer or act on (forwarded to it, or refused): one item, the same before
+        # and after it is answered, so the office keeps it open while it answers and sees the answer after
+        if me == COORDINATOR and w.orch.office_answers(case) and (handles(u, case) or (not own and case.handled)):
+            waiting = handles(u, case)
+            title = ("A report from a class representative" if report else
+                     "A request was refused" if case.status == S.REFUSED else "A message passed to you for a reply")
+            add(f"forward:{case.id}", n, "alert" if case.status == S.REFUSED and not report and not waiting else "action",
+                case, title, case.request.raw_text, at, sender=case.request.sender_id, needs_you=waiting,
+                **({"action": "reply"} if waiting else {"answered": True}))
     return sorted(out, key=lambda x: x["at"], reverse=True)
+
+
+def _negotiation_settings(w: World) -> dict:
+    """The negotiator's settings as it runs, for the How it works page."""
+    n = w.orch.negotiator
+    return {"rounds_at_most": n.max_rounds, "options_per_message": n.k, "asks_per_owner": n.asks_per_owner,
+            "reminders_before_escalating": 1, "reply_deadline_minutes": round(w.deadline / 60),
+            "solver_time_limit_s": n.time_limit, "solves_around_the_conflict": "yes" if n.local else "no",
+            "ledger_decay_per_semester": n.ledger.decay if n.ledger else None}
 
 
 def _reading(w: World, m: Message, r: Reply) -> str:
@@ -405,32 +491,268 @@ def _pct(xs: list[float], q: float) -> float | None:
     return xs[min(len(xs) - 1, round(q / 100 * (len(xs) - 1)))]
 
 
-_CACHE_MODEL: dict[str, str] = {}  # cache file -> model; cached answers never change, so each file is read once
+_CACHE = ROOT / "runs" / "llm_cache"
+_CACHE_INDEX = _CACHE / "_models.json"  # cache file -> model, kept across restarts: cached answers never change
+_CACHE_MODEL: dict[str, str] = {}
 _CACHE_LOCK = threading.Lock()
+_CACHE_STATE = {"thread": None, "listed": 0.0, "names": set(), "quota": [], "counting": False}
+_CACHE_RELIST_S = 30.0  # how stale the file listing may be (listing ~24k files takes a moment)
+
+
+def _cache_names() -> set[str]:
+    """The cached answers' file names, listed again at most every ``_CACHE_RELIST_S`` seconds."""
+    now = time.monotonic()
+    if now - _CACHE_STATE["listed"] > _CACHE_RELIST_S:
+        try:
+            with os.scandir(_CACHE) as it:
+                all_names = [e.name for e in it]
+        except OSError:
+            all_names = []
+        _CACHE_STATE["names"] = {n for n in all_names if n.endswith(".json") and not n.startswith("_")}
+        _CACHE_STATE["quota"] = [n for n in all_names if n.startswith("_quota-") and n.endswith(".txt")]
+        _CACHE_STATE["listed"] = now
+    return _CACHE_STATE["names"]
+
+
+def _index_cache(names: set[str]) -> None:
+    """Read the model of each cache file not in the index yet (the first start reads them all, once), saving
+    the index as it goes, so a restart only reads files added since."""
+    todo = sorted(names - _CACHE_MODEL.keys())
+    for i, name in enumerate(todo, 1):
+        try:
+            model = json.loads((_CACHE / name).read_text(encoding="utf-8")).get("model", "?")
+        except (OSError, ValueError):
+            continue
+        with _CACHE_LOCK:
+            _CACHE_MODEL[name] = model
+        if i % 2000 == 0 or i == len(todo):
+            with _CACHE_LOCK:
+                snapshot = dict(_CACHE_MODEL)
+            with contextlib.suppress(OSError):
+                tmp = _CACHE_INDEX.with_suffix(".tmp")
+                tmp.write_text(json.dumps(snapshot), encoding="utf-8")
+                tmp.replace(_CACHE_INDEX)
+    _CACHE_STATE["counting"] = False
+
+
+def _warm_cache_index() -> None:
+    """Load the saved index and start reading what it lacks in the background; called at start-up and by
+    ``_llm_usage``, which never waits for it."""
+    with _CACHE_LOCK:
+        if not _CACHE_MODEL and _CACHE_INDEX.exists():
+            with contextlib.suppress(OSError, ValueError):
+                _CACHE_MODEL.update(json.loads(_CACHE_INDEX.read_text(encoding="utf-8")))
+        t = _CACHE_STATE["thread"]
+        if t is not None and t.is_alive():
+            return
+        names = _cache_names()
+        if not names - _CACHE_MODEL.keys():
+            return
+        _CACHE_STATE["counting"] = True
+        _CACHE_STATE["thread"] = threading.Thread(target=_index_cache, args=(names,), daemon=True, name="llm-cache-index")
+        _CACHE_STATE["thread"].start()
 
 
 def _llm_usage() -> list[dict]:
-    cache = ROOT / "runs" / "llm_cache"
+    """Calls per model today (quota files, one per model, day and API key) and cached answers per model. The
+    cached counts come from the index; while it is still being filled the rows say ``counting``."""
+    if not _CACHE.exists():
+        return []
     today = date.today().isoformat()
+    _warm_cache_index()
+    with _CACHE_LOCK:
+        names = _cache_names()
+        counts = Counter(m for n, m in _CACHE_MODEL.items() if n in names)
+        quota = list(_CACHE_STATE["quota"])
+    used: Counter = Counter()
+    for m in FREE_TIER:  # "_quota-<model>-<date>.txt", or "_quota-<model>-<date>-<key>.txt" per API key
+        for q in quota:
+            if q.startswith(f"_quota-{m}-{today}"):
+                with contextlib.suppress(OSError, ValueError):
+                    used[m] += int((_CACHE / q).read_text().strip() or 0)
     out = []
-    with _CACHE_LOCK:  # requests run in a thread pool
-        if cache.exists():
-            names = {f.name for f in cache.glob("*.json")}
-            for name in names - _CACHE_MODEL.keys():
-                try:
-                    _CACHE_MODEL[name] = json.loads((cache / name).read_text(encoding="utf-8")).get("model", "?")
-                except (OSError, ValueError):
-                    continue
-            for gone in _CACHE_MODEL.keys() - names:
-                del _CACHE_MODEL[gone]
-        counts = Counter(_CACHE_MODEL.values())
-    models = set(counts) | {m for m in FREE_TIER if (cache / f"_quota-{m}-{today}.txt").exists()}
-    for m in sorted(models):
-        q = cache / f"_quota-{m}-{today}.txt"
+    for m in sorted(set(counts) | set(used)):
         rpm, rpd = FREE_TIER.get(m, (None, None))
-        out.append({"model": m, "used_today": int(q.read_text()) if q.exists() else 0, "rpd": rpd, "rpm": rpm,
-                    "cached_responses": counts.get(m, 0)})
+        out.append({"model": m, "used_today": used.get(m, 0), "rpd": rpd, "rpm": rpm,
+                    "cached_responses": counts.get(m, 0), "counting": _CACHE_STATE["counting"]})
     return out
+
+
+_LEVEL = {"bad": 0, "warn": 1, "info": 2, "ok": 3}
+# the settled outcomes of a request, in the order the health page shows them
+_OUTCOMES = ("published", "awaiting_approval", "negotiating", "escalated", "clarification_requested", "denied",
+             "refused", "forwarded", "answered", "withdrawn")
+
+
+def _health(w: World, cases: list[Case], events: list[dict]) -> dict:
+    """What the health page explains: where requests ended up, who read them, how negotiations went, and a
+    list of checks, worst first, each with what it means and the next step to take. Thresholds are
+    deliberately simple: they point at something to look at, they do not grade the system."""
+    S = RequestStatus
+    n = len(cases)
+    kinds = Counter(e["kind"] for e in events)
+    received = kinds.get("received", 0) or n
+
+    def ids(xs: Iterable[Case]) -> list[str]:
+        return [c.id for c in xs][:8]
+
+    # -- who read each request ---------------------------------------------------------------------------
+    readers = Counter((c.routing or {}).get("reader") or ("form" if c.form is not None else "unknown") for c in cases)
+    by_rules = [c for c in cases if (c.routing or {}).get("reader") == "rules"]
+    injected = [c for c in cases if (c.routing or {}).get("injection")]
+    unused = [c for c in cases if c.unused]
+    split = [c for c in cases if c.parts]
+    questioned = {e["case"] for e in events if e["kind"] == "clarification_requested"}
+    asked = [c for c in cases if c.id in questioned]
+    # -- outcomes -----------------------------------------------------------------------------------------
+    status = Counter(c.status.value for c in cases)
+    outcomes = {k: status.get(k, 0) for k in _OUTCOMES}
+    outcomes["in_progress"] = n - sum(outcomes.values())
+    # -- negotiations --------------------------------------------------------------------------------------
+    # negotiated: someone was asked, or the clash went straight to a person with authority
+    neg = [c for c in cases if c.outcome is not None and (c.outcome.messages or c.outcome.status == "escalated")]
+    replies = [r for c in neg for r in c.outcome.replies]
+    no_reply = sum(r.decision == "no_reply" for r in replies)
+    declined = sum(r.decision in ("reject", "counter", "propose") for r in replies)
+    agreed = [c for c in neg if c.outcome.status == "agreed"]
+    escalated = [c for c in cases if c.outcome is not None and c.outcome.status == "escalated"]
+    rounds = [c.outcome.rounds for c in neg if c.outcome.rounds]
+    negotiation = {"negotiated": len(neg), "agreed": len(agreed), "escalated": len(escalated),
+                   "first_round": sum(c.outcome.rounds <= 1 for c in agreed), "mean_rounds": mean(rounds) if rounds else None,
+                   "messages": sum(len(c.outcome.messages) for c in neg), "no_reply": no_reply, "declined": declined}
+    # -- approvals waiting ---------------------------------------------------------------------------------
+    now = datetime.now(UTC)
+    since: dict[str, datetime] = {}
+    for e in events:
+        if e["case"] and e["kind"] == "awaiting_approval":
+            with contextlib.suppress(ValueError, TypeError):
+                since[e["case"]] = datetime.fromisoformat(_event_time(e["at"]))
+    waiting = [c for c in cases if c.status == S.AWAITING_APPROVAL]
+    ages = [(now - since[c.id]).total_seconds() / 60 for c in waiting if c.id in since]
+    oldest = max(ages) if ages else None
+    # -- model link ----------------------------------------------------------------------------------------
+    link = None if w.model_link is None else w.model_link.status()
+    outages = kinds.get("model_unreachable", 0)
+    held = len(w.held)
+
+    checks: list[dict] = []
+
+    def check(level: str, area: str, title: str, detail: str, next_step: str | None = None, cases_: list[str] | None = None):
+        checks.append({"level": level, "area": area, "title": title, "detail": detail, "next": next_step,
+                       "cases": cases_ or []})
+
+    # the model that reads requests
+    if link is None:
+        check("info", "Model", "Running offline: the rule reader reads every request",
+              "No model is configured, so requests are read by rules. On the test split the rule reader is right on "
+              "52% of requests, the fine-tuned model on 99.8%.",
+              "Start the app with the GPU server (scripts/host.ps1) for the demo.")
+    elif not link.get("up"):
+        check("bad", "Model", "The request reader is unreachable",
+              f"The GPU server did not answer ({link.get('error') or 'no reply'}). New requests wait up to "
+              f"{os.environ.get('NTS_HOLD_MINUTES', '10')} min for it ({held} waiting now), then the rule stand-ins read them.",
+              "Check the GPU server (NTS_LOCAL_URL) is running and reachable; the app reconnects by itself.")
+    elif outages:
+        check("warn", "Model", f"The model dropped out {outages} time{'s' * (outages != 1)} since start",
+              "It is reachable now. While it was away, requests waited for it or were read by the rule stand-ins.",
+              "If this repeats, check the GPU server's load and the network between the two machines.")
+    else:
+        check("ok", "Model", "The request reader is up", "Every request since start could be read by the model.")
+    if by_rules and link is not None:
+        check("warn", "Reading", f"{len(by_rules)} request{'s' * (len(by_rules) != 1)} read by the rule stand-ins",
+              "These were read while the model was away (or by the fast path). The rule reader misses more, so their "
+              "readings deserve a second look before they are approved.",
+              "Open each one and check 'Read as' against the message; send it again if it was misread.", ids(by_rules))
+    # reading quality
+    rate = len(asked) / received if received else 0
+    if asked:
+        check("warn" if rate > 0.15 else "info", "Reading",
+              f"{len(asked)} of {received} requests needed a question back ({rate:.0%})",
+              "The reader asks when something is missing or unclear (which week, which class) instead of guessing. "
+              "A high share means people write things the reader does not know yet.",
+              "Read the questions asked: a phrase that comes back often is vocabulary to add to the intents training "
+              "data (count how often it appears in real requests first).", ids(asked))
+    else:
+        check("ok", "Reading", "No request needed a question back", "Every request named what it needed.")
+    if unused:
+        check("warn", "Reading", f"{len(unused)} reading{'s' * (len(unused) != 1)} left part of the message unused",
+              "A day, time or week in the message that the reading does not use (\"... but not on Friday\"). The sender "
+              "and the approver are shown it, so nothing is approved unseen.",
+              "Check these were approved knowingly; a pattern that keeps being dropped is a gap in the reader.", ids(unused))
+    if injected:
+        check("info", "Safety", f"{len(injected)} message{'s' * (len(injected) != 1)} tried to instruct the system",
+              "Lines like \"ignore your rules\" were left out before reading; nothing was obeyed.", None, ids(injected))
+    # negotiation
+    if no_reply:
+        check("warn", "Negotiation", f"{no_reply} ask{'s' * (no_reply != 1)} got no reply in time",
+              f"Each owner gets one reminder; a second silence escalates. The reply deadline is {round(w.deadline / 60)} min.",
+              "If people miss messages, lengthen NTS_REPLY_DEADLINE or make sure they see the inbox notification.")
+    if escalated:
+        check("info", "Negotiation", f"{len(escalated)} negotiation{'s' * (len(escalated) != 1)} went to a person with authority",
+              "No option was agreed (or the clash was with an institute rule), so the head of department or the office decides.",
+              "Read the briefs: the same room or teacher coming up again points at a bottleneck in the timetable itself.",
+              ids(escalated))
+    if neg and not escalated and not no_reply:
+        check("ok", "Negotiation", f"All {len(neg)} negotiations were agreed",
+              f"{negotiation['first_round']} on the first round of options.")
+    # approvals
+    if waiting:
+        old = oldest is not None and oldest > 60
+        check("warn" if old else "info", "Approvals", f"{len(waiting)} change{'s' * (len(waiting) != 1)} waiting for approval"
+              + (f", the oldest for {oldest / 60:.1f} h" if old else ""),
+              "Nothing reaches the timetable until the office approves it, and each queued change builds on the one before.",
+              "Approve or reject them in the Inbox (Needs you).", ids(waiting))
+    # speed
+    def p95(stage: str) -> float | None:
+        return _pct([c.timings[stage] for c in cases if stage in c.timings], 95)
+
+    slow_read, slow_solve = p95("parse"), p95("solve_and_negotiate")
+    if slow_read is not None and slow_read > 20:
+        check("warn", "Speed", f"Reading is slow: 95% of requests within {slow_read:.0f} s",
+              "Reading waits for the model; a busy GPU server or a long message makes it slower.",
+              "Check the GPU server's load; other clients sharing it slow every request.")
+    if slow_solve is not None and slow_solve > 30:
+        check("warn", "Speed", f"Solving is slow: 95% within {slow_solve:.0f} s",
+              "This covers solving and the negotiation's own solves (not people's replies).",
+              "Look at the slowest requests' traces: a conflict that needs the whole timetable is the usual cause.")
+    if (slow_read is None or slow_read <= 20) and (slow_solve is None or slow_solve <= 30) and n:
+        check("ok", "Speed", "Reading and solving are quick",
+              f"95% of readings within {secs_(slow_read)} and of solves within {secs_(slow_solve)}.")
+    # errors and guarantees
+    errors = [e for e in events if e["kind"] == "error"]
+    if errors:
+        check("bad", "Errors", f"{len(errors)} error{'s' * (len(errors) != 1)} logged since start",
+              f"The last: {str(errors[-1].get('error'))[:160]}", "See Recent errors at the bottom of this page.",
+              [e["case"] for e in errors if e["case"]][-8:])
+    msgs = [m for c in cases if c.outcome for m in c.outcome.messages]
+    leaks = sum(len(m.leaks) for m in msgs)
+    if leaks:
+        check("bad", "Safety", f"{leaks} private reason{'s' * (leaks != 1)} reached a colleague",
+              "An explanation named something a sender said in confidence (an illness, a personal reason).",
+              "Report it: explanations are built from constraints and should never carry private reasons.")
+    unapproved = any(e.get("approver") != COORDINATOR for e in events if e["kind"] == "published")
+    check("bad" if unapproved else "ok", "Safety",
+          "A change was published without the office's approval" if unapproved else "Every published change was approved",
+          "Publishing is gated in code: only an approval from the timetable office publishes a version.")
+    for m in _llm_usage():
+        if m["rpd"] and m["used_today"] / m["rpd"] > 0.85:
+            check("warn", "Model", f"{m['model']} has used {m['used_today']} of {m['rpd']} calls today",
+                  "The free tier stops at its daily limit; cached answers still work.",
+                  "Use the local model for the demo, or wait for the reset (midnight Pacific time).")
+    checks.sort(key=lambda c: _LEVEL[c["level"]])
+    return {
+        "checks": checks,
+        "outcomes": outcomes, "total": n,
+        "reading": {"readers": dict(readers), "asked": len(asked), "unused": len(unused), "injected": len(injected),
+                    "split": len(split), "received": received},
+        "negotiation": negotiation,
+        "approvals": {"waiting": len(waiting), "oldest_minutes": oldest},
+        "model": None if link is None else {**link, "outages": outages, "held": held},
+    }
+
+
+def secs_(x: float | None) -> str:
+    return "–" if x is None else f"{x * 1000:.0f} ms" if x < 1 else f"{x:.1f} s"
 
 
 # The main negotiation experiment: three runs that together make the reduced plan (README, Interpretation layer)
@@ -535,6 +857,12 @@ class AskBody(BaseModel):
     text: str
 
 
+class AsQuestionBody(BaseModel):
+    """A request card in the chat to read as a question instead: ``{"n": 12}``."""
+
+    n: int
+
+
 class ConfirmBody(BaseModel):
     """The answer to the chat's "send this as a request?": ``{"n": 12, "as": "request" | "question" | "cancel"}``."""
 
@@ -634,6 +962,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     """``world``: the demo world (built when omitted). Worlds made from offering documents are kept
     in ``worlds_dir`` and restored at start (by default only when the demo world is built here, so tests
     that pass their own world start alone); ``campus`` also makes the demo campus if it is missing."""
+    if world is None:  # the real server (tests pass their own world): the health page's model counts
+        _warm_cache_index()
     from .worlds import DEMO, Registry, WorldStarting, current_world
 
     registry = Registry(world or World(), worlds_dir, restore=world is None if restore is None else restore)
@@ -738,13 +1068,19 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             "my_decisions": sum(1 for c in cases.values() if c.status == RequestStatus.ESCALATED and decides(u, c)),
             # messages forwarded to the office and not answered yet (listed on the Approvals page)
             "my_forwarded": sum(1 for c in cases.values() if handles(u, c)),
-            "my_inbox": sum(1 for i in _feed(w, u, decides, handles) if i["unread"]),
+            # the sidebar's Inbox badge: everything unread, what waits on the person included; ``my_unread``: the rest
+            # (the Inbox's Unread tab), so the dashboard does not count what it already lists under "needs you"
+            **(lambda feed: {"my_inbox": sum(1 for i in feed if i["unread"]),
+                             "my_unread": sum(1 for i in feed if i["unread"] and not i["needs_you"])})(_feed(w, u, decides, handles)),
             # requests that wait on this person's answer (the Requests tab's count): their own asking a question
             # back, and others' sending them options
             "my_waiting": len({i.case_id for i in w.inbox.items.values() if i.to == u["id"] and i.reply is None
                                and i.case_id} | {r.id for r in reqs if r.sender_id == u["id"] and r.id in cases
                                                   and cases[r.id].status == RequestStatus.CLARIFICATION}),
+            # the semester timetable's version (what a week without changes of its own shows), and the newest
+            # published version of any kind (a one-week change is numbered after it: v38 for week 9 over v31)
             "published_version": cur.version if cur else None,
+            "latest_version": max((v["version"] for v in w.store.versions() if v["published"]), default=None),
             "gini": ledger.gini(teaching, SEMESTER),
             "negotiations": {"agreed": sum(o.status == "agreed" for o in outcomes),
                              "escalated": sum(o.status == "escalated" for o in outcomes),
@@ -752,7 +1088,10 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                              "mean_rounds": mean([o.rounds for o in outcomes if o.rounds])},
             "recent": w.store.events(limit=None)[-12:],
             "models": w.models, "sessions": len(w.instance.sessions), "faculty": len(w.instance.faculty),
-            "model": None if w.model_link is None else {**w.model_link.status(), "mode": w.parser_mode},
+            # while it is away: how many requests wait for it, and for how long at most (``World._hold``)
+            "model": None if w.model_link is None else {**w.model_link.status(), "mode": w.parser_mode,
+                                                        "held": len(w.held),
+                                                        "hold_minutes": float(os.environ.get("NTS_HOLD_MINUTES", "10"))},
             "rooms": len(w.instance.rooms), "groups": len(w.instance.groups),
             "test_run": w.test_run,
         }
@@ -805,7 +1144,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         return out
 
     @app.get("/api/calendar")
-    def calendar(u: dict = Depends(user)) -> dict:
+    def calendar(u: dict = Depends(user), teacher: str | None = None, group: str | None = None,
+                 room: str | None = None) -> dict:
         """The semester's teaching weeks with their dates; for each, the days the signed-in person has
         classes (a teacher's own, a class rep's section's) in that week's timetable, the days a class of
         theirs is cancelled, and whether the week has changes of its own."""
@@ -820,6 +1160,14 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         else:
             mine = {s.id for s in sessions.values() if s.faculty == u["id"]}
         semester = w.store.current_version()
+        # whose week ``mine_changed`` marks: the signed-in person's, or the teacher, section or room a page shows
+        # (the office browsing Dr. Rao's week, or Lab 3's): their classes moved, not held or added, in or out of it
+        if teacher:
+            subject = {s.id for s in sessions.values() if s.faculty == teacher}
+        elif group:
+            subject = {s.id for s in sessions.values() if group in s.groups}
+        else:
+            subject = None if room else mine
         rows = []
         for n in range(1, n_weeks + 1):
             own = w.store.current_version(n)
@@ -832,16 +1180,34 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                        for sid in sorted(mine)
                        if (p := placed.get(sid) or (semester.assignment.get(sid) if sid in cancelled and semester else None))]
             classes.sort(key=lambda c: (inst.calendar.days.index(c["day"]), c["slot"]))
+            # two marks a week: ``mine_changed``, a class of this person's (a teacher's own, a class rep's
+            # section's) is moved, not held or added that week, for their own timetable; ``own_changes``, the week
+            # has changes of its own for anyone, for the department's (the office and the heads; to anyone else
+            # it is only their own, so another teacher's absence is no mark on their week)
+            usual = semester.assignment if semester else {}
+            spot = lambda a, s: (a[s].day, a[s].slot, a[s].room) if s in a else None  # noqa: E731
+            if room:  # a class into or out of the room, or one of its classes not held
+                inside = {s for s, p in usual.items() if p.room == room} | (
+                    {s for s, p in own.assignment.items() if p.room == room} if own else set())
+                watched = inside
+            else:
+                watched = subject or set()
+            differs = own is not None and (bool(set(own.cancelled or []) & watched)
+                                           or any(spot(own.assignment, s) != spot(usual, s) for s in watched))
+            if not (teacher or group or room):  # the person's own: their cancelled classes count as above
+                differs = differs or (own is not None and bool(cancelled))
             rows.append({"week": n, "monday": (start + timedelta(weeks=n - 1)).isoformat(), "classes": classes,
-                         "own_changes": own is not None,
+                         "own_changes": own is not None if u["role"] in OVERSIGHT else differs,
+                         "mine_changed": differs,
                          "class_days": sorted({placed[s].day for s in mine if s in placed},
                                               key=inst.calendar.days.index),
                          "cancelled_days": sorted({semester.assignment[s].day for s in cancelled
                                                    if semester and s in semester.assignment},
                                                   key=inst.calendar.days.index)})
-        today = (date.today() - start).days // 7 + 1
+        today = w.today()
         return {"days": inst.calendar.days, "day_names": {d: FULL_DAY[d] for d in inst.calendar.days},
-                "current_week": min(max(today, 1), n_weeks), "weeks": rows}
+                "current_week": min(max((today - start).days // 7 + 1, 1), n_weeks), "weeks": rows,
+                "today": today.isoformat()}
 
     @app.post("/api/ask")
     def ask(body: AskBody, u: dict = Depends(user)) -> dict:
@@ -863,7 +1229,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         """The signed-in person's chat, oldest first (``after``: only messages after that number). A request shows
         only as a card with its number; what happens to it after (questions back, options, the outcome) is on
         its page in the Requests tab. Notice cards of earlier versions are left out."""
-        return [m for m in W().store.chat(u["id"], after) if m["kind"] != "notice"]
+        return [m for m in W().store.chat(u["id"], after) if m["kind"] != "notice"]  # "change" cards are kept
 
     @app.post("/api/chat")
     def chat_send(body: RequestBody, u: dict = Depends(user)) -> list[dict]:
@@ -904,10 +1270,21 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             reply = ("other", {"text": "I can answer questions about the timetable (“am I free on Friday?”) and "
                                        "about the rules (“how many online classes are allowed?”), and make "
                                        "requests (“move my Monday lecture to Tuesday”)."})
-        else:  # a request: sent as it was read ("move my DS lecture there" with "there" filled in)
-            reply = ("confirm", {"text": read, "makeup": body.makeup, "reader": q[1]})
-        return [w.store.add_chat(me, "you", "text", mine),
-                *(w.store.add_chat(me, "assistant", kind, m) for kind, m in [reply, *rest])]
+        else:  # a request: sent at once, as it was read ("move my DS lecture there" with "there" filled in);
+            # its card offers "it's a question" for the rare misreading (POST /api/chat/as-question)
+            reply = ("send", {"text": read, "makeup": body.makeup, "reader": q[1]})
+        out = [w.store.add_chat(me, "you", "text", mine)]
+        for kind, m in [reply, *rest]:
+            if kind != "send":
+                out.append(w.store.add_chat(me, "assistant", kind, m))
+                continue
+            try:
+                out.append(_send_request(w, me, m))
+            except HTTPException as e:
+                if e.status_code != 409:
+                    raise
+                out.append(w.store.add_chat(me, "assistant", "other", {"text": "You have sent this request already."}))
+        return out
 
     def _other_parts(w: World, me: str, text: str, others: list, makeup: bool,
                      reader: str) -> list[tuple[str, dict]]:
@@ -924,8 +1301,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             out.append(("rule", rule))
         if requests or (unsure and (REQUEST.search(text) or not out)):
             words = [o.text for o in requests + unsure if o.text]
-            out.append(("confirm", {"text": "; ".join(words) if words else text, "makeup": makeup,
-                                    "reader": reader, "part": True}))
+            out.append(("send", {"text": "; ".join(words) if words else text, "makeup": makeup,
+                                 "reader": reader, "part": True}))
         return out
 
     @app.post("/api/chat/confirm")
@@ -960,10 +1337,43 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(403, "unknown user") from None
         if r is None:
             raise HTTPException(409, "duplicate request")
-        # what was asked kept with the card: a follow-up ("has it been approved?") sees which request it was
-        card = w.store.add_chat(me, "assistant", "request", {"case": r.id, "request_text": m["text"]})
+        # what was asked kept with the card: a follow-up ("has it been approved?") sees which request it was, and
+        # "it's a question" reads it again; ``part``: the request part of a message whose questions were answered
+        card = w.store.add_chat(me, "assistant", "request",
+                                {"case": r.id, "request_text": m["text"], **({"part": True} if m.get("part") else {})})
+        w.read_by_chat.add(r.id)  # the chat has read it already: the pipeline does not ask again if it is a question
         w.submit(r)
         return card
+
+    @app.post("/api/chat/as-question")
+    def chat_as_question(body: AsQuestionBody, u: dict = Depends(user)) -> list[dict]:
+        """A request the chat sent at once, read as a timetable question instead (its card's "it's a question"):
+        the message is read again without the request-words check; when it reads as a question, the request is taken
+        back (withdrawn once the pipeline has stopped: everything it set in motion is undone) and the answer added.
+        When it does not, the request stays as it is. Once per card. Returns the new messages."""
+        w = W()
+        me = u["id"]
+        m = w.store.chat_message(me, body.n)
+        if m is None or m["kind"] != "request":
+            raise HTTPException(404, "no such request in the chat")
+        if m.get("reread"):
+            raise HTTPException(409, "already read as a question")
+        call, reader = w.read_question(m.get("request_text") or "", me, gate=False)
+        if call is None:
+            return [w.store.add_chat(me, "assistant", "other", {
+                "text": "I couldn't read that as a question about the timetable, so the request stays as it is. "
+                        "Try asking the question another way."})]
+        c = w.orch.cases.get(m["case"])
+        if c is not None and c.status not in (RequestStatus.ANSWERED, RequestStatus.WITHDRAWN, RequestStatus.REFUSED,
+                                              RequestStatus.DENIED):
+            if (t := w.threads.get(c.id)) is not None:
+                t.join(timeout=120)  # let the pipeline stop before taking it back
+            try:
+                w.orch.withdraw(c.id, me)
+            except ValueError as e:
+                raise HTTPException(409, f"the request could not be taken back: {e}") from None
+        w.store.update_chat(me, body.n, {"reread": "question"})
+        return [w.store.add_chat(me, "assistant", "lookup", _lookup_answer(w, call, me, reader))]
 
     @app.delete("/api/chat")
     def chat_clear(u: dict = Depends(user)) -> dict:
@@ -974,11 +1384,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         """A timetable question's answer: the reply, the lookup, who read it, the part of the timetable to draw
         beside it (``view``, agents.views; None when there is nothing to draw), and for free hours the hours
         themselves (``free``, for the timetable to shade)."""
-        from agents.more_lookups import Records
-
         week = WeekTimetable(w.instance, w.store, call.week)
-        records = Records.from_world(w)  # requests, rules, bookings, other weeks: v3's lookups read them
-        answerer = Answerer(w.instance, sender, records, sees_all=sender == COORDINATOR)
 
         def shown(c) -> dict:
             args = ({"parts": [shown(p) for p in c.args["parts"]]} if c.tool == "multi" else c.args)
@@ -987,7 +1393,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         # several lookups (v3): the timetable beside the answer is the first part's
         first = call.args["parts"][0] if call.tool == "multi" else call
         first_week = week if first.week == call.week else WeekTimetable(w.instance, w.store, first.week)
-        out = {"answer": answerer.answer(call, week), "reader": reader, "call": shown(call),
+        out = {"answer": w.answer_lookup(call, sender), "reader": reader, "call": shown(call),
                "view": view_of(w.instance, first, first_week, sender)}
         if first.tool == "free_hours" and first.confident:
             out["free"] = [{"day": d, "slot": s} for d, s in free_hours_of(w.instance, first, first_week)]
@@ -1327,7 +1733,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(403, str(e)) from None
         except (KeyError, ValueError) as e:
             raise HTTPException(409, str(e)) from None
-        return {"version": v.version, "notified": w.orch.cases[case_id].notices}
+        # None: a requirement the timetable already met, confirmed with nothing to publish
+        return {"version": v.version if v else None, "notified": w.orch.cases[case_id].notices}
 
     @app.post("/api/approvals/{case_id}/reject")
     def reject(case_id: str, body: RejectBody, u: dict = Depends(user)) -> dict:
@@ -1365,12 +1772,57 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         changed = {d["session"] for d in _diff(w, parent.assignment, v.assignment)} if parent else set()
         # weeks with their own repair (an absence, a room closed): everyone can look at them
         weeks = sorted({x["week"] for x in w.store.versions() if x["published"] and x["week"] is not None})
-        cancelled = [{"session": sid, "session_name": session_name(w.instance, sid),
-                      "faculty_name": w.name_of(w.instance.session_by_id[sid].faculty),
-                      "groups": w.instance.session_by_id[sid].groups} for sid in v.cancelled]
+        # each class not held: where it would have been (the semester timetable's place) and why
+        regular = (w.store.current_version() or v).assignment
+        reasons, rooms = w.orch.cancel_reasons(v.week) if v.week is not None else ({}, [])
+        why_of = {"away": "{t} is unavailable", "asked": "{t} cancelled it", "closed": "its room is closed"}
+
+        def not_held(sid: str) -> dict:
+            s, p = w.instance.session_by_id[sid], regular.get(sid)
+            teacher = w.name_of(s.faculty)
+            return {"session": sid, "session_name": session_name(w.instance, sid), "faculty_name": teacher,
+                    "faculty": s.faculty, "course": s.course, "room": p.room if p else None,
+                    "room_name": w.instance.room_by_id[p.room].name if p and p.room in w.instance.room_by_id else None,
+                    "groups": s.groups, "title": w.instance.course_title(s.course), "kind": s.kind.value,
+                    "day": p.day if p else None, "slot": p.slot if p else None, "duration": s.duration,
+                    "reason": reasons.get(sid), "why": why_of.get(reasons.get(sid, ""), "").format(t=teacher) or None}
+
+        cancelled = [not_held(sid) for sid in v.cancelled]
+        # a week with changes of its own: the classes not where they usually are (from, to), and the requests behind
+        # that week's changes, so the page can say what is different about the week and why
+        semester = w.store.current_version()
+        moved, because = [], []
+        if v.week is not None and semester is not None and v.version != semester.version:
+            for sid, p in v.assignment.items():
+                q = semester.assignment.get(sid)
+                if q is not None and (q.day, q.slot, q.room) != (p.day, p.slot, p.room):
+                    s = w.instance.session_by_id.get(sid)
+                    moved.append({"session": sid, "title": w.instance.course_title(s.course) if s else sid,
+                                  "kind": s.kind.value if s else "", "groups": s.groups if s else [],
+                                  "faculty_name": w.name_of(s.faculty) if s else None,
+                                  "faculty": s.faculty if s else None, "course": s.course if s else None,
+                                  "from": _placement(w, q), "to": _placement(w, p)})
+            if u["role"] in OVERSIGHT:
+                seen: set[str] = set()
+                for x in w.store.versions():
+                    rid = x["case"] or ""
+                    if x["published"] and x["week"] == v.week and rid in w.orch.cases and rid not in seen:
+                        seen.add(rid)
+                        r = w.orch.cases[rid].request
+                        because.append({"case": rid, "text": r.raw_text.strip(), "by": w.name_of(r.sender_id)})
+        # rooms closed in the week shown (a lab under maintenance, a room taken for exams), for the room views
+        shown = week if week is not None else v.week
+        closed = [{"room": c.scope.room, "room_name": w.instance.room_by_id[c.scope.room].name
+                   if c.scope.room in w.instance.room_by_id else c.scope.room,
+                   "days": c.when.days or None, "slots": c.when.slots or None, "request": c.source.request,
+                   "text": w.orch.cases[c.source.request].request.raw_text.strip()
+                   if c.source.request in w.orch.cases else None}
+                  for c in w.store.constraints() if shown is not None and c.hard and c.scope.room
+                  and c.type == ConstraintType.UNAVAILABLE and c.active_in(shown)
+                  and (c.when.weeks is None or shown in c.when.weeks)]
         return {"version": v.version, "week": v.week, "approved_by": v.approved_by, "parent": v.parent,
                 "entries": _timetable(w, v.assignment), "changed": sorted(changed), "weeks": weeks,
-                "cancelled": cancelled}
+                "cancelled": cancelled, "closed": closed, "moved": moved, "because": because}
 
     @app.get("/api/versions/diff")
     def diff(a: int, b: int, u: dict = Depends(view("history"))) -> list[dict]:
@@ -1411,18 +1863,107 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.get("/api/graph")
     def graph(u: dict = Depends(view("graph"))) -> dict:
+        """The knowledge graph, made to be read: every node has a short label, a title and details in plain
+        words (who teaches a class and when, what a constraint asks and how firm it is, what a request said),
+        and ``conflicts`` lists the clashes negotiations found (from the event log, so they survive a restart)."""
         w = W()
-        teaching = sorted({s.faculty for s in w.instance.sessions})
+        inst = w.instance
+        teaching = sorted({s.faculty for s in inst.sessions})
         led = ConcessionLedger(w.store.ledger())
+        entries = w.store.ledger()
+        given = Counter(e.stakeholder for e in entries)
         cons = [c for c in w.store.constraints() if c.tier >= Tier.COMMITMENT or c.owner]
-        g = build_graph(w.instance, cons, {f: led.credit(f, SEMESTER) for f in teaching})
-        for c in w.orch.cases.values():
-            for mus in (c.outcome.mus_log if c.outcome else []):
-                add_conflict(g, [i for i in mus if i in g])
-        nodes = [{"id": n, **{k: v for k, v in d.items()}, "label": w.name_of(n) if d.get("kind") == "stakeholder"
-                  else n} for n, d in g.nodes(data=True)]
+        by_id = {c.id: c for c in w.store.constraints(active_only=False)}
+        g = build_graph(inst, cons, {f: led.credit(f, SEMESTER) for f in teaching})
+        conflicts = []
+        for e in w.store.events(kind="negotiation_conflict"):
+            mus = [i for i in e.get("mus") or [] if i in by_id]
+            if len(mus) < 2:
+                continue
+            for i in mus:  # a constraint in a conflict that is no longer in force: shown, so the clash reads whole
+                if i not in g:
+                    add_constraint(g, by_id[i])
+            add_conflict(g, mus)
+            case = w.orch.cases.get(e["case"] or "")
+            conflicts.append({"case": e["case"], "round": e.get("round"), "constraints": mus,
+                              "request": case.request.raw_text if case else None,
+                              "sender": w.name_of(case.request.sender_id) if case else None,
+                              "status": case.status.value if case else None})
+        current = w.store.current_version()
+        assignment = current.assignment if current else {}
+        sessions_of: dict[str, list] = {}
+        for s_ in inst.sessions:
+            sessions_of.setdefault(s_.faculty, []).append(s_)
+
+        def abbr(title: str) -> str:
+            words = [x for x in re.findall(r"[A-Za-z]+", title) if x.lower() not in ("of", "and", "the", "to", "in")]
+            return "".join(x[0] for x in words).upper() if len(words) > 1 else title[:10]
+
+        def where(sid: str) -> str | None:
+            pl = assignment.get(sid)
+            return placement_text(inst, pl) if pl else None
+
+        nodes = []
+        for n, d in g.nodes(data=True):
+            kind = d.get("type") if d.get("kind") == "resource" else d.get("kind")
+            out = {"id": n, "kind": kind, "label": n, "title": n, "details": []}
+            if kind == "stakeholder":
+                f = inst.faculty_by_id.get(n)
+                out["label"] = out["title"] = w.name_of(n)
+                out["role"] = d.get("role")
+                out["details"] = [["Role", (d.get("role") or "").replace("_", " ")]]
+                if f is not None:
+                    classes = sessions_of.get(n, [])
+                    out["details"] += [["Teaches", f"{len(classes)} class{'es' * (len(classes) != 1)}"],
+                                       ["Reports to", w.name_of(f.reports_to) if f.reports_to else "nobody (top of the chain)"],
+                                       ["Has given way", f"{given.get(n, 0)} time{'s' * (given.get(n, 0) != 1)}"],
+                                       ["Fairness credit", f"{d.get('balance', 0.0):.2f}"]]
+                    out["credit"] = d.get("balance", 0.0)
+                    out["given"] = given.get(n, 0)
+            elif kind == "session":
+                s_ = inst.session_by_id.get(n)
+                if s_ is not None:
+                    title = inst.course_title(s_.course)
+                    groups = ", ".join(inst.group_by_id[x].name for x in s_.groups if x in inst.group_by_id)
+                    out["label"] = f"{abbr(title)} {s_.kind.value[:4]}"
+                    out["title"] = f"{title} {s_.kind.value}"
+                    out["details"] = [["Teacher", w.name_of(s_.faculty)], ["Sections", groups],
+                                      ["When", where(n) or "not placed"], ["Class ID", n]]
+            elif kind == "room":
+                r = inst.room_by_id.get(n)
+                if r is not None:
+                    out["label"] = out["title"] = r.name
+                    out["details"] = [["Type", r.type.value], ["Capacity", str(r.capacity)]] + (
+                        [["Equipment", ", ".join(r.equipment)]] if r.equipment else [])
+            elif kind == "group":
+                grp = inst.group_by_id.get(n)
+                if grp is not None:
+                    out["label"] = out["title"] = grp.name
+                    out["details"] = [["Students", str(grp.size)]]
+            elif kind == "constraint":
+                c = by_id.get(n)
+                out["tier"] = d.get("tier")
+                if c is not None:
+                    out["hard"] = c.hard
+                    word = {"prefer": "needs" if c.hard else "prefers", "avoid": "can't" if c.hard else "avoids",
+                            "unavailable": "away", "require_room": "needs room"}.get(c.type.value, c.type.value.replace("_", " "))
+                    out["label"] = f"{w.name_of(c.owner).replace('Dr. ', '') if c.owner else 'rule'} {word}"
+                    out["title"] = describe(inst, c)
+                    out["details"] = [["Firmness", "requirement (hard)" if c.hard else "preference (soft)"],
+                                      ["Tier", f"{int(c.tier)}, {TIER_NAME[c.tier]}"],
+                                      ["Owner", w.name_of(c.owner) if c.owner else "institute rule"],
+                                      ["From", c.source.request or c.source.rule or "–"],
+                                      ["In force", "yes" if n in {x.id for x in cons} else "no longer"]]
+            elif kind in ("request", "rule"):
+                case = w.orch.cases.get(n)
+                if case is not None:
+                    text = case.request.raw_text
+                    out["title"] = text if len(text) <= 160 else text[:157] + "…"
+                    out["details"] = [["From", w.name_of(case.request.sender_id)], ["Status", case.status.value.replace("_", " ")],
+                                      ["Request", n]]
+            nodes.append(out)
         edges = [{"source": u_, "target": v, "rel": d.get("rel")} for u_, v, d in g.edges(data=True)]
-        return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "edges": edges, "conflicts": conflicts}
 
     @app.get("/api/handbook")
     def handbook(u: dict = Depends(user)) -> list[dict]:
@@ -1492,21 +2033,47 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                       for t in Tier],
             "weights": Weights().__dict__, "role_authority": {r.value: v for r, v in ROLE_AUTHORITY.items()},
             "justification": {j.value: v for j, v in JUSTIFICATION.items()},
+            "lifecycle": [
+                {"name": "Read", "text": "Shorthand is spelled out (\"my DL prac in wk 5\" names the Digital Logic practical in week 5). Lines that "
+                 "try to instruct the system are never read; a message that is nothing else is refused. System One sends "
+                 "familiar requests down a fast path; the rest are read by the intents model into typed intents."},
+                {"name": "Check the reading", "text": "Code checks every reading against the message and the timetable: "
+                 "weeks the message names are kept, the sender's own name is not read as someone else's class, made-up "
+                 "options and duplicates are dropped. Anything the reading could not account for (a day, a time, a week) "
+                 "is shown to the sender and the approver; when it is unsure, it asks the sender instead of guessing."},
+                {"name": "Split", "text": "A message that asks for several things becomes one request per part: what can "
+                 "be solved together stays together; a swap, a cancellation, an extra class or an unclear part goes on its own, "
+                 "so one question does not hold up the rest."},
+                {"name": "Check policy", "text": "The policy agent looks the request up in the handbook and policy "
+                 "documents; authority is checked by code. A request against policy is denied with the rule it breaks."},
+                {"name": "Solve and negotiate", "text": "CP-SAT repairs the timetable; the resolution ladder below runs when "
+                 "something has to give."},
+                {"name": "Approve and publish", "text": "The timetable office sees the change, how the message was read and "
+                 "who is affected, then approves or rejects it. Only then is a new version published and its people told."},
+            ],
             "ladder": [
-                {"step": 1, "name": "Auto-substitute", "text": "If the hard constraints fit, repair the timetable "
-                 "moving as little as possible and notify those affected."},
-                {"step": 2, "name": "Auto-relax", "text": "Preferences that cannot be kept are dropped by the "
+                {"step": 1, "name": "Repair", "text": "If the requirements fit together, the timetable is repaired moving as "
+                 "few classes as possible. A requirement that already fits moves nothing but still waits for the office, "
+                 "because it binds every later change."},
+                {"step": 2, "name": "Drop preferences", "text": "Preferences the repair cannot keep are dropped by the "
                  "objective; their owners are told, and can send the request again as a requirement."},
-                {"step": 3, "name": "Negotiate", "text": "Find the minimal conflict, the cheapest minimal corrections "
-                 "(Tier 3-4 only), and ask the owner of the cheapest with 2-3 solver-verified alternatives."},
-                {"step": 4, "name": "Escalate", "text": "On deadlock, no reply, or a Tier 0-2 conflict, brief the "
-                 "person with authority along the reporting chain."}],
-            "negotiation": {"max_rounds": 6, "options_per_message": 3, "asks_per_owner": 2,
-                            "reply_deadline_s": w.deadline, "ledger_decay_per_semester": 0.5},
+                {"step": 3, "name": "Negotiate", "text": "The solver finds the smallest set of constraints that clash and "
+                 "the cheapest ways to resolve it (Tiers 3-4 only), solving around the conflict first and checking against "
+                 "the whole timetable. The owner of the cheapest is offered 2-3 solver-verified options. When a fix needs "
+                 "several people to give way, each is asked for their own part, and what one agrees to is held while the "
+                 "next is asked. A declined option rules out that day and half-day, so the next options look elsewhere."},
+                {"step": 4, "name": "Escalate", "text": "On deadlock, the round limit, no reply after one reminder, or a "
+                 "Tier 0-2 conflict, the person with authority along the reporting chain gets a brief. A request with a "
+                 "fallback (\"Thursday, or else Friday\") tries the fallback as a request of its own instead."}],
+            "negotiation": _negotiation_settings(w),
             "system_one": w.system_one_info, "models": w.models,
-            "safety": ["Nothing is published without the coordinator's approval.",
+            "safety": ["Nothing changes the timetable without the timetable office's approval, including a requirement "
+                       "that already fits.",
                        "Authority is checked by code before any constraint is created; the model cannot override it.",
-                       "Message text is data: models return structured data and code decides what happens.",
+                       "Message text is data: lines that try to instruct the system are never read, and models return "
+                       "structured data that code acts on.",
+                       "What a reading left out is shown to the sender and the approver before anything is approved.",
+                       "Every option offered is checked by the solver; a counter-proposal is passed on only if it is.",
                        "Explanations name constraints, never private reasons; leaks are measured.",
                        "Tier 0-2 constraints are never relaxed without a named person with authority."],
         }
@@ -1541,6 +2108,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                                                         if e["kind"] == "published") else 1,
                        "leaks": sum(len(m.leaks) for m in msgs)},
             "threads_running": sum(t.is_alive() for t in w.threads.values()),
+            "health": _health(w, cases, events),
         }
 
     @app.get("/api/experiments")
