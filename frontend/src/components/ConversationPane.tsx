@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ArrowLeft, Eraser, Send, Undo2, X } from "lucide-react";
+import { ArrowLeft, Eraser, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -8,6 +8,8 @@ import { useApi } from "../lib/hooks";
 import type { AskAnswer, InboxItem } from "../lib/types";
 import { ColleagueThread, groupOf, type Conversation } from "./Conversations";
 import { RequestThread } from "./RequestThread";
+import { ReplyBubble, YouBubble } from "./thread/Bubble";
+import { Chips, Composer, MakeupToggle } from "./thread/Composer";
 import { Button, Skeleton } from "./ui";
 
 /** Which conversation is open, its details, and what the composer under it does: answer the open request's
@@ -222,12 +224,8 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                 <div className="space-y-3">
                   {answers.map((x, i) => (
                     <div key={i} className="space-y-1.5">
-                      <div className="flex justify-end">
-                        <p className="max-w-[85%] rounded-lg rounded-br-sm bg-brand/12 px-3 py-2 text-[13.5px]">{x.q}</p>
-                      </div>
-                      <p className="max-w-[92%] rounded-lg rounded-bl-sm border border-line bg-panel-2/60 px-3 py-2 text-[13.5px] leading-relaxed">
-                        {x.a.answer}
-                      </p>
+                      <YouBubble text={x.q} />
+                      <ReplyBubble>{x.a.answer}</ReplyBubble>
                     </div>
                   ))}
                   <button onClick={() => setAnswers([])} className="text-[11.5px] text-ink-3 hover:text-ink">
@@ -317,50 +315,28 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
               </button>
             </p>
           )}
-          {attached.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {attached.map((a) => (
-                <span key={a.key} className="flex items-center gap-1 rounded border border-brand/40 bg-brand/10 py-0.5 pl-1.5 pr-1 text-[11.5px]">
-                  {a.label}
-                  <button onClick={() => attachments!.remove(a.key)} className="text-ink-3 hover:text-ink" aria-label={`Remove ${a.label}`}>
-                    <X size={11} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="flex items-end gap-2 rounded-lg border border-line bg-panel px-3 py-2 focus-within:border-brand/60">
-            <textarea
-              ref={box}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              onFocus={s.startNew}
-              rows={composing ? 4 : 2}
-              placeholder={
-                s.answering
-                  ? "Your answer…"
-                  : s.replying
-                    ? "e.g. “B works” or “Friday after 2 pm would suit me”"
-                    : attached.length
-                      ? "What should happen to these classes?"
-                      : s.selected
-                        ? "Start a new request…"
-                        : "Ask or request something…"
-              }
-              className="max-h-40 flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed outline-none placeholder:text-ink-3"
-            />
-            <Button variant="primary" size="sm" icon={Send} loading={sending} disabled={!text.trim()} onClick={send} aria-label="Send" />
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-3">
-            <p className="flex items-center gap-2">
-              Enter to send · Shift+Enter for a new line
-              {composing && (
+          <Composer
+            value={text}
+            onChange={setText}
+            onSend={() => void send()}
+            sending={sending}
+            inputRef={box}
+            onFocus={s.startNew}
+            rows={composing ? 4 : 2}
+            placeholder={
+              s.answering
+                ? "Your answer…"
+                : s.replying
+                  ? "e.g. “B works” or “Friday after 2 pm would suit me”"
+                  : attached.length
+                    ? "What should happen to these classes?"
+                    : s.selected
+                      ? "Start a new request…"
+                      : "Ask or request something…"
+            }
+            above={attachments && <Chips items={attached} onRemove={attachments.remove} />}
+            footerLeft={
+              composing && (
                 <>
                   <button onClick={undo} disabled={!history.length} className="flex items-center gap-0.5 hover:text-ink disabled:opacity-40" title="Undo the last example, week or clear">
                     <Undo2 size={11} /> Undo
@@ -369,16 +345,11 @@ export function ConversationPane({ s, convs, attachments, when, wide = false, on
                     <Eraser size={11} /> Clear
                   </button>
                 </>
-              )}
-            </p>
-            {teaches && !s.answering && !s.replying && (
-              <label className="flex cursor-pointer items-center gap-1.5" title="If you are away in some weeks: ticked, the classes you miss move to other times that week; left empty, they are cancelled">
-                <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} className="accent-brand" />
-                Hold make-up classes
-              </label>
-            )}
-          </div>
-          {error && <p className="mt-1 text-[12.5px] text-bad">{error}</p>}
+              )
+            }
+            footerRight={teaches && !s.answering && !s.replying && <MakeupToggle checked={makeup} onChange={setMakeup} />}
+            error={error}
+          />
         </div>
       </div>
       )}

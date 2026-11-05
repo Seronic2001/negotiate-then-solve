@@ -92,7 +92,7 @@ export default function Dashboard() {
         subtitle={ov ? `${user ? ROLE_LABEL[user.role] : ""} · ${ov.department}, semester ${ov.semester}` : " "}
         actions={
           sees("new") && (
-            <Link to="/new">
+            <Link to="/?tab=workspace">
               <Button variant="primary" icon={Plus}>
                 New request
               </Button>
@@ -170,7 +170,7 @@ export default function Dashboard() {
               <>
                 No requests yet.{" "}
                 {sees("new") && (
-                  <Link to="/new" className="text-brand hover:underline">
+                  <Link to="/?tab=workspace" className="text-brand hover:underline">
                     Write one
                   </Link>
                 )}

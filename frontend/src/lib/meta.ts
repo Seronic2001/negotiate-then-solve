@@ -56,6 +56,10 @@ export const ROLE_LABEL: Record<Role, string> = {
  * sidebar keeps only the essentials. Everyone else opens on the dashboard. */
 export const TIMETABLE_HOME: Role[] = ["faculty", "guest_faculty", "student"];
 
+/** Where a role's request workspace (the timetable and the chat) is: the home page for the timetable-home roles,
+ * the Workspace tab of the home page for everyone else (whose home opens on the Overview). */
+export const workspacePath = (role: Role) => (TIMETABLE_HOME.includes(role) ? "/" : "/?tab=workspace");
+
 /** Tiers in the words of the person using the service; the number and who may change it stay in the tooltip. */
 export const TIER: Record<number, { name: string; who: string; tone: Tone }> = {
   0: { name: "Can't be changed", who: "Nobody, it is physically impossible otherwise", tone: "bad" },

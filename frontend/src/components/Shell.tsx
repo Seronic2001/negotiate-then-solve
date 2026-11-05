@@ -73,7 +73,7 @@ const COLLAPSED_KEY = "nts.sidebar.collapsed";
 
 /** What the timetable-home roles keep in view (their timetable, their requests as chats, the handbook);
  * the rest of their pages sit under "More". */
-const ESSENTIAL = ["/", "/requests", "/policy"];
+const ESSENTIAL = ["/", "/requests", "/timetable", "/policy"];
 
 const GROUPS: { id: NavItem["group"]; label?: string }[] = [
   { id: "main" },
@@ -115,7 +115,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // window, so their panels keep their proportions at any zoom
   const fullscreen =
     !!user &&
-    (location.pathname === "/new" ||
+    (location.pathname === "/timetable" ||
+      (location.pathname === "/" && new URLSearchParams(location.search).get("tab") === "workspace") ||
       (TIMETABLE_HOME.includes(user.role) &&
         (location.pathname === "/" || (location.pathname.startsWith("/requests") && !new URLSearchParams(location.search).has("details")))));
   const onSearch = () => setPalette(true);
@@ -242,7 +243,7 @@ function Sidebar({
       <div className={clsx("space-y-1.5", collapsed ? "px-2" : "px-3")}>
         {sees("new") && !minimal && (
           <button
-            onClick={() => navigate("/new")}
+            onClick={() => navigate("/?tab=workspace")}
             title={collapsed ? "New request" : undefined}
             aria-label="New request"
             className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-brand text-[13px] font-medium text-panel hover:bg-brand/90"
@@ -293,10 +294,21 @@ function Sidebar({
           GROUPS.map((g) => {
             const list = items.filter((i) => i.group === g.id);
             if (!list.length) return null;
+            // the research pages fold away under "More" (opened by a click, or by opening one of them)
+            const folds = g.id === "research" && !collapsed;
+            const open = !folds || more || list.some((i) => location.pathname.startsWith(i.to));
             return (
               <div key={g.id}>
-                {g.label && (collapsed ? <div className="mx-2 mb-2 border-t border-line" /> : <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>)}
-                {list.map(navLink)}
+                {collapsed ? (
+                  g.label && <div className="mx-2 mb-2 border-t border-line" />
+                ) : folds ? (
+                  <button onClick={() => setMore(!more)} aria-expanded={open} className="mb-1 flex w-full items-center gap-1 px-2.5 text-[11px] font-medium text-ink-3 hover:text-ink">
+                    <ChevronRight size={12} className={clsx("transition-transform", open && "rotate-90")} /> More: {g.label}
+                  </button>
+                ) : (
+                  g.label && <p className="mb-1 px-2.5 text-[11px] font-medium text-ink-3">{g.label}</p>
+                )}
+                {open && list.map(navLink)}
               </div>
             );
           })

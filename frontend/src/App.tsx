@@ -1,10 +1,10 @@
-import { Lock } from "lucide-react";
+import { LayoutDashboard, Lock, MessagesSquare } from "lucide-react";
 import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { Shell } from "./components/Shell";
-import { EmptyState, Mark, Skeleton } from "./components/ui";
+import { EmptyState, Mark, Skeleton, Tabs } from "./components/ui";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { TIMETABLE_HOME } from "./lib/meta";
+import { TIMETABLE_HOME, workspacePath } from "./lib/meta";
 import { ThemeProvider } from "./lib/theme";
 import type { Role, View } from "./lib/types";
 
@@ -54,9 +54,40 @@ function Guard({ view, children }: { view: View; children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** The home page. Faculty and class representatives: their workspace (the timetable and the chat). Everyone else:
+ * two tabs, the Overview (what needs them, the department at a glance) and the same Workspace, kept in the
+ * address (``?tab=workspace``) so a link can open either. */
 function HomePage() {
+  const { user, sees } = useAuth();
+  const [params, setParams] = useSearchParams();
+  if (TIMETABLE_HOME.includes(user?.role as Role)) return <Home />;
+  if (!sees("new")) return <Dashboard />;
+  const tab = params.get("tab") === "workspace" ? "workspace" : "overview";
+  return (
+    <div className={tab === "workspace" ? "flex flex-col gap-3 lg:h-full" : "space-y-5"}>
+      <Tabs
+        tabs={[
+          { id: "overview", label: "Overview", icon: LayoutDashboard },
+          { id: "workspace", label: "Workspace", icon: MessagesSquare },
+        ]}
+        value={tab}
+        onChange={(t) => setParams(t === "workspace" ? { tab: "workspace" } : {})}
+      />
+      {tab === "workspace" ? (
+        <div className="min-h-0 lg:flex-1">
+          <Home />
+        </div>
+      ) : (
+        <Dashboard />
+      )}
+    </div>
+  );
+}
+
+/** The old New request address: the workspace, where requests are made now. */
+function NewRequest() {
   const { user } = useAuth();
-  return TIMETABLE_HOME.includes(user?.role as Role) ? <Home /> : <Dashboard />;
+  return <Navigate to={user ? workspacePath(user.role) : "/"} replace />;
 }
 
 /** For faculty and class representatives, requests are conversations (their own screen, read as a chat);
@@ -92,7 +123,7 @@ function Routed() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<Guard view="new"><Home /></Guard>} /> {/* the timetable and the chat beside it, for every role */}
+          <Route path="/new" element={<Guard view="new"><NewRequest /></Guard>} /> {/* requests are made in the workspace */}
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/:id" element={<RequestsPage one />} />
           <Route path="/inbox" element={<Guard view="inbox"><Inbox /></Guard>} />

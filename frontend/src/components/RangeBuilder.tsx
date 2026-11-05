@@ -6,7 +6,7 @@ import { useApi } from "../lib/hooks";
 import { dateOf } from "../lib/slots";
 import { startWeek } from "../lib/scheduling";
 import type { CalendarView, InstanceView } from "../lib/types";
-import { clock } from "./ClassActions";
+import { clock } from "../lib/draft";
 import { Button } from "./ui";
 
 /** One of the teacher's classes on a date of the range. */

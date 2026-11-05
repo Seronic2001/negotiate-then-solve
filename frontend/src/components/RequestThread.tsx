@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { ago, EVENT_LABEL } from "../lib/meta";
 import type { CaseDetail, DiffRow, EventRow, InboxItem } from "../lib/types";
 import { OfferCard } from "./Negotiation";
+import { ReplyBubble, StepList, Tag, YouBubble } from "./thread/Bubble";
 import { Button, LiveDot } from "./ui";
 
 /** Steps worth a line in the conversation; the rest (parsing, compiling, solving) stay on the case page. */
@@ -52,23 +53,9 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-lg rounded-br-sm bg-brand/12 px-3 py-2">
-          <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">{c.text}</p>
-          <p className="mt-1 text-right text-[11px] text-ink-3">{ago(c.received_at)}</p>
-        </div>
-      </div>
+      <YouBubble text={c.text} note={ago(c.received_at)} />
 
-      {steps.length > 0 && (
-        <ul className="space-y-1 pl-1">
-          {steps.map((e) => (
-            <li key={e.n} className="flex items-center gap-2 text-[12px] text-ink-3">
-              <span className="size-1.5 shrink-0 rounded-full bg-ink-3/50" />
-              {stepText(e, c)}
-            </li>
-          ))}
-        </ul>
-      )}
+      <StepList steps={steps.map((e) => ({ key: e.n, text: stepText(e, c) }))} />
 
       {c.running ? (
         <p className="flex items-center gap-2 pl-1 text-[12.5px] text-ink-2">
@@ -86,24 +73,29 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
         </p>
       ) : (
         c.reply && (
-          <div className={clsx("max-w-[92%] rounded-lg rounded-bl-sm border px-3 py-2", asking ? "border-warn/40 bg-warn/5" : "border-line bg-panel-2/60")}>
-            {asking && (
-              <p className="mb-1 flex items-center gap-1.5 text-[11.5px] font-medium text-warn">
-                <HelpCircle size={13} /> A question for you. Answer it below.
-              </p>
-            )}
-            <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">{c.reply}</p>
-            {c.answer && <p className="mt-1 text-[11.5px] text-ink-3">From {c.answer.by_name}</p>}
-            {rules.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {rules.map((r) => (
-                  <span key={r} className="rounded border border-line bg-panel px-1.5 py-0.5 text-[11px] text-ink-2" title="The rule this rests on">
-                    {r}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          <ReplyBubble
+            tone={asking ? "warn" : "plain"}
+            icon={asking ? HelpCircle : undefined}
+            label={asking ? "A question for you. Answer it below." : undefined}
+            footer={
+              (c.answer || rules.length > 0) && (
+                <>
+                  {c.answer && <p>From {c.answer.by_name}</p>}
+                  {rules.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {rules.map((r) => (
+                        <Tag key={r} title="The rule this rests on">
+                          {r}
+                        </Tag>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            }
+          >
+            {c.reply}
+          </ReplyBubble>
         )
       )}
 

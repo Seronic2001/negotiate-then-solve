@@ -5,9 +5,11 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { dateOf } from "../lib/slots";
-import { dayPassed, freeSlotsFor, startWeek, swappableWith } from "../lib/scheduling";
+import { dayPassed, freeSlotsFor, swappableWith } from "../lib/scheduling";
+import { useWeek } from "../lib/useWeek";
 import type { TimetableEntry } from "../lib/types";
-import { intent, sentence, type ActionKind, type Draft, type WeekChoice } from "./ClassActions";
+import { intent, sentence, type ActionKind, type Draft, type WeekChoice } from "../lib/draft";
+import { WhenField } from "./draft/WhenField";
 import { RangeBuilder } from "./RangeBuilder";
 import { Button, Skeleton } from "./ui";
 
@@ -22,12 +24,7 @@ export function RequestBuilder({ onClose, onSent }: { onClose: () => void; onSen
   const { user } = useAuth();
   const teaching = ["faculty", "guest_faculty", "hod"].includes(user?.role ?? "");
   const group = user?.role === "student" && user.id.startsWith("ST-") ? user.id.slice(3) : null;
-  const { data: inst } = useApi(() => api.instance(), []);
-  const { data: cal } = useApi(() => api.calendar(), []);
-  const [week, setWeek] = useState<number | null>(null);
-  useEffect(() => {
-    if (cal && week === null) setWeek(startWeek(cal));
-  }, [cal, week]);
+  const { inst, cal, week, setWeek, dayName, slotLabel: time } = useWeek();
   const { data: tt } = useApi(() => (week === null ? Promise.resolve(null) : api.timetable({ week })), [week]);
   const all = useMemo(() => tt?.entries ?? [], [tt]);
   const [day, setDay] = useState<string | null>(null); // null: every day
@@ -62,8 +59,6 @@ export function RequestBuilder({ onClose, onSent }: { onClose: () => void; onSen
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
 
-  const time = (s: number) => inst?.slots.find((x) => x.slot === s)?.label ?? `slot ${s}`;
-  const dayName = (d: string) => inst?.day_names[d] ?? d;
   const at = (d: string) => (cal && week ? dateOf(cal, week, d) : dayName(d));
   const free = inst && cls ? freeSlotsFor(inst, cal, week, all, cls) : [];
   const swaps = cls ? swappableWith(all, cls) : [];
@@ -96,8 +91,6 @@ export function RequestBuilder({ onClose, onSent }: { onClose: () => void; onSen
   const tab = (on: boolean, off = false) =>
     clsx("shrink-0 rounded-md border px-2.5 py-1 text-[12.5px] transition-colors", off && "opacity-40",
          on ? "border-brand bg-brand/10 text-brand" : "border-line text-ink-2 hover:bg-panel-2");
-  const modes: Record<ActionKind, WeekChoice["mode"][]> = { cancel: ["this", "pick"], move: ["this", "from", "pick"], swap: ["this", "every", "pick"] };
-  const modeLabel = { this: `Week ${week} only`, from: `From week ${week} on`, every: "Every week", pick: "Pick weeks" };
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-6"
@@ -204,23 +197,11 @@ export function RequestBuilder({ onClose, onSent }: { onClose: () => void; onSen
                       ) : <p className="text-[12.5px] text-ink-3">No colleague's class in week {week} can be swapped with this one.</p>}
                     </Row>
                   )}
-                  {kind && (
+                  {kind && cal && week !== null && (
                     <Row label="Weeks">
-                      {modes[kind].map((m) => (
-                        <button key={m} onClick={() => setWhen({ mode: m, weeks: m === "pick" ? when.weeks : [] })} className={tab(when.mode === m)}>
-                          {modeLabel[m]}
-                        </button>
-                      ))}
-                    </Row>
-                  )}
-                  {kind && when.mode === "pick" && cal && (
-                    <Row label="">
-                      {cal.weeks.filter((w) => w.week >= cal.current_week).map((w) => (
-                        <button key={w.week} className={tab(when.weeks.includes(w.week))}
-                                onClick={() => setWhen({ mode: "pick", weeks: when.weeks.includes(w.week) ? when.weeks.filter((x) => x !== w.week) : [...when.weeks, w.week] })}>
-                          {w.week}
-                        </button>
-                      ))}
+                      <div className="min-w-0 flex-1">
+                        <WhenField kind={kind} value={when} onChange={setWhen} week={week} weeks={cal.weeks.length} current={cal.current_week} />
+                      </div>
                     </Row>
                   )}
                   {kind && (

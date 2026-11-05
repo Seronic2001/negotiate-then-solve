@@ -2,13 +2,19 @@ import { ExternalLink, Plus, Search, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { RequestBuilder } from "../components/RequestBuilder";
-import { Button, Skeleton, StatusBadge } from "../components/ui";
+import { Button, Skeleton, StatusBadge, Tabs } from "../components/ui";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import type { CaseSummary, Status } from "../lib/types";
 
 /** Requests that have run their course: they can be taken off the list (as web.app.FINISHED). */
 const FINISHED = new Set<Status>(["published", "refused", "denied", "answered", "forwarded", "withdrawn"]);
+
+type Show = "all" | "waiting" | "progress" | "done";
+
+/** Where a request stands for its sender: waiting on their answer, still under way, or run its course. */
+const stage = (r: CaseSummary): Exclude<Show, "all"> =>
+  r.waits_on_you || r.status === "clarification_requested" ? "waiting" : FINISHED.has(r.status) ? "done" : "progress";
 
 /** The Requests tab of faculty and class representatives (CHAT-PLAN step 6): their requests as a table, newest
  * first: the number, what was asked, the status, and quick actions (Open, Withdraw where allowed, Delete from
@@ -20,7 +26,10 @@ export default function RequestsTable() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [building, setBuilding] = useState(false); // the New request builder is open
-  const rows = (data ?? []).filter((r) => !q || `${r.id} ${r.text}`.toLowerCase().includes(q.toLowerCase()));
+  const [show, setShow] = useState<Show>("all");
+  const found = (data ?? []).filter((r) => !q || `${r.id} ${r.text}`.toLowerCase().includes(q.toLowerCase()));
+  const rows = found.filter((r) => show === "all" || stage(r) === show);
+  const count = (x: Show) => found.filter((r) => stage(r) === x).length;
 
   const act = async (r: CaseSummary, what: "withdraw" | "hide") => {
     if (what === "withdraw" && !window.confirm(`Withdraw ${r.id}? Everything it set in motion is undone.`)) return;
@@ -50,13 +59,23 @@ export default function RequestsTable() {
           </Button>
         </div>
       </div>
+      <Tabs
+        tabs={[
+          { id: "all", label: "All" },
+          { id: "waiting", label: "Waiting on you", count: count("waiting") },
+          { id: "progress", label: "In progress", count: count("progress") },
+          { id: "done", label: "Finished", count: count("done") },
+        ]}
+        value={show}
+        onChange={setShow}
+      />
       {error && <p className="text-[12.5px] text-bad">{error}</p>}
 
       {loading && !data ? (
         <Skeleton className="h-48" />
       ) : !rows.length ? (
         <p className="py-16 text-center text-[13.5px] text-ink-3">
-          {q ? "No request matches." : "No requests yet. Make one in the chat."}
+          {q || show !== "all" ? "No request matches." : "No requests yet. Make one in the chat."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-line">

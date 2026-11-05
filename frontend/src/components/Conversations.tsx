@@ -1,13 +1,12 @@
 import clsx from "clsx";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, CalendarClock, ChevronDown, MessagesSquare, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { CalendarClock, MessagesSquare } from "lucide-react";
+import { useMemo } from "react";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { ago, STATUS, TONE_CLASS } from "../lib/meta";
 import type { CaseSummary, FeedItem, Status } from "../lib/types";
 import { Options } from "./RequestThread";
+import { ReplyBubble } from "./thread/Bubble";
 
 /** Everything one person is told, as conversations: one per request of theirs, and one per colleague's
  * request that asks something of them or changed their timetable. Built from their requests and the
@@ -151,84 +150,6 @@ export function ConversationList({ items, selected, onSelect, q = "", short = fa
   );
 }
 
-/** The conversations in a dropdown, grouped by what they wait on; picking one opens it. */
-export function ConversationSwitcher({ items, selected, onSelect }: { items: Conversation[]; selected: string | null; onSelect: (key: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const click = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("mousedown", click);
-    window.addEventListener("keydown", key);
-    return () => {
-      window.removeEventListener("mousedown", click);
-      window.removeEventListener("keydown", key);
-    };
-  }, [open]);
-
-  const needs = items.filter((c) => c.needs).length;
-  const unread = items.filter((c) => c.unread && !c.needs).length;
-  const current = items.find((c) => c.key === selected);
-
-  return (
-    <div className="relative min-w-0 flex-1" ref={box}>
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-2">
-        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{current ? current.title : "Requests and messages"}</span>
-        {needs > 0 ? (
-          <span className="shrink-0 rounded bg-warn/15 px-1.5 text-[11px] font-semibold text-warn">{needs} needs you</span>
-        ) : (
-          unread > 0 && <span className="shrink-0 rounded bg-brand px-1.5 text-[11px] font-semibold text-panel">{unread} new</span>
-        )}
-        <ChevronDown size={15} className={clsx("shrink-0 text-ink-3 transition-transform", open && "rotate-180")} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-            className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-line bg-panel shadow-lg"
-          >
-            <div className="flex items-center gap-2 border-b border-line px-3">
-              <Search size={14} className="text-ink-3" />
-              <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a request or message" className="h-9 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-3" />
-            </div>
-            <div className="max-h-[400px] overflow-y-auto py-1">
-              <ConversationList
-                items={items}
-                selected={selected}
-                q={q}
-                short
-                onSelect={(key) => {
-                  onSelect(key);
-                  setOpen(false);
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between border-t border-line px-3 py-2 text-[12.5px]">
-              <button
-                onClick={() => {
-                  onSelect(null);
-                  setOpen(false);
-                }}
-                className="text-ink-2 hover:text-ink"
-              >
-                Start a new request
-              </button>
-              <Link to="/requests" className="flex items-center gap-1 text-brand hover:underline">
-                See all requests <ArrowRight size={13} />
-              </Link>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 /** A colleague's request as it reached this person: what was asked, the options sent to them, and how
  * it changed their timetable. */
 export function ColleagueThread({ c, onChanged }: { c: Conversation; onChanged: () => void }) {
@@ -236,24 +157,20 @@ export function ColleagueThread({ c, onChanged }: { c: Conversation; onChanged: 
   return (
     <div className="space-y-3">
       {c.feed[0]?.request && (
-        <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-line bg-panel-2/60 px-3 py-2">
-          <p className="text-[11px] text-ink-3">A colleague's request</p>
-          <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">“{c.feed[0].request}”</p>
-        </div>
+        <ReplyBubble label="A colleague's request">“{c.feed[0].request}”</ReplyBubble>
       )}
       {items.map((f) =>
         f.kind === "negotiation" && f.message ? (
           <Options key={f.id} item={f.message} onDone={onChanged} />
         ) : (
-          <div key={f.id} className="max-w-[92%] rounded-lg rounded-bl-sm border border-info/30 bg-info/5 px-3 py-2">
-            <p className="text-[11.5px] font-medium text-info">{f.title}</p>
-            {f.text && <p className="mt-0.5 whitespace-pre-line text-[13.5px] leading-relaxed">{f.text}</p>}
-            <p className="mt-1 text-[11px] text-ink-3">
-              {f.from_name ? `${f.from_name} · ` : ""}
-              {ago(f.at)}
-              {f.version != null ? ` · timetable version ${f.version}` : ""}
-            </p>
-          </div>
+          <ReplyBubble
+            key={f.id}
+            tone="info"
+            label={f.title}
+            footer={`${f.from_name ? `${f.from_name} · ` : ""}${ago(f.at)}${f.version != null ? ` · timetable version ${f.version}` : ""}`}
+          >
+            {f.text}
+          </ReplyBubble>
         ),
       )}
     </div>

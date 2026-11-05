@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { FlaskConical, GraduationCap, MapPin } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
-import { colorFor } from "../lib/meta";
+import { classTile } from "./classTile";
 import type { InstanceView, TimetableEntry } from "../lib/types";
 
 export function TimetableGrid({
@@ -108,7 +108,8 @@ function Row({ children }: { children: ReactNode }) {
 }
 
 function Entry({ e, changed, index, onPick, faded }: { e: TimetableEntry; changed: boolean; index: number; onPick?: (e: TimetableEntry, ev: MouseEvent) => void; faded?: boolean }) {
-  const c = colorFor(e.course);
+  const tile = classTile(e.course, { changed, faded });
+  const c = tile.color;
   const Icon = e.kind === "practical" ? FlaskConical : GraduationCap;
   return (
     <button
@@ -118,12 +119,8 @@ function Entry({ e, changed, index, onPick, faded }: { e: TimetableEntry; change
         onPick?.(e, ev);
       }}
       disabled={faded}
-      className={clsx(
-        "relative w-full overflow-hidden rounded border-l-[3px] px-2 py-1.5 text-left transition-[colors,opacity]",
-        changed && "outline-2 outline-offset-1 outline-brand",
-        faded && "opacity-30",
-      )}
-      style={{ borderColor: c, background: `color-mix(in oklab, ${c} 10%, var(--panel))` }}
+      className={clsx("relative w-full px-2 py-1.5", tile.className)}
+      style={tile.style}
       title={`${e.title} · ${e.faculty_name} · ${e.group_names.join(", ")} · ${e.room_name}`}
     >
       <p className="flex items-center gap-1 truncate text-[11.5px] font-semibold text-ink">
