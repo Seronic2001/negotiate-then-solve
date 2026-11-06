@@ -230,3 +230,41 @@ def test_a_later_message_does_not_take_back_a_request_waiting_for_the_office(dem
     send(c, me, "has it been approved?")
     settled(c, desk, me)
     assert world.orch.cases[cid].status.value == "awaiting_approval"
+
+
+def _submitted(c, world, desk, play, me, week, day_index, reason):
+    day = world.instance.calendar.days[day_index]
+    play.load([call("constrain", rule="unavailable", teacher="me", days=[FULL_DAY[day]], from_week=week, to_week=week,
+                    reason=reason),
+               call("check_draft"), call("submit", message="Sent.")])
+    send(c, me, f"away {FULL_DAY[day]} week {week}")
+    return settled(c, desk, me)[-1]["case"]
+
+
+def test_a_draft_made_before_another_change_is_rebased_when_its_weeks_did_not_change(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 2)
+    week = (world.current_week() or 1) + 5
+    cid = _submitted(c, world, desk, play, me, week, 3, "a workshop")
+    other = world.store.propose_version(dict(world.store.current_version().assignment), "elsewhere", week=week + 2)
+    world.store.publish_version(other.version, COORDINATOR)  # another week changed meanwhile
+    r = c.post(f"/api/approvals/{cid}/approve", headers={"X-User": COORDINATOR})
+    assert r.status_code == 200, r.text
+    assert world.store.current_version(week).version == r.json()["version"]
+    assert world.store.current_version(week + 2).version == other.version  # the other change is kept
+
+
+def test_a_draft_whose_week_changed_since_is_sent_back(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 3)
+    week = (world.current_week() or 1) + 6
+    cid = _submitted(c, world, desk, play, me, week, 4, "a viva")
+    sem = world.store.current_version()
+    moved = dict(sem.assignment)
+    a, b = list(moved)[:2]
+    moved[a], moved[b] = moved[b], moved[a]
+    v = world.store.propose_version(moved, "elsewhere", week=week)
+    world.store.publish_version(v.version, COORDINATOR)
+    r = c.post(f"/api/approvals/{cid}/approve", headers={"X-User": COORDINATOR})
+    assert r.status_code == 409 and f"week {week} changed" in r.json()["detail"]
+    assert world.orch.cases[cid].status.value == "awaiting_approval"

@@ -27,7 +27,7 @@ office is told to run it again.
 
     NTS_AGENT_MODEL    llama (default) | gemini
     NTS_AGENT_URL      llama-server's /v1 (default NTS_LOCAL_URL, else the GPU server)
-    NTS_AGENT_ADAPTER  the LoRA to use (default nts-agent-v6; "" for the base model)
+    NTS_AGENT_ADAPTER  the LoRA to use, by file name (default nts-agent-v6-dpo, the best v6 in runs/eval; "" for the base model)
     NTS_AGENT          the agent configuration (default coordinator-v6, the one nts-agent-v6 was trained on)
     NTS_AGENT_PICK     0 to offer every tool to every message (default: questions get the reading tools only)
 """
@@ -50,7 +50,7 @@ from nts.kernel.instance import Instance as NInstance
 from nts.kernel.schemas import ConcessionEntry as NConcession
 from nts.kernel.schemas import Constraint as NConstraint
 from nts.notices import notices as nts_notices
-from nts.state import ConstraintAdded, ConstraintRemoved, Store, TimetableSet
+from nts.state import ClassCancelled, ConstraintAdded, ConstraintRemoved, Store, TimetableSet
 from nts.state.events import Conceded
 from nts.tools import Reply
 from nts.tools.draft import OFFICE, REP
@@ -106,7 +106,7 @@ def make_model():
         load_dotenv(ROOT / ".env")  # GEMINI_API_KEY
         return GeminiChat(os.environ.get("NTS_AGENT_GEMINI") or None)
     url = os.environ.get("NTS_AGENT_URL") or os.environ.get("NTS_LOCAL_URL") or DEFAULT_URL
-    return OpenAIChat(url, adapter=os.environ.get("NTS_AGENT_ADAPTER", "nts-agent-v6") or None)
+    return OpenAIChat(url, adapter=os.environ.get("NTS_AGENT_ADAPTER", "nts-agent-v6-dpo") or None)
 
 
 def make_agent():
@@ -192,9 +192,10 @@ class AgentDesk:
         changes += [Conceded(entry=NConcession.model_validate(e.model_dump())) for e in w.store.ledger()]
         return Store.create(NInstance.model_validate(w.instance.model_dump()), changes)
 
-    def _resync(self) -> None:
-        """A new mirror when the demo changed it from elsewhere, unless the agent is working on the current one."""
-        if self._mark() == self.synced or any(e.busy for e in self.svc.episodes.values()):
+    def _resync(self, force: bool = False) -> None:
+        """A new mirror when the demo changed it from elsewhere, unless the agent is working on the current one
+        (``force``: all the same, at approval: drafts made on the old one are rebased, ``_rebase``)."""
+        if self._mark() == self.synced or (not force and any(e.busy for e in self.svc.episodes.values())):
             return
         store = self._mirror()
         from nts.bookings import Desk
@@ -479,9 +480,10 @@ class AgentDesk:
         """Commit the case's draft through the kernel, then publish the same timetables in the demo store and
         record its rules and concessions there. Returns the demo version (None: nothing in the timetable moved)."""
         with self.lock:
-            self._resync()
+            self._resync(force=True)
             eid = self.episode_of[case_id]
             case = self.w.orch.cases[case_id]
+            self._rebase(self.svc.get(eid))
             before = len(self.svc.store.events)
             ep = self.svc.approve(eid)
             if ep.status != "approved":
@@ -510,6 +512,28 @@ class AgentDesk:
                           agent_status="approved", **({"more": [v.version for v in published[1:]]} if len(published) > 1 else {}))
             self.synced = self._mark()
             return version
+
+    def _rebase(self, ep: Episode) -> None:
+        """A draft made before other changes were published (someone else's request approved first, a change made
+        with clicks): its changes again on the timetable as it is now, when none of the timetables it writes has
+        changed since; the commit gate then checks the result against everything in force. When one has, it is
+        not guessed at: the office is told to run the request again."""
+        out = ep.outcome
+        if out is None or ep.status != "submitted" or out.draft.base.version == self.svc.store.version:
+            return
+        old, now = out.draft.base, self.svc.store.world
+        weeks = {ch.week for ch in out.draft.changes if isinstance(ch, TimetableSet | ClassCancelled)}
+        moved = [w for w in weeks if _same(old.timetable(w)) != _same(now.timetable(w))]
+        if moved:
+            when = ", ".join("the semester timetable" if w is None else f"week {w}" for w in sorted(moved, key=lambda w: w or 0))
+            raise Conflict(f"{when} changed since this draft was made; ask for it again in the chat")
+        draft = self.svc.store.draft(out.draft.actor, out.draft.episode)
+        try:
+            for ch in out.draft.changes:
+                draft.add(ch)
+        except ValueError as e:
+            raise Conflict(f"the draft no longer applies: {e}; ask for it again in the chat") from None
+        out.draft = draft
 
     def reject(self, case_id: str, approver: str, reason: str) -> None:
         with self.lock:
@@ -580,6 +604,11 @@ class AgentDesk:
 
 
 # -- events as the chat shows them ---------------------------------------------------------------------------------
+
+def _same(tt) -> tuple | None:
+    """A timetable as what it says (where each class is, which are not held), to compare two versions of it."""
+    return None if tt is None else (tuple(sorted(tt.assignment.items())), tuple(sorted(tt.cancelled)))
+
 
 def _short(value, limit: int = 700) -> str:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)

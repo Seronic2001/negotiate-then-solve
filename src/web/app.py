@@ -1246,7 +1246,9 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         number). Each agent message carries its episode as it stands: the steps so far, the answer, a question waiting
         for the person, the request it became. Notice cards of earlier versions are left out."""
         w = W()
-        return desk_of(w).chat_view([m for m in w.store.chat(u["id"], after) if m["kind"] != "notice"])
+        d = desk_of(w)
+        d.sync()  # the requests the agent's replies became, before they are shown
+        return d.chat_view([m for m in w.store.chat(u["id"], after) if m["kind"] != "notice"])
 
     @app.post("/api/chat")
     def chat_send(body: RequestBody, u: dict = Depends(user)) -> list[dict]:
@@ -1474,6 +1476,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         on them (``waits_on_you``: a question back, or options to choose from). ``all``: every request they may
         see."""
         w = W()
+        desk_of(w).sync()
         out = []
         me = u["id"]
         hidden = w.store.hidden(me) if scope == "mine" else set()
@@ -1639,6 +1642,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.get("/api/feed")
     def feed(u: dict = Depends(user)) -> list[dict]:
         """Everything addressed to this person: the one place they hear from the timetable office."""
+        desk_of(W()).sync()
         return _feed(W(), u, decides, handles)
 
     @app.post("/api/feed/seen")
@@ -1749,6 +1753,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.get("/api/approvals")
     def approvals(u: dict = Depends(view("approvals"))) -> list[dict]:
         w = W()
+        desk_of(w).sync()
         return [_case_detail(w, c) for c in w.orch.pending()]
 
     @app.post("/api/approvals/{case_id}/approve")

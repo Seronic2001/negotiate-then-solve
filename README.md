@@ -37,7 +37,7 @@ timetable still go through the demo pipeline.
 
 ```powershell
 $env:NTS_AGENT_URL = "http://10.1.25.191:8080/v1"   # llama-server with the agent adapter (default: NTS_LOCAL_URL)
-$env:NTS_AGENT_ADAPTER = "nts-agent-v6"              # default; "" for the base model
+$env:NTS_AGENT_ADAPTER = "nts-agent-v6-dpo"          # default; "" for the base model
 $env:NTS_AGENT = "coordinator-v6"                    # default: the configuration nts-agent-v6 was trained on
 uv run nts-web                                       # or $env:NTS_AGENT_MODEL = "gemini" (GEMINI_API_KEY in .env)
 ```
