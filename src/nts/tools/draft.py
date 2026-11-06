@@ -1,0 +1,426 @@
+"""Draft tools: change the episode's draft, one numbered change at a time.
+
+A change is one or two kernel constraints written from names, days, hours and weeks. Nothing is solved
+here: ``check_draft`` asks the solver what the draft does, and ``submit`` hands it on. Who may change
+what is decided here too: a teacher changes only their own classes and times; the timetable office
+(``actor == "coordinator"``) may set rules for anyone, a section or a room.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from nts.kernel.instance import Session
+from nts.kernel.schemas import (
+    Constraint,
+    ConstraintType,
+    Justification,
+    RoomRequirement,
+    Source,
+    Tier,
+    Validity,
+    When,
+)
+from nts.kernel.schemas import (
+    Scope as Who,
+)
+from nts.kernel.semantics import room_compatible
+from nts.state import ClassCancelled, ConstraintAdded, ConstraintRemoved, Draft
+from nts.state.world import Timetable
+
+from . import words
+from .names import FULL_DAY, Directory, hour
+from .read import _class
+from .registry import Context, Refusal, Scope, tool
+
+OFFICE = "coordinator"
+REP = "rep:"  # a class representative's person id: "rep:" + the section's id ("rep:G-01")
+CANCEL = "cancel:"  # a cancellation among a draft's changes (``extend.cancel_class``): "cancel:<week>:<session>"
+
+
+def _draft(ctx: Context) -> Draft:
+    if ctx.draft is None:
+        raise Refusal("no_draft", "this episode has no draft to change")
+    return ctx.draft
+
+
+def _changes(ctx: Context) -> dict[int, list[str]]:
+    """Change number -> the ids of the constraints it added (kept in the episode's scratch)."""
+    return ctx.scratch.setdefault("changes", {})
+
+
+def _record(ctx: Context, constraints: list[Constraint], request: str | None) -> dict:
+    draft, changes = _draft(ctx), _changes(ctx)
+    n = max(changes, default=0) + 1
+    ids = []
+    for i, c in enumerate(constraints):
+        c = c.model_copy(update={"id": f"{draft.episode or 'draft'}-{n}{'abcdefgh'[i] if len(constraints) > 1 else ''}",
+                                 "source": c.source.model_copy(update={"request": request})})
+        try:
+            draft.add(ConstraintAdded(constraint=c))
+        except ValueError as e:
+            raise Refusal("bad_change", str(e)) from None
+        ids.append(c.id)
+    changes[n] = ids
+    inst = draft.world.instance
+    return {"change": n, "added": [words.constraint(inst, draft.world.constraints[i]) for i in ids]}
+
+
+def _validity(ctx: Context, from_week: int | None, to_week: int | None) -> Validity:
+    n = ctx.state.instance.calendar.weeks
+    for w in (from_week, to_week):
+        if w is not None and not 1 <= w <= n:
+            raise Refusal("unknown_week", f"week {w} is not in term", weeks=f"1-{n}")
+    if from_week is not None and to_week is not None and from_week > to_week:
+        raise Refusal("bad_arguments", f"week {from_week} comes after week {to_week}")
+    return Validity(from_week=from_week, to_week=to_week)
+
+
+def _slots(d: Directory, from_hour: str | None, to_hour: str | None) -> list[int] | None:
+    if from_hour is None and to_hour is None:
+        return None
+    lo = d.slot(from_hour) if from_hour is not None else 0
+    hi = d.slot(to_hour, end=True) if to_hour is not None else d.instance.calendar.slots_per_day
+    if lo >= hi:
+        raise Refusal("bad_arguments", f"{hour(lo)} is not before {hour(hi)}")
+    return list(range(lo, hi))
+
+
+def _tier(ctx: Context, hard: bool, reason: str | None) -> tuple[Tier, Justification]:
+    if not hard:
+        return Tier.PREFERENCE, Justification.NONE
+    if ctx.actor == OFFICE:
+        return Tier.COMMITMENT, Justification.NONE  # the office's own decisions bind
+    if reason:
+        return Tier.VERIFIED_UNAVAILABILITY, Justification.STATED
+    return Tier.OPERATIONAL, Justification.NONE
+
+
+def _may(ctx: Context, scope: Who) -> None:
+    """A teacher may constrain only themselves, their courses and their classes."""
+    if ctx.actor == OFFICE:
+        return
+    inst = ctx.state.instance
+    taught = {s.course for s in inst.sessions if s.faculty == ctx.actor}
+    mine = {c for c in taught if all(s.faculty == ctx.actor for s in inst.sessions if s.course == c)}  # not shared
+    ok = (scope.faculty == ctx.actor or (scope.course in mine) or
+          (scope.session is not None and inst.session_by_id[scope.session].faculty == ctx.actor))
+    if not ok:
+        raise Refusal("not_allowed", "a teacher can change only their own times and classes; "
+                                     "the timetable office decides for other people, sections and rooms")
+
+
+# -- the tools ------------------------------------------------------------------
+
+
+class Constrain(BaseModel):
+    rule: Literal["unavailable", "no_classes", "classes_only", "room_needed"] = Field(
+        description="unavailable: cannot be there; no_classes: keep free; classes_only: only then; "
+                    "room_needed: needs a kind of room")
+    teacher: str | None = Field(None, description="Name, or 'me'")
+    section: str | None = None
+    room: str | None = Field(None, description="unavailable: the room is closed")
+    course: str | None = None
+    days: list[str] = Field(default_factory=list, description="Empty: every day")
+    from_hour: str | None = Field(None, description="'2 pm'; none: from the start of the day")
+    to_hour: str | None = Field(None, description="Until ('5 pm'); none: to the end of the day")
+    from_week: int | None = Field(None, description="No weeks: the whole term")
+    to_week: int | None = Field(None, description="= from_week for one week")
+    firm: bool = Field(True, description="false for 'if possible', 'I'd prefer'")
+    reason: str | None = Field(None, description="The person's reason, if given")
+    room_kind: Literal["lecture", "lab"] | None = None
+    equipment: list[str] = Field(default_factory=list)
+    rooms: list[str] = Field(default_factory=list, description="room_needed: one of these")
+
+
+@tool(Scope.DRAFT)
+def constrain(ctx: Context, args: Constrain) -> dict:
+    """Add a rule to the draft for one teacher, section, room or course: when they cannot or should not
+    have classes, when classes must be, or what room they need."""
+    d = Directory(ctx.state.instance)
+    named = [x for x in (args.teacher, args.section, args.room, args.course) if x]
+    if len(named) != 1:  # the agent repeated this call word for word when it said no more ("schedule a class ...")
+        both = args.teacher and args.course and not (args.section or args.room)
+        raise Refusal("bad_arguments", "name exactly one of teacher, section, room or course" + (
+            f"; for a rule on the course's classes give course={args.course!r} alone (they are the teacher's), and to "
+            "hold a new or extra class use add_class(course, week, day, hour) instead" if both else ""))
+    scope = (Who(faculty=d.teacher(args.teacher, ctx.actor).id) if args.teacher else
+             Who(group=d.section(args.section).id) if args.section else
+             Who(room=d.room(args.room).id) if args.room else Who(course=d.course(args.course)))
+    _may(ctx, scope)
+    when = When(days=[d.day(x) for x in args.days] or None, slots=_slots(d, args.from_hour, args.to_hour))
+    valid = _validity(ctx, args.from_week, args.to_week)
+    owner = scope.faculty or (ctx.actor if ctx.actor != OFFICE else None)
+    room = None
+    if args.rule == "room_needed":
+        if args.room:
+            raise Refusal("bad_arguments", "for room_needed, give the room in 'rooms' and who needs it")
+        if not (args.room_kind or args.equipment or args.rooms):
+            raise Refusal("bad_arguments", "say which room, kind of room or equipment is needed")
+        known = {e for r in d.instance.rooms for e in r.equipment}
+        if unknown := [e for e in args.equipment if e not in known]:
+            raise Refusal("unknown_equipment", f"no room has {', '.join(unknown)}", equipment=sorted(known))
+        room = RoomRequirement(rooms=[d.room(r).id for r in args.rooms] or None, equipment=args.equipment,
+                               room_type=args.room_kind)
+        kind, hard = ConstraintType.REQUIRE_ROOM, args.firm
+    elif args.rule == "unavailable":  # "unavailable, if possible" is a time kept free if possible
+        kind, hard = (ConstraintType.UNAVAILABLE, True) if args.firm else (ConstraintType.AVOID, False)
+    elif args.room:
+        raise Refusal("bad_arguments", "for a room, only 'unavailable' (closed) applies")
+    else:
+        kind, hard = (ConstraintType.AVOID if args.rule == "no_classes" else ConstraintType.PREFER), args.firm
+    tier, why = _tier(ctx, hard, args.reason)
+    c = Constraint(id="new", type=kind, hard=hard, tier=tier, owner=owner, scope=scope, when=when, room=room,
+                   justification=why, valid=valid, source=Source())
+    result = _record(ctx, [c], args.reason)
+    if note := (_cancel_missed(ctx.request, args.rule) or _absence_missed(ctx.request, valid, ctx.week)
+                or (None if _ABSENT.search(ctx.request or "") else _standing_missed(ctx.request, valid))):
+        result["note"] = note
+    return result
+
+
+class MoveClass(BaseModel):
+    course: str
+    kind: Literal["lecture", "tutorial", "practical"] | None = None
+    section: str | None = None
+    teacher: str | None = None
+    on_day: str | None = Field(None, description="Where it is now (to pick one class)")
+    at_hour: str | None = None
+    to_day: str
+    to_hour: str | None = Field(None, description="None: any time that day")
+    to_room: str | None = None
+    from_week: int | None = Field(None, description="No weeks: the whole term")
+    to_week: int | None = Field(None, description="= from_week for one week")
+    firm: bool = True
+
+
+@tool(Scope.DRAFT)
+def move_class(ctx: Context, args: MoveClass) -> dict:
+    """Move one class to another day (and hour, room) in the draft. Pick it by course and, if needed,
+    kind, section, teacher or where it is now."""
+    d = Directory(ctx.state.instance)
+    inst = d.instance
+    valid, tt = _weeks(ctx, args.from_week, args.to_week)
+    s = _pick(ctx, d, tt, args.course, args.kind, args.section, args.teacher, args.on_day, args.at_hour,
+              to_hour=args.to_hour)
+    scope = Who(session=s.id)
+    _may(ctx, scope)
+    day = d.day(args.to_day)
+    slots = None if args.to_hour is None else _slots_for(inst, s, d.slot(args.to_hour))
+    tier, why = _tier(ctx, args.firm, None)
+    out = [Constraint(id="new", type=ConstraintType.PREFER, hard=args.firm, tier=tier, owner=s.faculty, scope=scope,
+                      when=When(days=[day], slots=slots), justification=why, valid=valid)]
+    if args.to_room:
+        room = d.room(args.to_room)
+        if not room_compatible(inst, s, room):
+            raise Refusal("room_unsuitable", f"{room.name} cannot hold this class "
+                          f"({inst.session_size(s)} students, a {s.room_type.value} room"
+                          + (f" with {words.joined(s.equipment)}" if s.equipment else "") + ")")
+        out.append(Constraint(id="new", type=ConstraintType.REQUIRE_ROOM, hard=args.firm, tier=tier, owner=s.faculty,
+                              scope=scope, room=RoomRequirement(rooms=[room.id]), justification=why, valid=valid))
+    result = _record(ctx, out, None)
+    if args.to_hour is None and (asked := _hour_asked(ctx.request, day)):
+        result["note"] = (f"the request says {FULL_DAY[day]} at {asked}, and this change has no to_hour, so the class "
+                          f"may land at any hour that day; retract it and give to_hour if they asked for {asked}")
+    elif note := _range_missed(ctx.request, valid) or _standing_missed(ctx.request, valid):
+        result["note"] = note
+    return result
+
+
+def _weeks(ctx: Context, from_week: int | None, to_week: int | None) -> tuple[Validity, Timetable]:
+    """The weeks a class change holds in (a start week with no end is that week, unless the request says from
+    then on or names no week at all), and the timetable its class is picked from."""
+    req = ctx.request or ""
+    if from_week is not None and to_week is None and not _ONWARD.search(req) and _NAMES_WEEK.search(req):
+        to_week = from_week
+    valid = _validity(ctx, from_week, to_week)
+    tt = ctx.state.timetable(from_week or ctx.week)
+    if tt is None:
+        raise Refusal("no_timetable", "there is no timetable yet")
+    return valid, tt
+
+
+def _pick(ctx: Context, d: Directory, tt: Timetable, course: str, kind: str | None, section: str | None,
+          teacher: str | None, on_day: str | None, at_hour: str | None, *, to_hour: str | None = None) -> Session:
+    """The one class a change is about, picked by course and, if needed, kind, section, teacher or where it is now."""
+    inst = d.instance
+    courses = d.courses(course)
+    who = d.teacher(teacher, ctx.actor).id if teacher else (ctx.actor if ctx.actor != OFFICE else None)
+    sec = d.section(section).id if section else None
+    day = d.day(on_day) if on_day else None
+    at = d.slot(at_hour) if at_hour else None
+
+    def fits(s: Session) -> bool:
+        p = tt.assignment.get(s.id)
+        return (s.course in courses and (kind is None or s.kind.value == kind)
+                and (who is None or s.faculty == who) and (sec is None or sec in s.groups)
+                and p is not None and (day is None or p.day == day)
+                and (at is None or p.slot <= at < p.slot + s.duration))
+
+    found = [s for s in inst.sessions if fits(s)]
+    if not found:
+        raise Refusal("no_such_class", f"no {inst.course_title(next(iter(courses)))} class matches"
+                      + (" among your classes" if ctx.actor != OFFICE else ""))
+    if len(found) > 1:
+        rows = []
+        for s in found:
+            p = tt.assignment[s.id]
+            rows.append({**_class(inst, s, p.day, p.slot, p.room), "pick_with": {"on_day": FULL_DAY[p.day],
+                                                                                "at_hour": hour(p.slot)}})
+        hint: dict = {"candidates": rows}
+        if at is None and to_hour is not None and any(r["from"] == hour(d.slot(to_hour)) for r in rows):
+            hint["note"] = (f"to_hour is where the class goes; {to_hour} is where one of them is now, which goes in "
+                            "at_hour (with on_day)")
+        raise Refusal("ambiguous_class", f"{len(found)} classes match; say which with on_day and at_hour", **hint)
+    return found[0]
+
+
+def _slots_for(inst, s: Session, q: int) -> list[int]:
+    if q + s.duration > inst.calendar.slots_per_day:
+        raise Refusal("bad_arguments", f"a {s.duration}-hour class from {hour(q)} runs past the end of the day")
+    return list(range(q, q + s.duration))
+
+
+_RANGE = re.compile(r"\bweeks?\s+(\d{1,2})\s*(?:to|-|–|through|till|until|and)\s*(?:week\s+)?(\d{1,2})\b", re.IGNORECASE)
+
+
+def _range_missed(request: str, valid: Validity) -> str | None:
+    """A note when the request names a run of weeks ("weeks 6 to 8") and the change does not cover it."""
+    m = _RANGE.search(request or "")
+    if not m:
+        return None
+    lo, hi = int(m.group(1)), int(m.group(2))
+    if lo >= hi or (valid.from_week, valid.to_week) == (lo, hi):
+        return None
+    return (f"the request says weeks {lo} to {hi}, and this change holds in "
+            + ("every week" if valid.from_week is None else f"weeks {valid.from_week} to {valid.to_week or 'the end'}")
+            + f"; retract it and give from_week={lo}, to_week={hi} if that is what they asked")
+
+
+def _standing_missed(request: str | None, valid: Validity) -> str | None:
+    """A note when a change holds one week and the request names no week ("from now on", or nothing said)."""
+    if valid.from_week is None or valid.from_week != valid.to_week or _NAMES_WEEK.search(request or ""):
+        return None
+    return (f"the request names no week, so it holds from now to the end of term, and this change holds in week "
+            f"{valid.from_week} only; retract it and give from_week={valid.from_week} with no to_week")
+
+
+# "week 10", and as people type it: "wee 10", "wk 10", "w10", "10th week"
+_NAMES_WEEK = re.compile(r"\b(?:weeks?|wee?k?s?|wks?|w)\.?\s*\d|\b\d+(?:st|nd|rd|th)?\s+week\b|"
+                         r"\b(this|next|coming|that) week\b|\b(today|tomorrow)\b", re.IGNORECASE)
+# a one-off absence ("I am absent on Thursday"), as against a standing wish ("no classes on Thursdays")
+_ABSENT = re.compile(r"\b(absent|away|on leave|leave|sick|ill|conference|workshop|travel\w*|out of (?:town|station)|"
+                     r"not (?:be )?(?:there|around|available|in)|won'?t be|can'?t (?:come|make it))\b", re.IGNORECASE)
+_EVERY = re.compile(r"\bevery\b|\b(?:mon|tues|wednes|thurs|fri|satur)days\b|\balways\b", re.IGNORECASE)
+_CANCEL = re.compile(r"\bcancel\w*\b", re.IGNORECASE)
+
+
+def _absence_missed(request: str | None, valid: Validity, week: int | None) -> str | None:
+    """A note when a one-off absence that names no week is drafted for the rest of term: "absent on Thursday" is
+    this Thursday, not every Thursday (that change was approved once, for every Thursday)."""
+    if (not request or not _ABSENT.search(request) or _NAMES_WEEK.search(request) or _ONWARD.search(request)
+            or _EVERY.search(request) or valid.to_week is not None or week is None):
+        return None
+    return (f"an absence that names no week is the next such day, this week (week {week}), not every week to the end of "
+            f"term; retract it and give from_week={week}, to_week={week}, or ask the requester whether they mean every "
+            "week")
+
+
+def _cancel_missed(request: str | None, rule: str) -> str | None:
+    """A note when the request asks to cancel classes and the change only makes the teacher unavailable, which moves
+    the classes (and cannot, when every day of the week is blocked) instead of cancelling them."""
+    if rule != "unavailable" or not request or not _CANCEL.search(request):
+        return None
+    return ("they asked to cancel their classes, and an unavailable rule moves them to other times instead; to cancel, "
+            "retract this and call cancel_class for each of their classes that week (classes_of lists them)")
+_ONWARD = re.compile(r"\b(from now on|from then on|onwards?|rest of (the )?(term|semester)|every week|for good|"
+                     r"permanently|until the end|from (this|next) week on)\b", re.IGNORECASE)
+
+
+def _hour_asked(request: str, day: str) -> str | None:
+    """The hour a request names right after ``day`` ("Tuesday at 12 pm"), if it names one."""
+    m = re.search(rf"\b(?:{FULL_DAY[day]}|{day})\w*\b[^.;,]{{0,12}}?\b(\d{{1,2}}(?::\d\d)?\s*[ap]\.?m\b\.?|noon)",
+                  request, re.IGNORECASE)
+    return m.group(1) if m else None
+
+
+class Retract(BaseModel):
+    change: int = Field(description="The change number")
+
+
+@tool(Scope.DRAFT)
+def retract(ctx: Context, args: Retract) -> dict:
+    """Take one of this draft's changes back out."""
+    draft, changes = _draft(ctx), _changes(ctx)
+    if args.change not in changes:
+        raise Refusal("unknown_change", f"there is no change {args.change}", changes=sorted(changes))
+    for cid in changes.pop(args.change):
+        if cid.startswith(CANCEL):
+            week, sid = cid.removeprefix(CANCEL).split(":", 1)
+            draft.add(ClassCancelled(week=int(week), session=sid, cancelled=False))
+        else:
+            draft.add(ConstraintRemoved(id=cid))
+    return {"retracted": args.change, "left": sorted(changes)}
+
+
+class ListDraft(BaseModel):
+    pass
+
+
+@tool(Scope.DRAFT)
+def list_draft(ctx: Context, args: ListDraft) -> list[dict]:
+    """The changes in the draft so far, by number."""
+    world = _draft(ctx).world
+    return [{"change": n, "rules": [_cancelled(world, i) if i.startswith(CANCEL) else
+                                    words.constraint(world.instance, world.constraints[i]) for i in ids]}
+            for n, ids in sorted(_changes(ctx).items())]
+
+
+def _cancelled(world, marker: str) -> str:
+    week, sid = marker.removeprefix(CANCEL).split(":", 1)
+    inst = world.instance
+    s = inst.session_by_id[sid]
+    return f"the {inst.course_title(s.course)} {s.kind.value} of {inst.faculty_by_id[s.faculty].name}: not held in week {week}"
+
+
+class SwapClasses(BaseModel):
+    course: str = Field(description="The first class")
+    on_day: str
+    at_hour: str
+    other_course: str = Field(description="The second class")
+    other_day: str
+    other_hour: str
+    from_week: int | None = Field(None, description="No weeks: the whole term")
+    to_week: int | None = None
+
+
+@tool(Scope.REARRANGE)
+def swap_classes(ctx: Context, args: SwapClasses) -> dict:
+    """Swap two of the same teacher's classes in the draft: each goes to the other's day and hour. Give each
+    class by course and where it is now."""
+    d = Directory(ctx.state.instance)
+    inst = d.instance
+    valid, tt = _weeks(ctx, args.from_week, args.to_week)
+    a = _pick(ctx, d, tt, args.course, None, None, None, args.on_day, args.at_hour)
+    b = _pick(ctx, d, tt, args.other_course, None, None, None, args.other_day, args.other_hour)
+    if a.id == b.id:
+        raise Refusal("bad_arguments", "both name the same class")
+    if a.faculty != b.faculty:
+        raise Refusal("bad_arguments", "only two classes of the same teacher can be swapped; use move_class for each")
+    for s in (a, b):
+        _may(ctx, Who(session=s.id))
+    tier, why = _tier(ctx, True, None)
+    pa, pb = tt.assignment[a.id], tt.assignment[b.id]
+    out = [Constraint(id="new", type=ConstraintType.PREFER, hard=True, tier=tier, owner=s.faculty,
+                      scope=Who(session=s.id), when=When(days=[p.day], slots=_slots_for(inst, s, p.slot)),
+                      justification=why, valid=valid) for s, p in ((a, pb), (b, pa))]
+    result = _record(ctx, out, None)
+    if note := _range_missed(ctx.request, valid):
+        result["note"] = note
+    return result
+
+
+DRAFT_TOOLS = [constrain, move_class, retract, list_draft, swap_classes]
