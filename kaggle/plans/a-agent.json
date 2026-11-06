@@ -1,0 +1,2031 @@
+{
+ "name": "a-agent",
+ "account": "shubhadeepmandal",
+ "kernel_sources": [
+  "shubhadeepmandal/nts-eval-tools",
+  "shubhadeepmandal/nts-agent-v6"
+ ],
+ "budget_hours": 10.5,
+ "server": {
+  "np": 4,
+  "ctx": 32768
+ },
+ "jobs": [
+  {
+   "id": "agent/v6-e2/eval/q_free",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "q_free"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/q_classes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "q_classes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/away",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "away"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/preference",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "preference"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/room_closed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "room_closed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/not_allowed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "not_allowed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/impossible",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "impossible"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/ambiguous",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "ambiguous"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/clarify",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "clarify"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/negotiate_refused",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "negotiate_refused"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/rules_question",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "rules_question"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/weekend",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "weekend"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/clarify_negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "clarify_negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/hedged_yes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "hedged_yes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/no_reply",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "no_reply"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/two_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "two_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/away_days",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "away_days"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/three_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "three_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/swap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "swap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/week_range",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "week_range"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/fallback",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "fallback"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/cancel_one",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "cancel_one"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/make_up",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "make_up"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/hour_limit",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "hour_limit"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/club_booking",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "club_booking"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/counter_offer",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "counter_offer"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/refused_alternative",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "refused_alternative"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/injection",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "injection"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/window_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "window_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/or_windows",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "or_windows"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/ranked_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "ranked_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/day_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "day_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/days_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "days_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/free_gap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "free_gap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/after_lecture",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "after_lecture"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/courses_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "courses_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/even_weeks",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "even_weeks"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/except_week",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "except_week"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/two_windows_off",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "two_windows_off"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval/move_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "move_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/q_free",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "q_free"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/q_classes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "q_classes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/away",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "away"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/preference",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "preference"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/room_closed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "room_closed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/not_allowed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "not_allowed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/impossible",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "impossible"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/ambiguous",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "ambiguous"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/clarify",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "clarify"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/negotiate_refused",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "negotiate_refused"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/rules_question",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "rules_question"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/weekend",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "weekend"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/clarify_negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "clarify_negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/hedged_yes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "hedged_yes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/no_reply",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "no_reply"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/two_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "two_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/away_days",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "away_days"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/three_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "three_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/swap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "swap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/week_range",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "week_range"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/fallback",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "fallback"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/cancel_one",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "cancel_one"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/make_up",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "make_up"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/hour_limit",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "hour_limit"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/club_booking",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "club_booking"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/counter_offer",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "counter_offer"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/refused_alternative",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "refused_alternative"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/injection",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "injection"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/window_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "window_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/or_windows",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "or_windows"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/ranked_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "ranked_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/day_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "day_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/days_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "days_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/free_gap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "free_gap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/after_lecture",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "after_lecture"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/courses_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "courses_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/even_weeks",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "even_weeks"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/except_week",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "except_week"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/two_windows_off",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "two_windows_off"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e2/eval-big/move_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-100",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "move_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/q_free",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "q_free"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/q_classes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "q_classes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/away",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "away"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/preference",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "preference"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/room_closed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "room_closed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/not_allowed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "not_allowed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/impossible",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "impossible"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/ambiguous",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "ambiguous"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/clarify",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "clarify"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/negotiate_refused",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "negotiate_refused"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/rules_question",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "rules_question"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/weekend",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "weekend"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/clarify_negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "clarify_negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/hedged_yes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "hedged_yes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/no_reply",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "no_reply"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/two_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "two_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/away_days",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "away_days"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/three_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "three_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/swap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "swap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/week_range",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "week_range"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/fallback",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "fallback"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/cancel_one",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "cancel_one"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/make_up",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "make_up"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/hour_limit",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "hour_limit"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/club_booking",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "club_booking"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/counter_offer",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "counter_offer"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/refused_alternative",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "refused_alternative"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/injection",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "injection"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/window_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "window_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/or_windows",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "or_windows"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/ranked_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "ranked_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/day_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "day_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/days_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "days_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/free_gap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "free_gap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/after_lecture",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "after_lecture"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/courses_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "courses_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/even_weeks",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "even_weeks"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/except_week",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "except_week"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/two_windows_off",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "two_windows_off"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval/move_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "move_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/q_free",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "q_free"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/q_classes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "q_classes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/away",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "away"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/preference",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "preference"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/room_closed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "room_closed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/not_allowed",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "not_allowed"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/impossible",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "impossible"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/ambiguous",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "ambiguous"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/clarify",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "clarify"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/negotiate_refused",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "negotiate_refused"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/rules_question",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "rules_question"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/weekend",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "weekend"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/clarify_negotiate",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "clarify_negotiate"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/hedged_yes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "hedged_yes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/no_reply",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "no_reply"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/two_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "two_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/away_days",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "away_days"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/three_changes",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "three_changes"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/swap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "swap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/week_range",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "week_range"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/fallback",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "fallback"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/cancel_one",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "cancel_one"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/make_up",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "make_up"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/hour_limit",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "hour_limit"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/club_booking",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "club_booking"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/counter_offer",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "counter_offer"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/refused_alternative",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "refused_alternative"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/injection",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "injection"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/window_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "window_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/or_windows",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "or_windows"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/ranked_move",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "ranked_move"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/day_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "day_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/days_cap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "days_cap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/free_gap",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "free_gap"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/after_lecture",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "after_lecture"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/courses_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "courses_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/even_weeks",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "even_weeks"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/except_week",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "except_week"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/two_windows_off",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "two_windows_off"
+   ],
+   "per_family": 5,
+   "seed": 0
+  },
+  {
+   "id": "agent/v6-e1/eval-big/move_apart",
+   "kind": "agent",
+   "adapter": "nts-agent-v6-read-050",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "move_apart"
+   ],
+   "per_family": 5,
+   "seed": 0
+  }
+ ]
+}

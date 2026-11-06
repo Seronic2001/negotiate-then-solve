@@ -1,0 +1,28 @@
+{
+ "name": "a-train-eval",
+ "account": "shubhadeepmandal",
+ "kernel_sources": [
+  "shubhadeepmandal/nts-eval-tools",
+  "shubhadeepmandal/nts-intents-v12-cos3",
+  "shubhadeepmandal/nts-intents-v12-cos1"
+ ],
+ "budget_hours": 10.5,
+ "server": {
+  "np": 4,
+  "ctx": 32768
+ },
+ "jobs": [
+  {
+   "id": "suites/v12-cos3",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-cos3",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-cos1",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-cos1",
+   "workers": 4
+  }
+ ]
+}

@@ -1,0 +1,71 @@
+{
+ "name": "a-intents",
+ "account": "shubhadeepmandal",
+ "kernel_sources": [
+  "shubhadeepmandal/nts-eval-tools",
+  "shubhadeepmandal/nts-intents-v12",
+  "shubhadeepmandal/nts-intents-v11",
+  "shubhadeepmandal/nts-intents-v8"
+ ],
+ "budget_hours": 10.5,
+ "server": {
+  "np": 4,
+  "ctx": 32768
+ },
+ "jobs": [
+  {
+   "id": "suites/v12-e1",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-033",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-e2",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-067",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-e3",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-100",
+   "workers": 4
+  },
+  {
+   "id": "suites/v11-e2",
+   "kind": "suites",
+   "adapter": "nts-intents-v11-read-067",
+   "workers": 4
+  },
+  {
+   "id": "suites/v11-e3",
+   "kind": "suites",
+   "adapter": "nts-intents-v11-read-100",
+   "workers": 4
+  },
+  {
+   "id": "suites/v8-e2",
+   "kind": "suites",
+   "adapter": "nts-intents-v8-read-067",
+   "workers": 4
+  },
+  {
+   "id": "suites/v8-e3",
+   "kind": "suites",
+   "adapter": "nts-intents-v8-read-100",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-e3/r1",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-100",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-e3/r2",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-100",
+   "workers": 4
+  }
+ ]
+}
