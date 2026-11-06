@@ -31,7 +31,8 @@ def test_a_week_off_is_drafted_checked_submitted_and_committed(store):
         call("check_draft"),
         call("submit", message="Your Tuesday classes in week 7 move."),
     ], actor=t)
-    assert out.status == "submitted" and out.text == "Your Tuesday classes in week 7 move."
+    assert out.status == "submitted" and out.text.startswith("Your Tuesday classes in week 7 move.")
+    assert "Sent for approval: " in out.text and "not available on Tuesday, all day, week 7" in out.text
     added = results(out)["constrain"].content
     assert added["change"] == 1 and "not available on Tuesday, all day, week 7 (firm)" in added["added"][0]
     checked = results(out)["check_draft"].content
@@ -345,3 +346,45 @@ def test_a_teacher_and_a_course_together_points_to_add_class(store):
                                                            course=inst.course_title(s.course), days=["Wednesday"]),
                                                       say("ok")])).run(COORDINATOR_V6, "schedule a class", store, s.faculty, 5)
     assert "add_class" in out.calls[0].error.message
+
+
+def _colleagues_classes(store):
+    """A class of one teacher and a class of another, at different times, both in the week-6 timetable."""
+    inst, tt = store.world.instance, store.world.timetable(6)
+    for a in inst.sessions:
+        for b in inst.sessions:
+            pa, pb = tt.assignment.get(a.id), tt.assignment.get(b.id)
+            if (a.faculty != b.faculty and pa and pb and a.duration == b.duration == 1
+                    and (pa.day, pa.slot) != (pb.day, pb.slot)):
+                return a, b, pa, pb
+    raise AssertionError("no two teachers' classes to swap")
+
+
+@pytest.mark.parametrize("agrees", [True, False])
+def test_a_swap_with_a_colleague_asks_them_and_holds_only_if_they_agree(store, agrees):
+    from nts.people import Cast, Teacher
+
+    a, b, pa, pb = _colleagues_classes(store)
+    inst = store.world.instance
+    cast = Cast(teachers={b.faculty: Teacher(accept=agrees)})
+    model = ScriptedModel([
+        call("swap_classes", course=inst.course_title(a.course), on_day=FULL_DAY[pa.day], at_hour=hour(pa.slot),
+             other_course=inst.course_title(b.course), other_day=FULL_DAY[pb.day], other_hour=hour(pb.slot),
+             from_week=6),
+        call("check_draft"),
+        call("submit", message="Swapped."),
+        call("decline", message="Your colleague did not agree."),
+    ])
+    out = Harness(Registry(ALL_TOOLS), model).run(COORDINATOR_V4, "swap with my colleague in week 6", store,
+                                                  a.faculty, 5, people=cast)
+    (ask, reply), = cast.asked
+    assert ask.consent and ask.to == b.faculty and "week 6" in ask.text
+    assert reply.answer == ("yes" if agrees else "no")
+    if agrees:
+        assert out.status == "submitted", out.calls[-1]
+        after = store.commit(out.draft).timetable(6).assignment
+        assert (after[a.id].day, after[a.id].slot) == (pb.day, pb.slot)
+        assert (after[b.id].day, after[b.id].slot) == (pa.day, pa.slot)
+    else:  # both halves taken out again: nothing to check, so the submit is refused and the agent declines
+        assert not [c for c in out.draft.world.constraints if c not in store.world.constraints]
+        assert results(out)["check_draft"].ok is False and out.status == "declined"

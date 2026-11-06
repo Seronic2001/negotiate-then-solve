@@ -38,6 +38,14 @@ def demo():
     return TestClient(create_web_app(world)), world, desk, play
 
 
+def ahead(world, n):
+    """The n-th week from now that the examination regulations leave alone (weeks 7, 8, 15 and 16 are theirs:
+    nts.exams), so a test's change is an ordinary one whatever week it is today."""
+    weeks = [w for w in range((world.current_week() or 1) + 1, world.instance.calendar.weeks + 1)
+             if w not in (7, 8, 15, 16)]
+    return weeks[n - 1]
+
+
 def teacher(world, n=0):
     return world.instance.faculty[n].id
 
@@ -89,7 +97,7 @@ def test_a_question_back_is_answered_with_the_next_message(demo):
 def test_a_change_goes_to_the_office_and_is_published_in_the_demo(demo):
     c, world, desk, play = demo
     me = teacher(world, 2)
-    week = (world.current_week() or 1) + 1
+    week = ahead(world, 1)
     day = world.instance.calendar.days[0]
     play.load([call("constrain", rule="unavailable", teacher="me", days=[FULL_DAY[day]], from_week=week, to_week=week,
                     reason="a conference"),
@@ -134,7 +142,7 @@ def test_a_change_made_elsewhere_reaches_the_agent_before_its_next_message(demo)
 def test_the_office_rejects_and_the_sender_hears_why(demo):
     c, world, desk, play = demo
     me = teacher(world, 4)
-    week = (world.current_week() or 1) + 2
+    week = ahead(world, 2)
     day = world.instance.calendar.days[1]
     play.load([call("constrain", rule="unavailable", teacher="me", days=[FULL_DAY[day]], from_week=week, to_week=week,
                     reason="a workshop"),
@@ -220,7 +228,7 @@ def test_how_it_works_describes_the_agent_loop(demo):
 def test_a_later_message_does_not_take_back_a_request_waiting_for_the_office(demo):
     c, world, desk, play = demo
     me = teacher(world, 1)
-    week = (world.current_week() or 1) + 3
+    week = ahead(world, 3)
     day = world.instance.calendar.days[2]
     play.load([call("constrain", rule="unavailable", teacher="me", days=[FULL_DAY[day]], from_week=week, to_week=week,
                     reason="exams"),
@@ -244,7 +252,7 @@ def _submitted(c, world, desk, play, me, week, day_index, reason):
 def test_a_draft_made_before_another_change_is_rebased_when_its_weeks_did_not_change(demo):
     c, world, desk, play = demo
     me = teacher(world, 2)
-    week = (world.current_week() or 1) + 5
+    week = ahead(world, 5)
     cid = _submitted(c, world, desk, play, me, week, 3, "a workshop")
     other = world.store.propose_version(dict(world.store.current_version().assignment), "elsewhere", week=week + 2)
     world.store.publish_version(other.version, COORDINATOR)  # another week changed meanwhile
@@ -257,7 +265,7 @@ def test_a_draft_made_before_another_change_is_rebased_when_its_weeks_did_not_ch
 def test_a_draft_whose_week_changed_since_is_sent_back(demo):
     c, world, desk, play = demo
     me = teacher(world, 3)
-    week = (world.current_week() or 1) + 6
+    week = ahead(world, 6)
     cid = _submitted(c, world, desk, play, me, week, 4, "a viva")
     sem = world.store.current_version()
     moved = dict(sem.assignment)
@@ -268,3 +276,20 @@ def test_a_draft_whose_week_changed_since_is_sent_back(demo):
     r = c.post(f"/api/approvals/{cid}/approve", headers={"X-User": COORDINATOR})
     assert r.status_code == 409 and f"week {week} changed" in r.json()["detail"]
     assert world.orch.cases[cid].status.value == "awaiting_approval"
+
+
+def test_a_change_in_the_weeks_around_the_examinations_is_escalated_not_submitted(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 5)
+    assert desk.svc.handbook.by_id("EXAM-3.2") is not None  # the policy documents reach the agent's rules tool
+    day = world.instance.calendar.days[0]
+    play.load([call("constrain", rule="unavailable", teacher="me", days=[FULL_DAY[day]], from_week=15, to_week=15,
+                    reason="a conference"),
+               call("check_draft"), call("submit", message="Sent."),
+               call("escalate", message="A change in week 15 needs the Controller of Examinations.")])
+    send(c, me, f"I am at a conference on {FULL_DAY[day]} in week 15")
+    msg = settled(c, desk, me)[-1]
+    tools = {s["name"]: s for s in msg["steps"] if s["type"] == "tool"}
+    assert "Controller of Examinations" in str(tools["check_draft"]["result"])
+    assert tools["submit"]["ok"] is False  # the failed check stops the submit
+    assert msg["status"] != "submitted"

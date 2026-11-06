@@ -163,3 +163,14 @@ def test_tools_outside_the_agents_scopes_are_not_offered_or_run(store):
     h, model = harness([call("describe", what="rooms"), say("I cannot look that up.")])
     out = h.run(replace(READER, scopes=frozenset()), "rooms?", store, actor="coordinator")
     assert model.tools[0] == [] and out.calls[0].error.code == "unknown_tool"
+
+
+def test_an_episode_going_round_in_circles_gets_a_closing_turn_to_answer_in(store):
+    from nts.harness.loop import CLOSING
+
+    same = call("describe", what="rooms").tool_calls[0]
+    steps = [AssistantTurn(tool_calls=[same.model_copy(update={"id": f"c{i}"})]) for i in range(2)]
+    h, model = harness(steps + [say("There are four rooms.")])
+    out = h.run(replace(READER, budgets=Budgets(max_repeats=2)), "rooms?", store, actor="coordinator")
+    assert out.status == "answered" and out.text == "There are four rooms."
+    assert any(m.content == CLOSING for m in model.seen[-1])  # told to finish, with only the end tools offered

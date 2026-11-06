@@ -40,6 +40,7 @@ class Ask(BaseModel):
     rule: str | None = None  # an offer: the id of the rule asked to be waived
     rule_text: str | None = None
     weeks: list[int] = Field(default_factory=list)  # an offer: the weeks it would be waived in; empty: dropped
+    consent: bool = False  # a swap with a colleague's class (swap_classes): ``rule`` is their half of the change
 
     @property
     def waits(self) -> bool:
@@ -145,6 +146,8 @@ def settle(ctx: Context, ask: Ask, reply: Reply) -> dict:
     if ask.kind != "offer":
         return out
     assert ask.rule is not None
+    if ask.consent:
+        return _consent(ctx, ask, reply, out)
     if reply.answer == "said":  # they answered without deciding (a question back, a condition): not a no
         return {**out, "answer": "undecided",
                 "next": "answer what they said and make the offer again, or decline or escalate"}
@@ -170,6 +173,27 @@ def settle(ctx: Context, ask: Ask, reply: Reply) -> dict:
         ctx.scratch.setdefault("waivers", []).append(out["draft"])
         out["next"] = "call check_draft again"
     return out
+
+
+def _consent(ctx: Context, ask: Ask, reply: Reply, out: dict) -> dict:
+    """A colleague's answer to a swap with their class: yes keeps both halves in the draft; anything else takes
+    the swap out again, since their class may move only with their agreement."""
+    from .draft import _changes
+
+    n = ctx.scratch.get("consent", {}).get(ask.rule)
+    if reply.answer == "yes":
+        ctx.scratch.setdefault("answers", set()).add((ask.rule, "yes"))
+        return {**out, "answer": "yes", "draft": f"change {n}: the swap is agreed",
+                "next": "call check_draft, then submit"}
+    draft = _draft(ctx)
+    for cid in _changes(ctx).pop(n, []):
+        if cid in draft.world.constraints:
+            draft.add(ConstraintRemoved(id=cid))
+    answer = {"no": "no", "no_reply": "no reply", "counter": "no (another time suggested)"}.get(reply.answer,
+                                                                                                "undecided")
+    again = "answer what they said and swap again if they are willing, or " if answer == "undecided" else ""
+    return {**out, "answer": answer, "draft": f"change {n} taken out: {ask.to_name} has not agreed to the swap",
+            "next": f"{again}tell the requester, and decline or ask whether another time would do"}
 
 
 def _other_times(ctx: Context, ask: Ask, out: dict) -> dict:

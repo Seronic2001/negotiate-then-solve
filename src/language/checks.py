@@ -51,6 +51,7 @@ from core.schemas import Placement, Request
 from .corpus import FULL_DAY, hour
 from .intents import (
     Avoid,
+    Cancel,
     ClashReport,
     ClassRef,
     ClubBooking,
@@ -228,9 +229,12 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
         if isinstance(intent, ClubBooking):
             intent = _club_times(intent, text, notes, i)
         if isinstance(intent, Move):
+            intent = _same_day(intent, text, notes, i)
             intent, q = _check_move(instance, intent, sender, timetable, notes, i)
             if q and question is None:
                 question, missing = q, ["slots"]
+        if isinstance(intent, Cancel) and timetable and len(items) == 1:  # with more, the day may be another's
+            intent = _cancel_day(instance, intent, text, sender, timetable, notes, i)
         intents.append(intent)
     # a limit on the week is about all of it by its nature: naming a course says why, not which classes
     if (question is None and intents and not any(map(_about_classes, intents))
@@ -503,6 +507,44 @@ def _check_move(instance: Instance, intent: Move, sender: str, timetable: Mappin
         return intent, (f"Your {_class_name(instance, sid)} is already on {FULL_DAY[p.day]} at {hour(p.slot)}. "
                         "When would you like it instead?")
     return intent, None
+
+
+def _same_day(intent: Move, text: str, notes: list[str], i: int) -> Move:
+    """A move to a part of the day or an hour, in a message that names no day but the one the class is on now ("move
+    my Friday 9 am class to the afternoon"), stays on that day: the reader gave it other days the message never
+    names."""
+    ref, to = intent.which, intent.to
+    if ref.day is None or not to.days or set(to.days) == {ref.day} or not (to.part or to.at or to.after or to.before):
+        return intent
+    named = {k for k, v in FULL_DAY.items() if v in _days_named(text)}
+    if not named <= {ref.day}:
+        return intent
+    notes.append(f"intent {i} (move): to {', '.join(to.days)}, days the message does not name; it names only "
+                 f"{ref.day}, where the class is: read as later or earlier the same day")
+    return intent.model_copy(update={"to": to.model_copy(update={"days": [ref.day]})})
+
+
+def _cancel_day(instance: Instance, intent: Cancel, text: str, sender: str, timetable: Mapping[str, Placement],
+                notes: list[str], i: int) -> Cancel:
+    """A cancellation whose class the reading left without the day the message names ("cancel my AI lecture next
+    Wednesday"): the class on that day, when that picks one class and the reading alone picks none. Only for a
+    message of one request: in "move it to Thursday; if no lab is free, cancel it" the day is the move's."""
+    ref = intent.which
+    days = [k for k, v in FULL_DAY.items() if v in _days_named(text)]
+    if ref.day is not None or ref.session is not None or len(days) != 1:
+        return intent
+    by_id = (lambda r: r.model_copy(update={"course": course_id(instance, r.course)}) if r.course else r)  # noqa: E731
+    on_day = ref.model_copy(update={"day": days[0]})
+    try:
+        if len(classes(instance, by_id(ref), sender, timetable)) < 2:
+            return intent  # the reading already picks one class (or none: that is asked about as before)
+        if len(classes(instance, by_id(on_day), sender, timetable)) != 1:
+            return intent
+    except Unresolved:
+        return intent
+    notes.append(f"intent {i} (cancel): the message names {days[0]}, which the reading left out: read as the class "
+                 "on that day")
+    return intent.model_copy(update={"which": on_day})
 
 
 def _resolves(instance: Instance, ref: ClassRef, sender: str, timetable: Mapping[str, Placement]) -> bool:

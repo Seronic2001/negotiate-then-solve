@@ -176,7 +176,8 @@ def constrain(ctx: Context, args: Constrain) -> dict:
     c = Constraint(id="new", type=kind, hard=hard, tier=tier, owner=owner, scope=scope, when=when, room=room,
                    justification=why, valid=valid, source=Source())
     result = _record(ctx, [c], args.reason)
-    if note := (_cancel_missed(ctx.request, args.rule) or _absence_missed(ctx.request, valid, ctx.week)
+    if note := (_hours_missed(ctx.request, args.from_hour, args.to_hour)
+                or _cancel_missed(ctx.request, args.rule) or _absence_missed(ctx.request, valid, ctx.week)
                 or (None if _ABSENT.search(ctx.request or "") else _standing_missed(ctx.request, valid))):
         result["note"] = note
     return result
@@ -244,11 +245,12 @@ def _weeks(ctx: Context, from_week: int | None, to_week: int | None) -> tuple[Va
 
 
 def _pick(ctx: Context, d: Directory, tt: Timetable, course: str, kind: str | None, section: str | None,
-          teacher: str | None, on_day: str | None, at_hour: str | None, *, to_hour: str | None = None) -> Session:
+          teacher: str | None, on_day: str | None, at_hour: str | None, *, to_hour: str | None = None,
+          anyone: bool = False) -> Session:
     """The one class a change is about, picked by course and, if needed, kind, section, teacher or where it is now."""
     inst = d.instance
     courses = d.courses(course)
-    who = d.teacher(teacher, ctx.actor).id if teacher else (ctx.actor if ctx.actor != OFFICE else None)
+    who = d.teacher(teacher, ctx.actor).id if teacher else (ctx.actor if ctx.actor != OFFICE and not anyone else None)
     sec = d.section(section).id if section else None
     day = d.day(on_day) if on_day else None
     at = d.slot(at_hour) if at_hour else None
@@ -316,6 +318,23 @@ _ABSENT = re.compile(r"\b(absent|away|on leave|leave|sick|ill|conference|worksho
                      r"not (?:be )?(?:there|around|available|in)|won'?t be|can'?t (?:come|make it))\b", re.IGNORECASE)
 _EVERY = re.compile(r"\bevery\b|\b(?:mon|tues|wednes|thurs|fri|satur)days\b|\balways\b", re.IGNORECASE)
 _CANCEL = re.compile(r"\bcancel\w*\b", re.IGNORECASE)
+_TIME = r"(?:noon|midday|\d{1,2}(?::\d{2})?\s*(?:am|pm))"
+_EARLY = re.compile(rf"\b(?:morning|before\s+{_TIME}|until\s+{_TIME}|till\s+{_TIME})", re.IGNORECASE)
+_LATE = re.compile(rf"\b(?:afternoon|evening|after\s+{_TIME}|from\s+{_TIME}(?!\s*(?:to|-|until|till)))", re.IGNORECASE)
+
+
+def _hours_missed(request: str | None, from_hour: str | None, to_hour: str | None) -> str | None:
+    """A note when the request names a part of the day the hours given contradict: "before noon" or "morning" is
+    the start of the day up to an hour (to_hour), "after 2 pm" or "afternoon" an hour to the end (from_hour)."""
+    req = request or ""
+    early, late = _EARLY.search(req), _LATE.search(req)
+    if early and not late and from_hour and not to_hour:
+        return (f"the request says '{early[0]}': that is from the start of the day until then, but this change is "
+                f"from {from_hour} to the end of the day; retract it and give to_hour (not from_hour)")
+    if late and not early and to_hour and not from_hour:
+        return (f"the request says '{late[0]}': that is from then to the end of the day, but this change is from "
+                f"the start of the day until {to_hour}; retract it and give from_hour (not to_hour)")
+    return None
 
 
 def _absence_missed(request: str | None, valid: Validity, week: int | None) -> str | None:
@@ -398,20 +417,30 @@ class SwapClasses(BaseModel):
 
 
 @tool(Scope.REARRANGE)
-def swap_classes(ctx: Context, args: SwapClasses) -> dict:
+def swap_classes(ctx: Context, args: SwapClasses):
     """Swap two of the same teacher's classes in the draft: each goes to the other's day and hour. Give each
     class by course and where it is now."""
+    # (the description is what the trained agents saw; it stays as it was: nts.agents, test_nts_frozen). The second
+    # class may also be a colleague's: they are asked at once, and the swap stays in the draft only if they agree.
     d = Directory(ctx.state.instance)
     inst = d.instance
     valid, tt = _weeks(ctx, args.from_week, args.to_week)
     a = _pick(ctx, d, tt, args.course, None, None, None, args.on_day, args.at_hour)
-    b = _pick(ctx, d, tt, args.other_course, None, None, None, args.other_day, args.other_hour)
+    try:
+        b = _pick(ctx, d, tt, args.other_course, None, None, None, args.other_day, args.other_hour)
+    except Refusal as e:  # not one of the sender's classes: a colleague's, found by where it is now
+        if e.error.code != "no_such_class" or ctx.actor == OFFICE:
+            raise
+        b = _pick(ctx, d, tt, args.other_course, None, None, None, args.other_day, args.other_hour, anyone=True)
     if a.id == b.id:
         raise Refusal("bad_arguments", "both name the same class")
-    if a.faculty != b.faculty:
-        raise Refusal("bad_arguments", "only two classes of the same teacher can be swapped; use move_class for each")
-    for s in (a, b):
-        _may(ctx, Who(session=s.id))
+    if (tt.assignment[a.id].day, tt.assignment[a.id].slot) == (tt.assignment[b.id].day, tt.assignment[b.id].slot):
+        raise Refusal("same_time", "both classes are at the same time already, so swapping them changes nothing; "
+                      "ask the requester what they mean")
+    colleague = b.faculty if a.faculty != b.faculty and ctx.actor != OFFICE else None
+    _may(ctx, Who(session=a.id))
+    if colleague is None:
+        _may(ctx, Who(session=b.id))
     tier, why = _tier(ctx, True, None)
     pa, pb = tt.assignment[a.id], tt.assignment[b.id]
     out = [Constraint(id="new", type=ConstraintType.PREFER, hard=True, tier=tier, owner=s.faculty,
@@ -420,7 +449,29 @@ def swap_classes(ctx: Context, args: SwapClasses) -> dict:
     result = _record(ctx, out, None)
     if note := _range_missed(ctx.request, valid):
         result["note"] = note
-    return result
+    if colleague is None:
+        return result
+    return _ask_colleague(ctx, a, b, pa, pb, valid, result["change"])
+
+
+def _ask_colleague(ctx: Context, a: Session, b: Session, pa, pb, valid: Validity, n: int):
+    """The question to the colleague whose class a swap moves: their half of the change waits on their yes."""
+    from .talk import Ask  # talk imports this module
+
+    inst = ctx.state.instance
+    theirs_id = _changes(ctx)[n][1]
+    who, me = inst.faculty_by_id[b.faculty], inst.faculty_by_id.get(ctx.actor)
+    weeks = list(range(valid.from_week, (valid.to_week or valid.from_week) + 1)) if valid.from_week else []
+    when = (f"in week {weeks[0]}" if len(weeks) == 1 else f"in weeks {weeks[0]} to {weeks[-1]}" if weeks
+            else "from now on")
+    mine, theirs = _class(inst, a, pa.day, pa.slot, pa.room), _class(inst, b, pb.day, pb.slot, pb.room)
+    ctx.scratch.setdefault("consent", {})[theirs_id] = n
+    text = (f"{me.name if me else 'A colleague'} asks to swap classes {when}: your {inst.course_title(b.course)} "
+            f"{b.kind.value} ({theirs['day']} {theirs['from']}) would be held at the time of their "
+            f"{inst.course_title(a.course)} {a.kind.value} ({mine['day']} {mine['from']}), and theirs at yours. "
+            "Do you agree?")
+    return Ask(kind="offer", to=who.id, to_name=who.name, rule=theirs_id, consent=True, weeks=weeks, text=text,
+               rule_text=words.constraint(inst, ctx.draft.world.constraints[theirs_id]))
 
 
 DRAFT_TOOLS = [constrain, move_class, retract, list_draft, swap_classes]

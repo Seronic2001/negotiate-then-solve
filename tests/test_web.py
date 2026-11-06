@@ -56,15 +56,15 @@ def test_mock_auth(client):
 def test_request_to_publication(client):
     c, _world = client
     # with make-up classes asked for: the classes missed move to other times that week (without, cancelled)
-    rid = c.post("/api/requests", json={"text": "I'm at a conference in week 7, Tuesday and Wednesday.",
+    rid = c.post("/api/requests", json={"text": "I'm at a conference in week 9, Tuesday and Wednesday.",
                                         "makeup": True}, headers=as_("F-104")).json()["id"]
     d = wait_for(c, rid, {"awaiting_approval"})
     assert d["routing"]["tau"] > 0 and d["policy"]["obligations"] == ["P-MAKEUP"]
-    assert d["parse"]["constraints"][0]["tier"] == 3 and d["proposal"]["week"] == 7
+    assert d["parse"]["constraints"][0]["tier"] == 3 and d["proposal"]["week"] == 9
     assert c.get(f"/api/cases/{rid}", headers=as_("F-105")).status_code == 403  # not theirs
     assert c.post(f"/api/approvals/{rid}/approve", headers=as_("F-104")).status_code == 403
     v = c.post(f"/api/approvals/{rid}/approve", headers=as_(COORDINATOR)).json()["version"]
-    assert c.get("/api/timetable?week=7", headers=as_("F-104")).json()["version"] == v
+    assert c.get("/api/timetable?week=9", headers=as_("F-104")).json()["version"] == v
     kinds = [e["kind"] for e in c.get(f"/api/events?case={rid}", headers=as_(COORDINATOR)).json()]
     assert kinds[0] == "received" and kinds[-1] == "published"
 
@@ -214,7 +214,7 @@ def test_calendar_marks_my_class_days_per_week(client):
                        if s.faculty == "F-104"}, key=world.instance.calendar.days.index)
     plain = [w for w in cal["weeks"] if not w["own_changes"]]
     assert plain and all(w["class_days"] == teaching for w in plain)
-    assert any(w["own_changes"] for w in cal["weeks"])  # week 7, from the conference absence above
+    assert any(w["own_changes"] for w in cal["weeks"])  # week 9, from the conference absence above
     assert all(w["class_days"] == [] for w in c.get("/api/calendar", headers=as_("S-LAB")).json()["weeks"])
 
 
@@ -222,8 +222,8 @@ def test_weekly_changes_are_listed_for_the_semester_plan(client):
     c, _ = client
     assert c.get("/api/weekly-changes", headers=as_("F-104")).status_code == 403  # the office's page
     rows = c.get("/api/weekly-changes", headers=as_(COORDINATOR)).json()
-    week7 = next(r for r in rows if r["week"] == 7)  # the conference absence published above
-    assert week7["version"] and week7["moved"] and week7["sender_name"] == "Dr. Khan"
+    week9 = next(r for r in rows if r["week"] == 9)  # the conference absence published above
+    assert week9["version"] and week9["moved"] and week9["sender_name"] == "Dr. Khan"
 
 
 def test_answering_a_clarification_reruns_the_same_case(client):

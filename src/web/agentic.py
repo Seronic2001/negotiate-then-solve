@@ -126,11 +126,25 @@ def _picker():
     return ToolPicker.trained()
 
 
-def _handbook():
-    from nts.policy import Handbook
+class WorldHandbook:
+    """The demo world's regulations for the agent's ``rules`` tool: the handbook and every policy document
+    (``data/policies``: the exam regulations, the guest-faculty circular, the lab notice, the room bookings), as
+    the pipeline reads them (``World.rules``). Rebuilt when the documents change (``World.reload_policies``)."""
 
-    path = ROOT / "data" / "handbook.md"
-    return Handbook.load(path) if path.exists() else None
+    def __init__(self, w: World) -> None:
+        self.w, self._for, self._hb = w, None, None
+
+    def current(self):
+        from nts.policy import Handbook
+        from nts.policy import Rule as NRule
+
+        if self._for is not self.w.rules:
+            self._hb = Handbook([NRule(r.id, r.number, r.title, r.text) for r in self.w.rules])
+            self._for = self.w.rules
+        return self._hb
+
+    def __getattr__(self, name: str):
+        return getattr(self.current(), name)
 
 
 # -- the desk: one per demo world --------------------------------------------------------------------------------
@@ -154,7 +168,7 @@ class AgentDesk:
         self.lock = threading.RLock()
         self.svc = Service(self._mirror(), model or make_model(),
                            tracer if tracer is not None else default_tracer(ROOT / "runs" / "telemetry"),
-                           agent=agent or make_agent(), handbook=_handbook(),
+                           agent=agent or make_agent(), handbook=WorldHandbook(w),
                            picker=None if picker is False else picker if picker is not None else _picker())
         self.synced = self._mark()
         self.case_of: dict[str, str] = {}  # episode -> its demo case
@@ -403,11 +417,14 @@ class AgentDesk:
             return
         weeks = (f"in week {', '.join(map(str, p.weeks))}" if len(p.weeks) == 1 else
                  f"in weeks {', '.join(map(str, p.weeks))}" if p.weeks else "from now on")
-        text = p.text if p.kind != "offer" else (
-            f"{p.text}\n\nYour rule: {p.rule_text}. Waive it {weeks}? Accept says yes, Decline says no, or suggest "
-            "another time for the class instead.")
-        offers = [Offer(key="A", drop=[p.rule] if p.rule else [], placements={})] if p.kind == "offer" else []
-        msg = Message(round=sum(1 for k in self.asked if k[0] == ep.id) + 1, to=p.to, mus=[p.rule] if p.rule else [],
+        consent = getattr(p, "consent", False)  # a swap with this teacher's class: nothing of theirs is waived
+        text = (p.text if p.kind != "offer" else
+                f"{p.text}\n\nAccept agrees to the swap, Decline keeps your class where it is." if consent else
+                f"{p.text}\n\nYour rule: {p.rule_text}. Waive it {weeks}? Accept says yes, Decline says no, or suggest "
+                "another time for the class instead.")
+        drop = [p.rule] if p.rule and not consent else []
+        offers = [Offer(key="A", drop=drop, placements={})] if p.kind == "offer" else []
+        msg = Message(round=sum(1 for k in self.asked if k[0] == ep.id) + 1, to=p.to, mus=drop,
                       offers=offers, text=text, explanation_mode="agent", faithfulness=1.0)
         item = self.w.inbox.add(case.id, p.to, msg)
         self.asked[key], self.offers[item.id] = item.id, ep.id

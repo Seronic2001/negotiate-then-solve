@@ -98,6 +98,12 @@ STUCK = ("I kept going round in circles on this one, so I stopped. Could you say
          "which class (course, day and time), what you want done with it, and for which week?")
 
 
+# any other episode going round in circles: the same refusal again and again, or the same call repeated
+MAX_REFUSALS = 3
+CLOSING = ("You are going round in circles: the same calls get the same answers. Stop looking things up and finish "
+           "now: answer the person in plain sentences from what you found, decline saying why it cannot be done, or "
+           "escalate to the office what they asked for and what you tried.")
+
 # a class representative's episode, once it repeats a look-up: answer from what was found, or pass the request on
 REP_CLOSING = ("You have looked up what you need. Now answer the class representative in plain sentences from the "
                "results above, or escalate their request to the office (decline if it cannot be done).")
@@ -182,13 +188,15 @@ class Harness:
             last = n == b.max_turns
             # a class representative's episode has nothing to draft: once it repeats a look-up, it has what it needs
             rep = run.ctx.actor.startswith(REP)  # a class representative has no draft to submit: answer, decline, escalate
-            closing = not last and rep and run.repeats > 0
+            # going round in circles (a call repeated, or refusals of one kind piling up): only the end tools are left
+            circling = run.repeats >= b.max_repeats - 1 or max(run.codes.values(), default=0) >= MAX_REFUSALS
+            closing = not last and ((rep and run.repeats > 0) or circling)
             run.closed = run.closed or closing
             allowed = {Scope.END} & run.agent.scopes if last or closing else run.agent.scopes  # the last turn can still end it
-            unchecked = last and run.unchecked()
+            unchecked = (last or closing) and run.unchecked()
             offered = [t for t in run.tools if self.registry.tools[t["function"]["name"]].scope in allowed
                        and not ((unchecked or rep) and t["function"]["name"] == "submit")]  # it would be refused
-            note = ((UNCHECKED if unchecked else LAST_TURN) if last else REP_CLOSING if closing
+            note = ((UNCHECKED if unchecked else LAST_TURN) if last else (REP_CLOSING if rep else CLOSING) if closing
                     else WRAP_UP if n == b.max_turns - 1 > 1 else None)
             sent = list(run.transcript) + ([Message(role="user", content=note)] if note else [])  # Qwen allows one system message, first
             sent = fit(sent, b.context_tokens - schema_tokens(offered), b.keep_recent)
@@ -243,8 +251,8 @@ class Harness:
             run.stop("budget_exhausted", "the model still called tools on its last turn")
         elif reason := run.over_budget():
             run.stop("budget_exhausted", reason)
-        elif run.repeats >= b.max_repeats and not (run.ctx.actor.startswith(REP) and not run.closed):
-            run.stop("stuck", f"{run.repeats} repeated calls", text=STUCK)  # (a class rep first gets its closing turn)
+        elif run.repeats >= b.max_repeats and run.closed:
+            run.stop("stuck", f"{run.repeats} repeated calls", text=STUCK)  # (only after its closing turn)
 
     def _ask(self, run: _Run, sent: list[Message], offered: list[dict]) -> AssistantTurn | None:
         """The model's next turn. When the prompt overflows the model's context, every tool result but the latest is
@@ -297,6 +305,7 @@ class Harness:
                 result = self.registry.run(call, run.ctx, allowed)
                 if not result.ok and result.error is not None:
                     run.refused[key] = result.error.message
+                    run.codes[result.error.code] += 1
             span.attrs["result"] = result.model_dump(mode="json")
             span.attrs["ok"] = result.ok
         run.calls.append(result)
@@ -365,6 +374,7 @@ class _Run:
         self.seen: Counter = Counter()
         self.refused: dict = {}  # call key -> why it was refused
         self.repeats = 0
+        self.codes: Counter = Counter()  # refusals by kind (error code)
         self.closed = False  # a class representative's episode was offered only its ending tools
         self.status, self.detail, self.text = "", "", ""
         self.elapsed = 0.0

@@ -14,12 +14,14 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
+from nts.exams import exam_ruling
 from nts.kernel.schemas import Placement
 from nts.kernel.solver import SolverTimeout, TimetableSolver
 from nts.state import TimetableSet, World
 from nts.state.store import touched
 
 from . import words
+from .extend import EXTRA
 from .read import _at
 from .registry import Context, Refusal, Scope, tool
 from .talk import number_theirs, waived
@@ -58,6 +60,9 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
     ours = {c.id: n for n, ids in ctx.scratch.get("changes", {}).items() for c in added if c.id in ids}
     # removing or waiving a rule never breaks a timetable
     weeks = set().union(*(touched(after, c) for c in added if not waived(c.id))) | set(cancels)
+    if (exams := _exams(ctx, _asked_weeks(ctx, added, cancels), cancels)) is not None:
+        ctx.scratch["check"] = Checked(after.version, False, [])
+        return exams
     if not weeks:
         ctx.scratch["check"] = Checked(after.version, True, [])
         return {"ok": True, "applies_to": "no timetable changes", "classes_moved": 0, "moves": [],
@@ -106,6 +111,36 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
         out["cancelled"] = [{**_at(inst, inst.session_by_id[sid], base.timetable(w).assignment[sid]), "week": w}
                             for w, sids in sorted(cancels.items()) for sid in sorted(sids)]
     return out
+
+
+def _asked_weeks(ctx: Context, added: list, cancels: dict[int, set[str]]) -> set[int | None]:
+    """The weeks the draft's changes are for: each new rule's from_week to to_week (to the end of term when open,
+    every week when it has none), and the weeks of its cancellations. Not the weeks the solver re-solves, which run
+    on past the change."""
+    n = ctx.world.instance.calendar.weeks
+    out: set[int | None] = set(cancels)
+    for c in added:
+        if waived(c.id):
+            continue
+        v = c.valid
+        out |= set(range(v.from_week or 1, (v.to_week or n) + 1)) - set(v.except_weeks or [])
+    return out
+
+
+def _exams(ctx: Context, weeks: set[int | None], cancels: dict[int, set[str]]) -> dict | None:
+    """The examination regulations on a draft for the weeks around the examinations (``nts.exams``): a change in an
+    examination week is declined, one in the weeks next to one is escalated (the Controller of Examinations must
+    approve it). None: no such week, or the department's regulations do not include them."""
+    rules = {r.id: r.text for r in getattr(ctx.handbook, "rules", None) or []}
+    extra = any((c.source.rule or "").startswith(EXTRA) for cid, c in ctx.draft.world.constraints.items()
+                if cid not in ctx.world.constraints and c.source is not None)
+    ruling = exam_ruling(weeks, rules, extra=extra)
+    if ruling is None:
+        return None
+    end = ("decline, telling the person why" if ruling.action == "refuse" else
+           "escalate, so the office passes it to the examination cell, and tell the person it was forwarded")
+    return {"ok": False, "why": f"{ruling.message} Do not submit or change the weeks yourself: {end}.",
+            "rules": ruling.cited}
 
 
 def cancellations(base: World, after: World) -> dict[int, set[str]]:

@@ -32,7 +32,18 @@ def submit(ctx: Context, args: Submit) -> dict:
         raise Refusal("check_failed", "the last check found the draft cannot be done; change it, decline or escalate")
     for s in checked.sets:
         draft.add(TimetableSet(week=s.week, assignment=s.assignment, cancelled=s.cancelled))
-    return {"status": "submitted", "message": args.message}
+    return {"status": "submitted", "message": with_draft(ctx, args.message)}
+
+
+def with_draft(ctx: Context, message: str) -> str:
+    """The model's message, then what was sent for approval in the system's own words (the draft's changes), so
+    the person reads what is in the draft, whatever the message says."""
+    from .draft import ListDraft, list_draft
+
+    rules = [r for change in list_draft.handler(ctx, ListDraft()) for r in change["rules"]]
+    if not rules:
+        return message
+    return f"{message.rstrip()}\n\nSent for approval: " + "; ".join(rules) + "."
 
 
 class Decline(BaseModel):
