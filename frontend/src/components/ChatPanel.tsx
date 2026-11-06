@@ -90,15 +90,23 @@ export function ChatPanel({ inst, cal, actions }: {
       setSending(false);
     }
   };
-  const send = () => {
-    const t = text.trim();
+  const send = (picked?: string) => {
+    const t = (picked ?? text).trim();
     if (!t || sending) return;
     void run(async () => {
       await api.chatSend(t, teaches && makeup);
-      setText("");
+      if (picked === undefined) setText("");
       setExamples(false);
     });
   };
+  const stop = (episode: string) => void run(() => api.chatStop(episode));
+  // while the agent works, follow it closely (every second) rather than at the usual pace
+  const working = shown.some((m) => m.kind === "agent" && m.busy);
+  useEffect(() => {
+    if (!working) return;
+    const id = window.setInterval(() => void refresh(), 1000);
+    return () => window.clearInterval(id);
+  }, [working, refresh]);
   const confirm = (n: number, as: ConfirmAs) => void run(() => api.chatConfirm(n, as));
   const asQuestion = (n: number) => void run(() => api.chatAsQuestion(n));
   const clear = () => {
@@ -109,7 +117,7 @@ export function ChatPanel({ inst, cal, actions }: {
     setExamples(false);
     box.current?.focus();
   };
-  const x: ChatContext = { inst, cal, busy: sending, onConfirm: confirm, onAsQuestion: asQuestion, cases };
+  const x: ChatContext = { inst, cal, busy: sending, onConfirm: confirm, onAsQuestion: asQuestion, cases, onSend: send, onStop: stop };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -140,7 +148,7 @@ export function ChatPanel({ inst, cal, actions }: {
         <Composer
           value={text}
           onChange={setText}
-          onSend={send}
+          onSend={() => send()}
           sending={sending}
           inputRef={box}
           placeholder="Ask or request something…"
@@ -174,8 +182,9 @@ function Welcome({ hasExamples, open, onExamples }: { hasExamples: boolean; open
     <div className="space-y-2 py-2">
       <p className="text-[14px] font-medium">What would you like to know or change?</p>
       <p className="text-[12px] text-ink-3">
-        Ask about the timetable or the rules, or make a request: a request is sent straight away, and if it was meant as a
-        question, the ? on its card answers it instead. Click a class on the timetable to cancel, move or swap it.
+        Ask about the timetable or the rules, or ask for a change. The assistant looks things up, drafts the change, checks
+        it with the solver, asks you or a colleague when it needs to, and sends it to the timetable office for approval.
+        Click a class on the timetable to cancel, move or swap it.
       </p>
       {hasExamples && (
         <button onClick={onExamples} onMouseDown={(e) => e.stopPropagation()} className="flex items-center gap-1 text-[12px] font-medium text-brand hover:underline">

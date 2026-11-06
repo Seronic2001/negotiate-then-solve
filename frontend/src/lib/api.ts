@@ -158,6 +158,8 @@ export const api = {
   /** A request the chat sent, taken back and answered as a timetable question instead. */
   chatAsQuestion: (n: number) => post<ChatMessage[]>("/chat/as-question", { n }),
   chatClear: () => call<{ cleared: number }>("/chat", { method: "DELETE" }),
+  /** Stop the agent while it works on a message of yours. */
+  chatStop: (episode: string) => post<{ stopped: string }>("/chat/stop", { episode }),
   submit: (text: string, makeup = false) => post<{ id: string }>("/requests", { text, makeup }),
   /** A request made with clicks: ``text`` is what people read, ``intent`` what the pipeline acts on (no parser). */
   submitForm: (text: string, intent: Record<string, unknown>) => post<{ id: string }>("/requests/form", { text, intent }),

@@ -9,6 +9,7 @@ import type { CalendarView, CaseSummary, ChatMessage, ConfirmAs, InstanceView } 
 import { useWorkspace, type LookupMessage } from "../../lib/workspace";
 import { PLAIN_STATUS, STATUS } from "../../lib/meta";
 import { Button, LiveDot, StatusBadge } from "../ui";
+import { AgentCard } from "./AgentCard";
 import { CardFrame, Tag, YouBubble } from "./Bubble";
 
 /** The assistant chat's messages, one card per kind (``CHAT_CARDS``): a new kind of message is a new entry
@@ -24,6 +25,10 @@ export interface ChatContext {
   onAsQuestion: (n: number) => void;
   /** the person's requests by number, for the status on a request's card */
   cases: Map<string, CaseSummary>;
+  /** send a message as the person (an answer picked from the agent's question) */
+  onSend: (text: string) => void;
+  /** stop the agent while it works on a message */
+  onStop: (episode: string) => void;
 }
 
 type Of<K extends ChatMessage["kind"]> = Extract<ChatMessage, { kind: K }>;
@@ -39,6 +44,12 @@ export const CHAT_CARDS: Renderers = {
   ),
   other: (m) => <CardFrame label="Assistant">{m.text}</CardFrame>,
   change: (m) => <ChangeNotice text={m.text} weeks={m.weeks} from={m.from_name} />,
+  agent: (m, x) => (
+    <AgentCard
+      m={m}
+      x={{ busy: x.busy, onSend: x.onSend, onStop: x.onStop, cases: x.cases, requestCard: (id, summary) => <RequestCard id={id} summary={summary} cases={x.cases} /> }}
+    />
+  ),
 };
 
 /** One chat message, drawn by its kind. */

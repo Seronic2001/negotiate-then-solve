@@ -7,6 +7,7 @@ import { ago, EVENT_LABEL } from "../lib/meta";
 import type { CaseDetail, DiffRow, EventRow, InboxItem } from "../lib/types";
 import { changedWeeks, groupWeeks, weeksLabel } from "../lib/weeks";
 import { OfferCard } from "./Negotiation";
+import { Thinking } from "./thread/AgentCard";
 import { ReplyBubble, StepList, Tag, YouBubble } from "./thread/Bubble";
 import { Button, LiveDot } from "./ui";
 
@@ -56,6 +57,7 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
     <div className="space-y-3">
       <YouBubble text={c.text} note={ago(c.received_at)} />
 
+      {c.agent && <Thinking steps={c.agent.steps} busy={c.agent.busy} />}
       <StepList steps={steps.map((e) => ({ key: e.n, text: stepText(e, c) }))} />
 
       {c.running ? (

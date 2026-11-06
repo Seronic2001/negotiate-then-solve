@@ -250,11 +250,12 @@ class Service:
         return n
 
     def start(self, request: str, actor: str, week: int | None = None, *, simulate: bool | None = None,
-              thread: str | None = None) -> Episode:
+              thread: str | None = None, keep_drafts: bool = False) -> Episode:
         """A new request, or with ``thread`` the next message of that conversation: the agent sees the earlier
         messages and what came of them (``MEMORY`` of them). A message to a conversation whose agent waits for the
         requester's answer is that answer. A draft of the conversation still waiting for the office is replaced:
-        the later message says what is wanted now."""
+        the later message says what is wanted now (``keep_drafts``: it stays, for a chat where one conversation holds
+        many requests; the agent still hears it is waiting)."""
         earlier = self.thread(thread) if thread else []
         if earlier:
             last = earlier[-1]
@@ -264,7 +265,7 @@ class Service:
                 if p.to != REQUESTER:
                     raise Conflict(f"the agent is waiting for {p.to_name} to answer first")
                 return self.reply(last.id, Reply(answer="said", text=request))
-            if last.status == "submitted" and last.decision is None:
+            if last.status == "submitted" and last.decision is None and not keep_drafts:
                 last.status, last.detail = "replaced", "a later message in the conversation replaced this draft"
                 last.push({"type": "end", "status": "replaced", "text": "", "detail": last.detail})
         name = self.name_of(actor)

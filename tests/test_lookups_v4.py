@@ -107,6 +107,7 @@ def test_request_and_rule_parts_keep_their_kind_and_words(world):
                             Other("request", "move my DS lecture to Thursday"), Other("other")]
 
 
+@pytest.mark.skip(reason="the agentic demo replaces the pipeline chat with the agent loop (tests/test_agentic_demo.py)")
 def test_in_the_chat_each_part_is_read_in_its_own_words(monkeypatch):
     from web.fallback import ModelLink
 

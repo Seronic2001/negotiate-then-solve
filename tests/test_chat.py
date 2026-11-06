@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from pipeline.store import Store
 from web.app import World, create_web_app
 
+pytestmark = pytest.mark.skip(reason="the agentic demo replaces the pipeline chat with the agent loop (tests/test_agentic_demo.py)")
+
 
 @pytest.fixture(scope="module")
 def client():

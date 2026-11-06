@@ -57,10 +57,13 @@ from language.intents import IntentOutput, Unresolved
 from language.intents import weeks as period_weeks
 from language.llm import FREE_TIER, LLMError
 from language.parsing import STUDENTS_REPORT
+from nts.api.service import Conflict as AgentConflict
+from nts.api.service import NotFound as AgentNotFound
 from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 from pipeline.store import EXTRA_PREFIX
 
+from .agentic import desk_of
 from .wording import TIER_LABEL, plain
 from .wording import TIER_WHO as TIER_WHO_PLAIN
 from .world import (
@@ -857,6 +860,10 @@ class AskBody(BaseModel):
     text: str
 
 
+class StopBody(BaseModel):
+    episode: str
+
+
 class AsQuestionBody(BaseModel):
     """A request card in the chat to read as a question instead: ``{"n": 12}``."""
 
@@ -1113,8 +1120,17 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.post("/api/cases/{case_id}/clarify")
     def clarify(case_id: str, body: RequestBody, u: dict = Depends(user)) -> dict:
         """The sender's answer to the question their request was sent back with."""
+        w = W()
+        if desk_of(w).owns_case(case_id):  # the agent asked: the answer goes on in its episode, and in the chat
+            try:
+                desk_of(w).clarify(case_id, u["id"], body.text)
+            except PermissionError as e:
+                raise HTTPException(403, str(e)) from None
+            except (ValueError, AgentConflict) as e:
+                raise HTTPException(409, str(e)) from None
+            return {"id": case_id}
         try:
-            W().clarify(case_id, u["id"], body.text)
+            w.clarify(case_id, u["id"], body.text)
         except KeyError:
             raise HTTPException(404) from None
         except PermissionError as e:
@@ -1226,65 +1242,44 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.get("/api/chat")
     def chat(after: int = 0, u: dict = Depends(user)) -> list[dict]:
-        """The signed-in person's chat, oldest first (``after``: only messages after that number). A request shows
-        only as a card with its number; what happens to it after (questions back, options, the outcome) is on
-        its page in the Requests tab. Notice cards of earlier versions are left out."""
-        return [m for m in W().store.chat(u["id"], after) if m["kind"] != "notice"]  # "change" cards are kept
+        """The signed-in person's chat with the agent (web.agentic), oldest first (``after``: only messages after that
+        number). Each agent message carries its episode as it stands: the steps so far, the answer, a question waiting
+        for the person, the request it became. Notice cards of earlier versions are left out."""
+        w = W()
+        return desk_of(w).chat_view([m for m in w.store.chat(u["id"], after) if m["kind"] != "notice"])
 
     @app.post("/api/chat")
     def chat_send(body: RequestBody, u: dict = Depends(user)) -> list[dict]:
-        """A message to the chat (CHAT-PLAN.md). In order:
-        - a timetable question → answered (``kind: lookup``);
-        - a question about the rules → answered from them, with every rule cited (``kind: rule``; no request);
-        - a greeting or thanks → what the chat can do (``kind: other``);
-        - anything else → "send this as a request?" (``kind: confirm``): nothing is sent until the person
-          confirms (``POST /api/chat/confirm``).
-        A message with timetable questions and something else ("when am I free on Friday, and move my DS lecture
-        to Thursday"): the questions answered, then the rest (``_other_parts``).
-        First, a follow-up ("and Friday?", "move my DS lecture there") is made to stand on its own from the last
-        messages of today (agents.memory): what it was read as is kept with the person's message (``read_as``);
-        when it leans on something the chat doesn't have, the reply asks what they mean.
-        Returns the new messages: the person's, then the reply."""
+        """A message to the agent. Questions, rule questions and requests alike go to the agent loop (web.agentic):
+        it reads the timetable through its tools and answers, or drafts a change, has the kernel check it, asks
+        what it needs to know (the person answers in the chat, with their next message) and sends it to the
+        timetable office. It runs in the background: the reply follows the episode (GET /api/chat).
+        Returns the new messages: the person's, then the agent's."""
         w = W()
         text, me = body.text.strip(), u["id"]
         if not text:
             raise HTTPException(422, "write a message first")
-        chat = w.store.chat(me)
-        follow = w.followup(text, me, turns_of(chat, today=date.today()))
-        read = follow.text if follow and follow.changed else text
-        mine = {"text": text} | ({"read_as": read} if read != text else {})
-        last = next((m for m in reversed(chat) if m["role"] == "assistant"), None)
-        if (follow and follow.changed and last and last["kind"] == "confirm" and not last.get("answered")
-                and read.strip() == last["text"].strip()):  # "yes" to "send this as a request?": it is sent
-            w.store.update_chat(me, last["n"], {"answered": "request"})
-            return [w.store.add_chat(me, "you", "text", mine), _send_request(w, me, last)]
-        rest: list[tuple[str, dict]] = []
-        if follow and follow.ask:
-            reply = ("other", {"text": follow.ask})
-        elif (q := w.read_message(read, me)) and q[0] is not None:
-            reply = ("lookup", _lookup_answer(w, q[0], me, q[1]))
-            rest = _other_parts(w, me, read, q[2], body.makeup, q[1])
-        elif (rule := w.answer_rule(read, me)) is not None:
-            reply = ("rule", rule)
-        elif SMALL_TALK.match(text):
-            reply = ("other", {"text": "I can answer questions about the timetable (“am I free on Friday?”) and "
-                                       "about the rules (“how many online classes are allowed?”), and make "
-                                       "requests (“move my Monday lecture to Tuesday”)."})
-        else:  # a request: sent at once, as it was read ("move my DS lecture there" with "there" filled in);
-            # its card offers "it's a question" for the rare misreading (POST /api/chat/as-question)
-            reply = ("send", {"text": read, "makeup": body.makeup, "reader": q[1]})
-        out = [w.store.add_chat(me, "you", "text", mine)]
-        for kind, m in [reply, *rest]:
-            if kind != "send":
-                out.append(w.store.add_chat(me, "assistant", kind, m))
-                continue
-            try:
-                out.append(_send_request(w, me, m))
-            except HTTPException as e:
-                if e.status_code != 409:
-                    raise
-                out.append(w.store.add_chat(me, "assistant", "other", {"text": "You have sent this request already."}))
-        return out
+        d = desk_of(w)
+        mine = w.store.add_chat(me, "you", "text", {"text": text})
+        try:
+            ep, start = d.send(me, text)
+        except AgentConflict as e:
+            return [mine, w.store.add_chat(me, "assistant", "other", {"text": f"Not yet: {e}."})]
+        reply = w.store.add_chat(me, "assistant", "agent", {"episode": ep.id, "from": start})
+        return [mine, d.message_view(reply, None)]
+
+    @app.post("/api/chat/stop")
+    def chat_stop(body: StopBody, u: dict = Depends(user)) -> dict:
+        """Stop the agent while it works on the person's message: nothing it does after this reaches the office."""
+        try:
+            desk_of(W()).stop(body.episode, u["id"])
+        except AgentNotFound:
+            raise HTTPException(404) from None
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from None
+        except AgentConflict as e:
+            raise HTTPException(409, str(e)) from None
+        return {"stopped": body.episode}
 
     def _other_parts(w: World, me: str, text: str, others: list, makeup: bool,
                      reader: str) -> list[tuple[str, dict]]:
@@ -1377,8 +1372,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
 
     @app.delete("/api/chat")
     def chat_clear(u: dict = Depends(user)) -> dict:
-        """Empties the person's chat; their requests stay in the Requests list."""
-        return {"cleared": W().store.clear_chat(u["id"])}
+        """Empties the person's chat, and the agent starts a new conversation; their requests stay in the Requests
+        list."""
+        w = W()
+        desk_of(w).new_conversation(u["id"])
+        return {"cleared": w.store.clear_chat(u["id"])}
 
     def _lookup_answer(w: World, call, sender: str, reader: str) -> dict:
         """A timetable question's answer: the reply, the lookup, who read it, the part of the timetable to draw
@@ -1521,10 +1519,13 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if c is None:
             return {**_summary(w, r, None), "events": w.store.events(case_id)}
         return _case_detail(w, c) | {"can_decide": c.status == RequestStatus.ESCALATED and decides(u, c),
-                                     "can_handle": handles(u, c), "can_withdraw": withdraws(w, u, c)}
+                                     "can_handle": handles(u, c), "can_withdraw": withdraws(w, u, c),
+                                     "agent": desk_of(w).trace(c.id)}
 
     def withdraws(w: World, u: dict, case: Case) -> bool:
         """The sender, while nothing the request asked for is in the published timetable."""
+        if desk_of(w).owns_case(case.id):  # the agent's: until it is in the timetable or settled
+            return u["id"] == case.request.sender_id and case.status not in FINISHED
         running = case.id in w.threads and w.threads[case.id].is_alive()
         return u["id"] == case.request.sender_id and not running and w.orch.withdrawable(case) is None
 
@@ -1567,6 +1568,9 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if u["id"] != COORDINATOR:
             raise HTTPException(403, "only the timetable office answers forwarded messages")
         try:
+            if desk_of(w).owns_case(case_id):
+                desk_of(w).handle(case_id, u["id"], body.note, name=w.name_of(u["id"]))
+                return _case_detail(w, c)
             w.orch.handle(case_id, u["id"], body.note, name=w.name_of(u["id"]))
         except ValueError as e:
             raise HTTPException(409 if body.note.strip() else 422, str(e)) from None
@@ -1600,6 +1604,12 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(404)
         if u["id"] != c.request.sender_id:
             raise HTTPException(403, "only the sender can withdraw a request")
+        if desk_of(w).owns_case(case_id):
+            try:
+                desk_of(w).withdraw(case_id, u["id"])
+            except (ValueError, AgentConflict) as e:
+                raise HTTPException(409, str(e)) from None
+            return _case_detail(w, c)
         if c.id in w.threads and w.threads[c.id].is_alive():
             raise HTTPException(409, "it is still being worked on; try again when it stops")
         try:
@@ -1647,8 +1657,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if body.decision not in ("accept", "reject", "counter"):
             raise HTTPException(422, "decision must be accept, reject or counter")
         try:
-            w.inbox.answer(item_id, Reply(**body.model_dump()), u["id"])
-        except ValueError as e:
+            if desk_of(w).owns_item(item_id):  # the agent asked: the answer goes back to its episode
+                desk_of(w).answer(item_id, Reply(**body.model_dump()), u["id"])
+            else:
+                w.inbox.answer(item_id, Reply(**body.model_dump()), u["id"])
+        except (ValueError, AgentConflict) as e:
             raise HTTPException(409, str(e)) from None
         return _inbox_item(w, item)
 
@@ -1665,6 +1678,17 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         text = body.text.strip()
         if not text:
             raise HTTPException(422, "write a reply first")
+        if desk_of(w).owns_item(item_id):  # the agent reads the answer itself, in the person's words
+            got = Reply(decision=None, text=text)
+            view = {"reply": got.model_dump(exclude_none=True), "parser": "agent",
+                    "reading": "Your words go to the assistant as you wrote them."}
+            if body.preview:
+                return view
+            try:
+                desk_of(w).answer(item_id, got, u["id"])
+            except (ValueError, AgentConflict) as e:
+                raise HTTPException(409, str(e)) from None
+            return view | {"item": _inbox_item(w, item)}
         try:
             got = w.reply_parser.parse(item.message, text)
         except LLMError as e:
@@ -1689,8 +1713,11 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if u["id"] not in (item.to, COORDINATOR):
             raise HTTPException(403)
         try:
-            w.inbox.answer(item_id, w.simulators[item.to].respond(item.message), "simulator")
-        except ValueError as e:
+            if desk_of(w).owns_item(item_id):
+                desk_of(w).simulate(item_id)
+            else:
+                w.inbox.answer(item_id, w.simulators[item.to].respond(item.message), "simulator")
+        except (ValueError, AgentConflict) as e:
             raise HTTPException(409, str(e)) from None
         return _inbox_item(w, item)
 
@@ -1727,6 +1754,14 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.post("/api/approvals/{case_id}/approve")
     def approve(case_id: str, u: dict = Depends(user)) -> dict:
         w = W()
+        if desk_of(w).owns_case(case_id):  # the agent's draft: committed through the kernel, then published
+            if u["id"] not in w.orch.approvers:
+                raise HTTPException(403, f"{u['id']} may not approve timetable changes")
+            try:
+                version = desk_of(w).approve(case_id, u["id"])
+            except AgentConflict as e:
+                raise HTTPException(409, str(e)) from None
+            return {"version": version, "notified": w.orch.cases[case_id].notices}
         try:
             v = w.orch.approve(case_id, u["id"])
         except NotAuthorised as e:
@@ -1739,6 +1774,14 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.post("/api/approvals/{case_id}/reject")
     def reject(case_id: str, body: RejectBody, u: dict = Depends(user)) -> dict:
         w = W()
+        if desk_of(w).owns_case(case_id):
+            if u["id"] not in w.orch.approvers:
+                raise HTTPException(403, f"{u['id']} may not review timetable changes")
+            try:
+                desk_of(w).reject(case_id, u["id"], body.reason)
+            except AgentConflict as e:
+                raise HTTPException(409, str(e)) from None
+            return {"status": w.orch.cases[case_id].status.value}
         try:
             w.orch.reject(case_id, u["id"], body.reason)
         except NotAuthorised as e:
@@ -2027,55 +2070,67 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.get("/api/transparency")
     def transparency(u: dict = Depends(user)) -> dict:
         w = W()
+        agent = desk_of(w).info()
         return {
             "tiers": [{"tier": t.value, "name": TIER_NAME[t], "who": TIER_WHO[t.value],
                        "examples": TIER_EXAMPLES[t.value], "relaxable_in_negotiation": t.value in (3, 4)}
                       for t in Tier],
             "weights": Weights().__dict__, "role_authority": {r.value: v for r, v in ROLE_AUTHORITY.items()},
             "justification": {j.value: v for j, v in JUSTIFICATION.items()},
+            # the agentic demo: what happens to a chat message is the agent loop (web.agentic, nts)
             "lifecycle": [
-                {"name": "Read", "text": "Shorthand is spelled out (\"my DL prac in wk 5\" names the Digital Logic practical in week 5). Lines that "
-                 "try to instruct the system are never read; a message that is nothing else is refused. System One sends "
-                 "familiar requests down a fast path; the rest are read by the intents model into typed intents."},
-                {"name": "Check the reading", "text": "Code checks every reading against the message and the timetable: "
-                 "weeks the message names are kept, the sender's own name is not read as someone else's class, made-up "
-                 "options and duplicates are dropped. Anything the reading could not account for (a day, a time, a week) "
-                 "is shown to the sender and the approver; when it is unsure, it asks the sender instead of guessing."},
-                {"name": "Split", "text": "A message that asks for several things becomes one request per part: what can "
-                 "be solved together stays together; a swap, a cancellation, an extra class or an unclear part goes on its own, "
-                 "so one question does not hold up the rest."},
-                {"name": "Check policy", "text": "The policy agent looks the request up in the handbook and policy "
-                 "documents; authority is checked by code. A request against policy is denied with the rule it breaks."},
-                {"name": "Solve and negotiate", "text": "CP-SAT repairs the timetable; the resolution ladder below runs when "
-                 "something has to give."},
-                {"name": "Approve and publish", "text": "The timetable office sees the change, how the message was read and "
-                 "who is affected, then approves or rejects it. Only then is a new version published and its people told."},
+                {"name": "Read", "text": "The agent gets the message, who sent it and the week, with the last few messages "
+                 "of the conversation and what came of them, so \"and Friday?\" or \"make it Thursday instead\" is read in "
+                 "context. System One reads the message first: a question it is sure of is offered only the tools that read, "
+                 "which leaves the small model room to think; anything else gets every tool."},
+                {"name": "Look up", "text": "It reads the department through typed tools: whose classes, free hours, who "
+                 "is free, free rooms, the changes so far, the rules. Tools take and return names (\"Dr. Iyer\", \"Lab 2\", "
+                 "\"Tue 2 pm\"), never ids; a name that matches nothing is refused with the names it might mean, and the "
+                 "model fixes the call on its next turn. A question ends here, answered from what the tools returned."},
+                {"name": "Draft", "text": "A change is written into a private draft: a rule (away on Tuesday, no classes "
+                 "after 4 pm), a move, a swap, a cancellation, an extra class. Nothing in a draft reaches the timetable. A "
+                 "teacher can only draft their own times and classes; the office can draft anything."},
+                {"name": "Check", "text": "check_draft asks CP-SAT to repair every timetable the draft touches: whether "
+                 "it fits, which classes move, whose, and which wishes are not met. When it clashes, the clashing rules come "
+                 "back in words, with their owners, marked as the draft's or already agreed."},
+                {"name": "Ask", "text": "When something is unclear the agent asks the sender, who answers in the chat. "
+                 "When another teacher's rule blocks the draft it asks them, in their inbox, to waive it for the weeks it "
+                 "blocks (whoever has given way less first): a yes writes the waiver into the draft and the agent checks "
+                 "again; a no is final. The office's own rules are never offered: those go to the office."},
+                {"name": "Approve and publish", "text": "The agent submits only a draft checked at exactly this version "
+                 "of the timetable. The timetable office sees the change and approves or rejects it. Approval goes through "
+                 "the commit gate, which checks every change again with the kernel's validator whatever the agent said; "
+                 "only then is the new version published and everyone affected told."},
             ],
             "ladder": [
-                {"step": 1, "name": "Repair", "text": "If the requirements fit together, the timetable is repaired moving as "
-                 "few classes as possible. A requirement that already fits moves nothing but still waits for the office, "
-                 "because it binds every later change."},
-                {"step": 2, "name": "Drop preferences", "text": "Preferences the repair cannot keep are dropped by the "
-                 "objective; their owners are told, and can send the request again as a requirement."},
-                {"step": 3, "name": "Negotiate", "text": "The solver finds the smallest set of constraints that clash and "
-                 "the cheapest ways to resolve it (Tiers 3-4 only), solving around the conflict first and checking against "
-                 "the whole timetable. The owner of the cheapest is offered 2-3 solver-verified options. When a fix needs "
-                 "several people to give way, each is asked for their own part, and what one agrees to is held while the "
-                 "next is asked. A declined option rules out that day and half-day, so the next options look elsewhere."},
-                {"step": 4, "name": "Escalate", "text": "On deadlock, the round limit, no reply after one reminder, or a "
-                 "Tier 0-2 conflict, the person with authority along the reporting chain gets a brief. A request with a "
-                 "fallback (\"Thursday, or else Friday\") tries the fallback as a request of its own instead."}],
-            "negotiation": _negotiation_settings(w),
+                {"step": 1, "name": "Repair", "text": "If the rules in force fit together with the draft, the solver "
+                 "repairs the timetable, moving as few classes as possible. The agent sees who else is affected before it "
+                 "submits, and says so to the sender."},
+                {"step": 2, "name": "Ask the sender", "text": "A request that names no class, no day or no week is not "
+                 "guessed at: the agent asks one short question (\"which class?\", with the sender's classes to pick from) "
+                 "and goes on with the answer."},
+                {"step": 3, "name": "Ask the owner", "text": "When the draft clashes with a rule another teacher set, "
+                 "make_offer asks its owner to waive it for the weeks it blocks. The concession ledger says how often each "
+                 "owner has given way, and the one who has given way less is asked first. A counter-offer (another time "
+                 "for the class) is drafted and checked like anything else."},
+                {"step": 4, "name": "Escalate or decline", "text": "A rule the office set, a request only the office can "
+                 "grant, or a clash no one gives way on goes to the timetable office with what was asked and what was tried. "
+                 "A request the rules forbid is declined, citing the rule."}],
+            "negotiation": {k: agent["budgets"][k] for k in ("max_turns", "max_tool_calls", "max_repeats", "max_seconds")},
+            "agent": agent,
             "system_one": w.system_one_info, "models": w.models,
-            "safety": ["Nothing changes the timetable without the timetable office's approval, including a requirement "
-                       "that already fits.",
-                       "Authority is checked by code before any constraint is created; the model cannot override it.",
-                       "Message text is data: lines that try to instruct the system are never read, and models return "
-                       "structured data that code acts on.",
-                       "What a reading left out is shown to the sender and the approver before anything is approved.",
-                       "Every option offered is checked by the solver; a counter-proposal is passed on only if it is.",
-                       "Explanations name constraints, never private reasons; leaks are measured.",
-                       "Tier 0-2 constraints are never relaxed without a named person with authority."],
+            "safety": ["The model never writes the timetable: only the commit gate changes it, and the gate checks every "
+                       "change again with the kernel's validator, whatever the agent claimed.",
+                       "Nothing reaches the timetable without the timetable office's approval; a draft is private until "
+                       "then.",
+                       "Only a draft checked at exactly the current version can be submitted: one made before another "
+                       "change is sent back to be run again.",
+                       "Who may change what is checked by the tools, not the model: a teacher drafts only their own times "
+                       "and classes, and touches a colleague's rule only through that colleague's yes.",
+                       "Rules the office set (Tiers 0-2) are never offered for waiving; they go to the office.",
+                       "Budgets on turns, tool calls and time; an identical call repeated is refused, and Stop ends an "
+                       "episode at once: nothing it does after reaches the office.",
+                       "Every model call and tool call is recorded, so any episode can be replayed and audited."],
         }
 
     @app.get("/api/observability")

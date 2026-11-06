@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from agents.tool_agent import ChoiceV3, Lookups
 from web.app import World, create_web_app
 
+pytestmark = pytest.mark.skip(reason="the agentic demo replaces the pipeline chat with the agent loop (tests/test_agentic_demo.py)")
+
 MIXED = "When am I free on Friday, and please move my Data Structures lecture to Thursday."
 
 

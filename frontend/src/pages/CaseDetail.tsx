@@ -16,6 +16,7 @@ import { ago, num, pct, ROLE_LABEL, secs } from "../lib/meta";
 import { study } from "../lib/study";
 import type { CaseDetail as Detail } from "../lib/types";
 import { useStudySession } from "../components/StudyBanner";
+import { Thinking } from "../components/thread/AgentCard";
 
 type Tab = "summary" | "negotiation" | "details";
 const OLD_TABS: Record<string, Tab> = { overview: "summary", change: "summary", parse: "details", policy: "details", trace: "details" };
@@ -127,6 +128,21 @@ export default function CaseDetail({ id: given, embedded = false }: { id?: strin
     </>
   );
 }
+
+/** What came of a request the chat's agent made, in a sentence (its steps are in "How the assistant handled it"). */
+const AGENT_OUTCOME: Record<string, string> = {
+  submitted: "The assistant drafted the change, the solver checked it, and it waits for the timetable office's approval.",
+  approved: "The timetable office approved the assistant's draft: it is in the timetable.",
+  rejected: "The timetable office did not approve the assistant's draft.",
+  not_committed: "The timetable changed before the draft could be approved; it needs to be sent again.",
+  escalated: "The assistant passed the request to the timetable office.",
+  declined: "The assistant found it cannot be done and said why.",
+  answered: "The assistant answered it.",
+  waiting: "The assistant is waiting for an answer.",
+  withdrawn: "The sender withdrew it.",
+  replaced: "A later message in the conversation replaced it.",
+  stopped: "The sender stopped the assistant.",
+};
 
 /** The sender takes the request back while nothing it asked for is in the published timetable. */
 function Withdraw({ c, onDone }: { c: Detail; onDone: (msg: string) => void }) {
@@ -263,7 +279,13 @@ function Summary({ c }: { c: Detail }) {
       <Card>
         <CardHeader title="What happened" />
         <div className="space-y-3 p-5 text-[14px] leading-relaxed">
-          {outcome ? <p>{outcome}</p> : <p className="text-ink-3">The request did not reach the solver.</p>}
+          {outcome ? (
+            <p>{outcome}</p>
+          ) : c.agent ? (
+            <p>{AGENT_OUTCOME[c.agent.status] ?? "The assistant is working on it."}</p>
+          ) : (
+            <p className="text-ink-3">The request did not reach the solver.</p>
+          )}
           {c.policy && (
             <p className="text-ink-2">
               Policy check: <span className="font-medium text-ink">{c.policy.verdict.replace("_", " ")}</span>
@@ -283,6 +305,15 @@ function Summary({ c }: { c: Detail }) {
           )}
         </div>
       </Card>
+
+      {c.agent && (
+        <Card className="lg:col-span-2">
+          <CardHeader title="How the assistant handled it" subtitle="Each step of the agent loop: what it read, what it drafted, what the solver said, who it asked" />
+          <div className="px-5 pb-4 pt-2">
+            <Thinking steps={c.agent.steps} busy={c.agent.busy} defaultOpen />
+          </div>
+        </Card>
+      )}
 
       <Card className="lg:col-span-2">
         <CardHeader

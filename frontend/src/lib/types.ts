@@ -201,6 +201,8 @@ export interface DiffRow {
 }
 
 export interface CaseDetail extends CaseSummary {
+  /** The agent loop's side of it, when the chat's agent made it (web/agentic.py). */
+  agent?: AgentTrace | null;
   /** What was read from the message, one sentence per intent. */
   understood?: string[];
   /** What the message says that the reading does not use (a day, a time, a week, a requirement read as a wish). */
@@ -523,6 +525,19 @@ export interface Transparency {
   system_one: { trained_on?: number; val_action_accuracy?: number; tau?: number };
   models: Record<string, string> & { parser: string; policy: string };
   safety: string[];
+  /** The agent the chat talks to (web/agentic.py): its model, configuration, budgets and tools by scope. */
+  agent: {
+    model: string;
+    adapter: string | null;
+    url: string | null;
+    config: string;
+    budgets: Record<string, number | null>;
+    tools: Record<string, string[]>;
+    picker: boolean;
+    episodes: number;
+    requests: number;
+    approved: number;
+  };
 }
 
 export interface Observability {
@@ -882,7 +897,53 @@ export type ChatMessage =
   | (ChatBase & { role: "assistant"; kind: "request"; case: string; request_text?: string; part?: boolean; reread?: "question" })
   | (ChatBase & { role: "assistant"; kind: "other"; text: string })
   /** someone's change reached this person's timetable (published): what it means for them, the weeks it is for */
-  | (ChatBase & { role: "assistant"; kind: "change"; text: string; case: string; weeks: number[]; from_name?: string });
+  | (ChatBase & { role: "assistant"; kind: "change"; text: string; case: string; weeks: number[]; from_name?: string })
+  /** the agent's reply (web/agentic.py): one episode of the agent loop, followed live */
+  | (ChatBase & { role: "assistant"; kind: "agent" } & AgentReply);
+
+/** One step of the agent loop as the chat shows it: what the model said and called, a tool's result, an ask and
+ *  its answer, how it ended or what it waits for, the office's decision or note. */
+export type AgentStep =
+  | { type: "model"; text: string; calls: string[]; ms?: number }
+  | { type: "tool"; name: string; ok: boolean; arguments: string; result: string; ms?: number }
+  | { type: "reply"; kind: "question" | "offer" | "notice"; to: string; text: string; rule?: string | null; answer: string; says: string }
+  | { type: "waiting" | "end"; status: string; text: string; detail: string }
+  | { type: "decision"; approved: boolean; note: string; by: string }
+  | { type: "note"; text: string }
+  | { type: "model_error"; error: string };
+
+/** An agent message of the chat: its episode as it stands. ``latest``: the newest message about the episode
+ *  (the answer, the waiting question and the request it became are shown there; earlier ones show their steps). */
+export interface AgentReply {
+  episode: string;
+  from: number;
+  status: string;
+  busy: boolean;
+  latest: boolean;
+  steps: AgentStep[];
+  text: string;
+  detail?: string;
+  pending: null | { kind: string; to_requester: boolean; to_name: string; text: string; rule?: string | null; weeks: number[] };
+  options: string[];
+  draft: string[];
+  case: string | null;
+  case_status: string | null;
+  decision: { approved: boolean; note?: string } | null;
+}
+
+/** The agent's side of a request (CaseDetail.agent): every step, the draft, how it ended. */
+export interface AgentTrace {
+  episode: string;
+  status: string;
+  busy: boolean;
+  text: string;
+  detail: string;
+  request: string;
+  kind: string;
+  draft: string[];
+  decision: { approved: boolean; note?: string } | null;
+  steps: AgentStep[];
+}
 
 export type ConfirmAs = "request" | "question" | "cancel";
 

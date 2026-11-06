@@ -26,6 +26,22 @@ uv run python -m evaluation.demo     # generate a department, solve it, run UC3
 uv run nts-web                # web app on http://127.0.0.1:8000 (builds the frontend first; needs Node.js)
 ```
 
+## The agentic demo (branch `f-agentic-demo`)
+
+The demo app as it is, with one difference: the chat is the agent loop (`src/nts`, see `docs/agentic.md`),
+end to end. The model reads the department through tools, drafts a change, has CP-SAT check it, asks the sender
+(in the chat) or the owner of a blocking rule (in their inbox), and submits; the timetable office approves in the
+inbox as usual, the commit gate checks it again, and the change is published in the demo's timetable.
+`src/web/agentic.py` connects the two; How it works describes the agent loop. Requests made with clicks on the
+timetable still go through the demo pipeline.
+
+```powershell
+$env:NTS_AGENT_URL = "http://10.1.25.191:8080/v1"   # llama-server with the agent adapter (default: NTS_LOCAL_URL)
+$env:NTS_AGENT_ADAPTER = "nts-agent-v6"              # default; "" for the base model
+$env:NTS_AGENT = "coordinator-v6"                    # default: the configuration nts-agent-v6 was trained on
+uv run nts-web                                       # or $env:NTS_AGENT_MODEL = "gemini" (GEMINI_API_KEY in .env)
+```
+
 ## Running the project
 
 The web app runs on Windows; llama.cpp (for the fine-tuned local model) runs
