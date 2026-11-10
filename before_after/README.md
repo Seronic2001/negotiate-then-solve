@@ -152,5 +152,91 @@ they are (v1: 24%).
 | test-plural (test templates and wordings only) | 64 |
 
 Notebook `notebooks/train_memory_v1_1_kaggle.ipynb` (from v1's by `scripts/make_memory_notebook.py`): continues from
-nts-memory-v1's adapter at 5e-5; ~3 h. Its row check passes every row here. Before, memory v1 on test-plural:
-not run yet (the GPU server was unreachable on 4 Nov).
+nts-memory-v1's adapter at 5e-5; ~3 h. Its row check passes every row here.
+
+Before: memory v1 on test-plural (`phase_3/memory-plural-v1.jsonl`): **52/64**. By kind: "these / those / same
+days" **26/26**, "those times / slots / hours" **17/17** (v1 already does both: the known gap was overstated), "the
+same slot / time for X" **9/21**: v1 keeps the earlier person and adds the new one ("is Dr. Reddy free on Wed at 9 am
+with Section 4?") instead of putting the new one in their place ("is Section 4 free on Wed at 9 am?"). That is what
+v1.1's "same time" rows teach; the other two kinds check it loses nothing.
+
+## Phase 5: v3 against v3.2 and v4 (4 Nov)
+
+On the GPU server: `nts-lookup-v3_2` (session 1 of 2: about 90% of its steps) and `nts-lookup-v4`. The server's LAN
+cable drops for moments, in bursts: the scripts that call it directly wait and try again; `before_after/run.py`
+(the chat, through the app, which falls back to the regex at the first drop) now sends a message again when it was
+answered without the model (`… sent again after the server dropped`), and every result below was checked to be the
+model's (the reader of every reply).
+
+| | v3 | v3.2 (session 1) | v4 |
+|---|---|---|---|
+| Phase 1 chat cases (`phase_1/v3_2.jsonl`, `v4.jsonl`) | 25/26 | 25/26 | **26/26** |
+| memory v2 chat cases (`memory_v2/`, memory v1) | – | 5/8 | **7/8** |
+| long and mixed messages (`phase_5/multi-*.jsonl`): whole message | 111/200 | 119/200 | **140/200** |
+| … question parts | 440/561 | 445/561 | **483/561** |
+| … requests and rule questions counted right | 171/200 | 177/200 | **191/200** |
+| … requests found (of 123 messages with one) | 112 | 117 | **122** |
+| … 4 questions / 5 questions | 14/36, 3/8 | 15/36, 2/8 | **23/36, 5/8** |
+| … joined in ways training never joins them | 36/72 | 42/72 | **52/72** |
+| test set A (`phase_5/A-*.jsonl`) | **346/362** | 339/362 | 337/362 |
+| test set C, names shuffled (`phase_5/C-*.jsonl`) | **346/362*** | 334/362 | 340/362 |
+| test set D, shared courses, never seen (`phase_5/D-*.jsonl`) | **343/360*** | 335/360 | 333/360 |
+
+| memory then lookup, end to end (`phase_5/e2e-*.jsonl`, memory v1) | 387/400 | 386/400 | **388/400** |
+| … misses by stage | memory 12, lookup 1 | memory 12, lookup 2 | memory 12, lookup 0 |
+
+\* v3's C and D runs (`runs/lookup-v3-{C,D}.jsonl`) were scored before the labels' `also`: counted again with
+today's labels (a reading right if v3.2 or v4 was right with the same reading), at least 346 and 343 (332 and
+327 as first scored).
+
+v3.2's misses on the chat cases: P1-05 ("I want my lecture moved…" read as a what-if). Memory v2: v4's request
+parts carry the words memory needs ("Could she take my IS lecture then?" → "Could Dr. Iyer take my IS lecture on
+Friday at 11 am?"); v3.2's card held the whole message there, and memory dropped the time in M2-01 ("to Friday").
+Both asked back with two free spans ("Which time do you mean: 9 am–12 pm or 2–5 pm?", the code's check). v4's one
+miss: its request part took in the question ("Am I free on Friday morning? If so, shift … to then").
+
+Test set A, against v3: v4 lost 25 questions and gained 16, v3.2 lost 19 and gained 12. Gained, by both: every
+slip the new templates teach (a 2 hr window, on leave, the exam hall, a guest lecture, the faculty, when we are
+free). Lost, and why:
+
+| lost | v4 | v3.2 | why |
+|---|---|---|---|
+| "in week 2" read as week 1 | 6 | 2 | no "in week N" in v3.2/v4's data (v3 knew it from v2's): forgotten |
+| calendar dates | 0 | 6 | the same, for dates |
+| "who could take my class?": course "me" | 3 | 1 | the model writes course "me" (the check should drop it) |
+| "can I have Thursday free?" read as a question | 3 | 3 | a request read as a question (the chat still offers the card: request words) |
+| "why was X's class cancelled?" read as changes | 3 | 0 | private, not looked up |
+| "can I book Room 102 on …" read as free_rooms | 3 | 0 | a request read as a question (card still offered) |
+| "who else teaches X and is free" read as free_hours | 3 | 0 | the other tool |
+| "how many teaching hours does X have" read as counts | 2 | 0 | v4 is right: the label predates counts |
+| other | 2 | 7 | |
+
+C and D: the same losses, in other departments (v4 lost 22 and gained 16 on C, lost 27 and gained 17 on D): week N
+read as N−1, course "me", "can I have … free", "can I book …", "why was … cancelled", "who else teaches …", plus
+"is it possible to shift my X to Monday" read as move_options (1 on C, 2 on D). Not memorised: forgotten, the same
+everywhere.
+
+Next: the check drops a course "me" (code), the label accepts counts, and a v4.1 top-up (from v4's adapter, with
+replay) teaches "in week N", dates, "can I have … free" and "book …" as requests, and "why …" as private.
+
+## Memory v2: a request that leans on the answer in the same message (4 Nov, code only)
+
+"When am I free on Friday? Move my DS lecture **there**." Memory works between messages; here "there" is the
+answer to the message's own question. With v3.2 or v4 (a request part keeps its words), the chat answers the
+questions, then gives memory the questions and their answer as the chat just before the request, and memory does
+what it was trained to ("move my DS lecture there" after "You are free on Friday 2–3 pm" is "move my DS lecture to
+Friday 2–3 pm"): one time: the card holds the request in full (and `said`, as written); several: the question
+back ("Which time do you mean: 9–11 am or 2–4 pm?"), no card, and the answer to it ("2–4 pm") is read as a
+follow-up, memory seeing what was asked about (`About “move my DS lecture there”: …`). Memory off, or nothing to
+fill in: the request as said. No new adapter: memory v1 (v1.1 when trained). With v3 (no request words) nothing
+changes. `tests/test_memory_v2.py` (fake models).
+
+Considered and left out: memory answering with an edit in v4's vocabulary instead of a sentence (one model call
+fewer, checkable), because memory would then have to know every other adapter's format (lookups, the team's
+request vocabulary, rule questions), against the split. Later (memory v3): a structured state of what the last
+answers held, given to memory with the chat, memory still answering in words.
+
+`memory_v2/requests.jsonl`: 8 chat cases (Dr. Menon, week 15: Friday has one free span, Monday and Wednesday
+several), scored with `card_has` / `card_lacks` / `asks`; run once v3.2 or v4 is served:
+`uv run python before_after/run.py before_after/memory_v2 --out after --lookup nts-lookup-v4` (`--out before`
+without `--lookup`: v3 as the app has it now, which can't fill anything in).
