@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from core.instance import Instance
 from core.schemas import Constraint, ConstraintType, Placement, Tier
-from language.corpus import FIRST_SLOT_HOUR, FULL_DAY, hour
+from language.corpus import FIRST_SLOT_HOUR, FULL_DAY, hour, hour_range
 from language.llm import LLMError
 from language.paraphrase import FidelityCheck
 
@@ -109,8 +109,12 @@ def session_name(instance: Instance, sid: str) -> str:
     return f"the {instance.course_title(s.course)} {s.kind.value} ({sid})"
 
 
-def placement_text(instance: Instance, p: Placement) -> str:
+def placement_text(instance: Instance, p: Placement, session: str | None = None) -> str:
+    """Where a class is; given the ``session``, a class longer than an hour says when it ends too."""
     room = instance.room_by_id[p.room].name if p.room in instance.room_by_id else p.room
+    s = instance.session_by_id.get(session) if session else None
+    if s is not None and s.duration > 1:
+        return f"{FULL_DAY[p.day]} from {hour_range(p.slot, s.duration, ' to ')} in {room}"
     return f"{FULL_DAY[p.day]} at {hour(p.slot)} in {room}"
 
 
