@@ -78,6 +78,7 @@ from language.corpus import FULL_DAY, ExpectedAction, RequestType, hour
 from language.intents import (
     AnyOf,
     Avoid,
+    ClashReport,
     ClubRef,
     Compiled,
     IntentOutput,
@@ -701,7 +702,9 @@ class Orchestrator:
             words = " ".join(say(self.instance, i, sender) for i in group)
             child = case.request.model_copy(update={"id": f"{case.id}-{n}", "raw_text": words,
                                                     "status": S.RECEIVED})
-            children.append(self.submit(child, form=IntentOutput(action="compile", intents=group)))
+            # a clash report is looked into (forwarded with the clash, ``_clash``), not solved as an empty change
+            action = "investigate" if all(isinstance(i, ClashReport) for i in group) else "compile"
+            children.append(self.submit(child, form=IntentOutput(action=action, intents=group)))
             children[-1].routing["part_of"] = case.id
         case.parts = [x.id for x in children]
         case.route += "+split"

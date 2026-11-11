@@ -679,7 +679,19 @@ def ground_references(instance: Instance, request: Request, out: IntentOutput) -
             courses = [_section_of(instance, c, text, sender, sections) for c in courses]
             update["courses"] = list(dict.fromkeys(courses))
         intents.append(intent.model_copy(update=update) if update else intent)
+    if len(intents) > 1:  # an intent that names nothing, tacked on after what was asked: the reader's slip, dropped
+        # ("move my DS lecture on Monday to Thursday afternoon" read as the move and a clash report, which became a
+        # request of its own, "clash report.", waiting for approval with no change); alone it stays (asked about)
+        intents = [i for i in intents if not _names_nothing(i)] or intents
     return out.model_copy(update={"intents": intents})
+
+
+def _names_nothing(intent) -> bool:
+    """A clash report without two courses (a clash is between two classes: students' reports name both), or a swap
+    with nobody's class on the other side."""
+    if isinstance(intent, ClashReport):
+        return len(intent.courses) < 2
+    return isinstance(intent, Swap) and intent.theirs == ClassRef()
 
 
 def classes(instance: Instance, ref: ClassRef, sender: str,
