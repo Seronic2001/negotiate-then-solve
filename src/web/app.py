@@ -193,7 +193,8 @@ def _case_detail(w: World, case: Case) -> dict:
             "concessions": [e.model_dump() | {"name": w.name_of(e.stakeholder)} for e in o.concessions],
             "notices": {k: [plain(t) for t in v] for k, v in o.notices.items()},
             "escalation": None if o.escalation is None else {"to": o.escalation.to, "to_name": w.name_of(
-                o.escalation.to) if o.escalation.to in inst.faculty_by_id else o.escalation.to,
+                o.escalation.to) if o.escalation.to in inst.faculty_by_id else
+                {"exam_cell": "the examination cell"}.get(o.escalation.to, o.escalation.to),
                 "reason": plain(o.escalation.reason), "text": plain(o.escalation.text),
                 "rule": next((_rule_view(r) for r in w.rules if r.id == o.escalation.rule), None),
                 "asked": plain(o.escalation.asked), "grant": plain(o.escalation.grant),
@@ -1015,6 +1016,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             return True
         if r.sender_id == u["id"]:
             return True
+        if case is not None and case.status == RequestStatus.ESCALATED and decides(u, case):
+            return True  # sent to them for a decision (the exam cell is not one of the roles that see everything)
         return any(i.case_id == r.id and i.to == u["id"] for i in W().inbox.items.values())
 
     from .semester import register as register_semester
@@ -1566,6 +1569,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if c is None:
             return {**_summary(w, r, None), "events": w.store.events(case_id)}
         return _case_detail(w, c) | {"can_decide": c.status == RequestStatus.ESCALATED and decides(u, c),
+                                     "can_simulate": simulates(u, c),
                                      "can_handle": handles(u, c), "can_withdraw": withdraws(w, u, c)}
 
     def withdraws(w: World, u: dict, case: Case) -> bool:
@@ -1582,7 +1586,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         to = case.outcome.escalation.to if case.outcome and case.outcome.escalation else ""
         if to == "coordinator":
             return u["id"] == COORDINATOR
-        if to in ("dean", "hod"):
+        if to in ("dean", "hod", "exam_cell"):  # a role: whoever holds it (the exam cell, for weeks next to exams)
             return u["role"] == to
         return u["id"] in to.split(", ")
 
@@ -1600,6 +1604,29 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if body.grant and (why := w.orch.cannot_grant(c)):
             raise HTTPException(409, why)
         w.decide(case_id, u["id"], body.grant, body.note.strip())
+        return {"status": "deciding"}
+
+    def simulates(u: dict, case: Case) -> bool:
+        """Whether this person may have the examination cell's reply simulated (the demo's stand-in for it, as for
+        a teacher's reply): an escalation to the exam cell, still open, seen by the office or the exam cell."""
+        to = case.outcome.escalation.to if case.outcome and case.outcome.escalation else ""
+        return (to == "exam_cell" and case.status == RequestStatus.ESCALATED
+                and (u["id"] == COORDINATOR or u["role"] == "exam_cell"))
+
+    @app.post("/api/cases/{case_id}/simulate-decision")
+    def simulate_decision(case_id: str, u: dict = Depends(user)) -> dict:
+        """The examination cell's reply to a change near the examinations, simulated (``World.simulate_exam_cell``)."""
+        w = W()
+        c = w.orch.cases.get(case_id)
+        if c is None:
+            raise HTTPException(404)
+        if not simulates(u, c):
+            raise HTTPException(403 if c.status == RequestStatus.ESCALATED else 409,
+                                "only an open escalation to the examination cell, by the office or the cell")
+        try:
+            w.simulate_exam_cell(case_id)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
         return {"status": "deciding"}
 
     @app.post("/api/cases/{case_id}/handle")

@@ -1,14 +1,14 @@
 import clsx from "clsx";
-import { BookOpen, Check, CircleSlash, Gavel, History, ListX, MessageSquareQuote, MessagesSquare, TriangleAlert, Undo2, X } from "lucide-react";
+import { BookOpen, Bot, Check, CircleSlash, Gavel, History, ListX, MessageSquareQuote, MessagesSquare, TriangleAlert, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { api } from "../lib/api";
 import type { CaseDetail } from "../lib/types";
 import { ConstraintCard } from "./Negotiation";
 import { Badge, Button, Card, Collapse, Label } from "./ui";
 
-/** Who an escalation names, in words: "coordinator", "dean", "hod" or the heads' names. */
+/** Who an escalation names, in words: "coordinator", "dean", "hod", "exam_cell" or the heads' names. */
 export function decider(to: string, toName: string): string {
-  return { coordinator: "the timetable office", dean: "the dean", hod: "the head of department" }[to] ?? toName;
+  return { coordinator: "the timetable office", dean: "the dean", hod: "the head of department", exam_cell: "the examination cell" }[to] ?? toName;
 }
 
 const sentence = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/\.?$/, ".") : "");
@@ -98,6 +98,7 @@ export function EscalationPanel({ c, onDecided }: { c: CaseDetail; onDecided?: (
       </div>
       )}
 
+      {c.can_simulate && <SimulateReply c={c} who={who} onDecided={onDecided} />}
       {c.can_decide && <Decide c={c} onDecided={onDecided} />}
     </Card>
   );
@@ -141,6 +142,34 @@ function RuleException({ c, rule, brief }: { c: CaseDetail; rule: { id: string; 
   );
 }
 
+/** The demo's stand-in for the person deciding (the examination cell), as the inbox simulates a teacher's
+ * reply: it answers as the cell would, and the request goes on like any granted one. */
+function SimulateReply({ c, who, onDecided }: { c: CaseDetail; who: string; onDecided?: (msg: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.simulateDecision(c.id);
+      onDecided?.(`${who.charAt(0).toUpperCase() + who.slice(1)} answered (simulated): granted, re-solving it now, then it comes to Approvals.`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-3">
+      <p className="text-[13px] text-ink-3">Demo: have {who} answer, as a simulated stakeholder.</p>
+      <Button variant="ghost" icon={Bot} loading={busy} className="ml-auto" onClick={go}>
+        Simulate reply
+      </Button>
+      {error && <p className="w-full text-[13px] text-bad">{error}</p>}
+    </div>
+  );
+}
+
 function Decide({ c, onDecided }: { c: CaseDetail; onDecided?: (msg: string) => void }) {
   const e = c.outcome!.escalation!;
   const [note, setNote] = useState("");
@@ -154,7 +183,7 @@ function Decide({ c, onDecided }: { c: CaseDetail; onDecided?: (msg: string) => 
       await api.decide(c.id, grant, note);
       onDecided?.(
         grant
-          ? e.rule ? `Granted; ${c.sender_name} has been told and the timetable office books the room.` : "Granted: re-solving it now, then it comes to Approvals."
+          ? e.rule?.id === "P-HOURS" ? `Granted; ${c.sender_name} has been told and the timetable office books the room.` : "Granted: re-solving it now, then it comes to Approvals."
           : `Declined; ${c.sender_name} has been told.`,
       );
     } catch (err) {
