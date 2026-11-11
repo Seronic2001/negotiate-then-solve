@@ -102,10 +102,11 @@ from language.intents import Fallback as FallbackIntent
 from language.intents import Swap as SwapIntent
 from language.parsing import STUDENTS_REPORT, ParseResult
 from language.rule_parser import RuleParser, injected, request_part, surname
-from nts.exams import OFFICE as EXAM_OFFICE
 from nts.exams import exam_ruling
 
 from .store import EXTRA_PREFIX, Store
+
+EXAM_CELL = "exam_cell"  # escalated to the role, like "hod" and "dean": whoever holds it decides
 
 S = RequestStatus
 CHOICES = 3  # times offered to a sender whose request fits in more than one way
@@ -616,8 +617,17 @@ class Orchestrator:
         self._advance(case, S.POLICY_CHECKED, verdict=case.policy.verdict.value, exams=ruling.weeks)
         if refused:
             self._advance(case, S.DENIED, cited=ruling.cited, reason=ruling.reason)
-        else:
-            self._advance(case, S.ESCALATED, to=EXAM_OFFICE, cited=ruling.cited, reason=ruling.reason)
+        else:  # sent to the examination cell (role exam_cell) to decide, as an escalation it can grant or decline:
+            # granted, the request is compiled and solved and goes to the office's approval like any change
+            brief = (f"{self._name(case.request.sender_id)} asks for a change in {_weeks_text(ruling.weeks)}, next to "
+                     f"the examinations: \"{case.request.raw_text.strip()}\". Under {', '.join(ruling.cited)} no change "
+                     "may take effect in the weeks around the examinations without the Controller of Examinations' "
+                     "written approval: grant it if no examination is affected.")
+            case.outcome = Outcome(status="escalated", step=0, escalation=EscalationBrief(
+                to=EXAM_CELL, reason=ruling.reason, text=brief, rule=ruling.cited[0] if ruling.cited else None,
+                asked=case.request.raw_text.strip(),
+                grant="The request is solved like any other change and then goes to the timetable office for approval."))
+            self._advance(case, S.ESCALATED, to=EXAM_CELL, cited=ruling.cited, reason=ruling.reason, brief=brief)
         return case
 
     def _passed(self, constraints: Iterable[Constraint]) -> str | None:
@@ -1446,7 +1456,8 @@ class Orchestrator:
             return None  # placed when granted; or held outside the timetable, arranged by the office
         if case.parse is None or not case.parse.constraints:
             return "this request has nothing to put into the timetable"
-        if case.outcome is not None and not self.overrides(case):
+        exception = case.outcome is not None and case.outcome.escalation is not None and case.outcome.escalation.rule
+        if case.outcome is not None and not exception and not self.overrides(case):  # a deadlock nothing would undo
             return ("it cannot fit even on its own, so granting would not help; "
                     "decline it, or ask the sender for a narrower request")
         return None

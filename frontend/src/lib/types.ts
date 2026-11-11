@@ -278,6 +278,7 @@ export interface CaseDetail extends CaseSummary {
   decision?: null | { by: string; by_name: string; granted: boolean; note: string; set_aside?: string[] };
   /** This viewer is the one the escalation was sent to, and it is still open. */
   can_decide?: boolean;
+  can_simulate?: boolean; // an escalation to the exam cell whose reply the demo can simulate
   /** The coordinator's answer to a forwarded message. */
   answer?: null | { by: string; by_name: string; note: string; at: string; acting?: string };
   /** This viewer is the coordinator and the forwarded message is still unanswered. */

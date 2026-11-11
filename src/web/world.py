@@ -1077,6 +1077,22 @@ class World:
         self.store.log(case_id, "clarified", answer=answer.strip(), question=case.reply)
         self.submit(r, wait=wait)
 
+    EXAM_CELL_NOTE = ("No examination is held in this class's slots in those weeks, so the change is approved for the "
+                      "Controller of Examinations (simulated reply).")
+
+    def exam_cell(self) -> str | None:
+        """The examination cell's person (role exam_cell), who decides changes next to the examinations."""
+        return next((i.person for i in self.directory.by_email.values() if i.role.value == "exam_cell"), None)
+
+    def simulate_exam_cell(self, case_id: str, wait: bool = False) -> None:
+        """The examination cell's reply, simulated for the demo as a teacher's is (``Simulator``): the regulations
+        ask it to approve a change near the examinations that no examination depends on, and regular classes are
+        not examinations, so it grants, saying so; the request then goes on like any change."""
+        cell = self.exam_cell()
+        if cell is None:
+            raise ValueError("this department has no examination cell")
+        self.decide(case_id, cell, True, self.EXAM_CELL_NOTE, wait=wait)
+
     def decide(self, case_id: str, decider: str, grant: bool, note: str = "", wait: bool = False) -> None:
         """Settle an escalation; granting re-solves, so it runs in the background like ``submit``."""
         def run() -> None:

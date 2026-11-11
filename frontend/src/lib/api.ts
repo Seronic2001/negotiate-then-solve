@@ -191,6 +191,7 @@ export const api = {
   reject: (id: string, reason: string) => post<{ status: string }>(`/approvals/${id}/reject`, { reason }),
   /** Settle an escalation sent to this person: grant (re-solved, then to approval) or decline. */
   decide: (id: string, grant: boolean, note: string) => post<{ status: string }>(`/cases/${id}/decide`, { grant, note }),
+  simulateDecision: (id: string) => post<{ status: string }>(`/cases/${id}/simulate-decision`),
   /** The coordinator answers a message forwarded to them; the answer becomes the sender's reply. */
   handle: (id: string, note: string) => post<CaseDetail>(`/cases/${id}/handle`, { note }),
   act: (id: string, text: string) => post<{ id: string; case: CaseDetail }>(`/cases/${id}/act`, { text }),
