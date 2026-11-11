@@ -63,6 +63,7 @@ def main() -> None:
     ap.add_argument("--no-checks", action="store_true")
     ap.add_argument("--note", default="", help="a word on this run for the leaderboard")
     ap.add_argument("--show", action="store_true", help="print the leaderboard and stop")
+    ap.add_argument("--misses", type=Path, default=None, help="write every request read wrongly here (JSONL)")
     add_args(ap)
     args = ap.parse_args()
     if args.show:
@@ -94,7 +95,14 @@ def main() -> None:
         if wanted and suite not in wanted:
             continue
         rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
-        s = score(rows, instance, reader, args.workers, checks=not args.no_checks)["summary"]
+        scored = score(rows, instance, reader, args.workers, checks=not args.no_checks)
+        s = scored["summary"]
+        if args.misses:
+            args.misses.parent.mkdir(parents=True, exist_ok=True)
+            with args.misses.open("a", encoding="utf-8") as f:
+                for r in scored["rows"]:
+                    if not r["match"]:
+                        f.write(json.dumps({"suite": suite, **r}, ensure_ascii=False, default=str) + chr(10))
         result["suites"][suite] = {k: s[k] for k in ("n", *COLUMNS, "action_accuracy", "invalid")} | {
             "fingerprint": manifest.get("fingerprints", {}).get(suite)}
         print(f"  {suite:12} {s['n']:>5} {s['outcome_match']:>7.1%} {s['silent_wrong']:>7.1%} "

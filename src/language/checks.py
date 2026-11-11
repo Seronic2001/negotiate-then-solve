@@ -226,6 +226,7 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
         intent = _ground_period(intent, text, notes, i)
         if len(items) == 1:
             intent = _restore_weeks(intent, text, notes, i)
+        intent = _alternate_weeks(intent, text, notes, i)
         if isinstance(intent, ClubBooking):
             intent = _club_times(intent, text, notes, i)
         if isinstance(intent, Move):
@@ -473,6 +474,29 @@ def _restore_weeks(intent, text: str, notes: list[str], i: int):
         return intent
     notes.append(f"intent {i} ({intent.kind}): every week, but the message names {spans[0][1]}"
                  f"{(' ' + joint + ' ' + b) if b else ''}; read as those weeks")
+    return out
+
+
+# "alternate weeks from week 9", "every other week, starting in week 9", "every second week from week 9"
+_ALTERNATE = re.compile(r"\b(?:alternate|every\s+other|every\s+second)\s+weeks?\b", re.IGNORECASE)
+
+
+def _alternate_weeks(intent, text: str, notes: list[str], i: int):
+    """``intent`` with the odd or even weeks the message means, when the reading kept the start week and dropped
+    the "every other week": "Alternate weeks from week 9: Wednesdays are out for me" read as every week from 9
+    takes Wednesday from eight weeks instead of four. The parity is the start week's (9: odd)."""
+    period = getattr(intent, "period", None)
+    if (not isinstance(period, Period) or period.parity is not None or period.from_week is None
+            or period.weeks or not _ALTERNATE.search(text)):
+        return intent
+    parity = "odd" if period.from_week % 2 else "even"
+    try:
+        out = intent.model_copy(update={"period": period.model_copy(update={"parity": parity})})
+        type(intent).model_validate(out.model_dump())
+    except ValueError:
+        return intent
+    notes.append(f"intent {i} ({intent.kind}): every week from week {period.from_week}, but the message says "
+                 f"every other week; read as the {parity} weeks")
     return out
 
 
