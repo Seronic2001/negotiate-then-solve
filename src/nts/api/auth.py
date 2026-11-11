@@ -7,7 +7,8 @@
 Roles: a teacher starts requests as themselves, sees their own requests and what waits for their answer,
 and answers asks addressed to them; the timetable office (sign in as "office") sees everything, starts
 requests for the office, approves or rejects drafts and publishes a rebuilt semester timetable; a club
-(sign in as "club: <name>") books rooms. A session is a random token held server-side
+(sign in as "club: <name>") books rooms; a section's class representative (sign in as "rep: <section>") asks
+about the section's timetable, reports clashes and asks for changes, which the agent passes to the office. A session is a random token held server-side
 and sent as an HttpOnly cookie (or ``Authorization: Bearer``), so a client cannot choose who it is.
 """
 
@@ -22,7 +23,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from nts.tools.draft import OFFICE
+from nts.tools.draft import OFFICE, REP
 
 ITERATIONS = 200_000
 SESSION_HOURS = 12
@@ -86,7 +87,7 @@ class Users:
 class Session:
     token: str
     dept: str
-    person: str  # a faculty id, or OFFICE
+    person: str  # a faculty id, OFFICE, CLUB + a club's name, or REP + a section's id
     name: str
     expires: float
 
@@ -99,11 +100,21 @@ class Session:
         return self.person.removeprefix(CLUB) if self.person.startswith(CLUB) else None
 
     @property
+    def rep(self) -> str | None:
+        """The section id a class representative speaks for."""
+        return self.person.removeprefix(REP) if self.person.startswith(REP) else None
+
+    @property
     def role(self) -> str:
-        return "office" if self.office else "club" if self.club else "teacher"
+        return "office" if self.office else "club" if self.club else "student" if self.rep else "teacher"
 
     def view(self) -> dict:
-        return {"dept": self.dept, "name": self.name, "role": self.role}
+        return {"dept": self.dept, "name": self.name, "role": self.role, **({"section": self.section} if self.rep else {})}
+
+    @property
+    def section(self) -> str | None:
+        """A class representative's section, by name ("Section 2")."""
+        return self.name.removesuffix(" class rep") if self.rep else None
 
 
 class Sessions:
@@ -114,7 +125,8 @@ class Sessions:
 
     def start(self, dept: str, person: str, name: str, password: str) -> Session | None:
         """A new session for ``name`` (as the directory spells it, or "office"), or None if the password is wrong."""
-        key = "office" if person == OFFICE else f"club: {person.removeprefix(CLUB)}" if person.startswith(CLUB) else name
+        key = ("office" if person == OFFICE else f"club: {person.removeprefix(CLUB)}" if person.startswith(CLUB)
+               else f"rep: {name.removesuffix(' class rep')}" if person.startswith(REP) else name)
         if not self.users.check(dept, key, password):
             return None
         s = Session(secrets.token_urlsafe(32), dept, person, OFFICE_NAME if person == OFFICE else name,

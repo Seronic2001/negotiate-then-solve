@@ -1,5 +1,7 @@
 """The agents, as configurations (``AgentConfig``): a prompt, tool scopes and budgets each."""
 
+from dataclasses import replace
+
 from nts.harness import AgentConfig, Budgets
 from nts.tools import Scope
 
@@ -119,7 +121,29 @@ COORDINATOR_V6 = AgentConfig(  # load limits, relations, choices, week patterns 
     never submit something else, and never make it "if possible" when they did not say so.""",
 )
 
+REP_RULES = """
+14. The person asking is a class representative: they speak for one section's students. "We", "us", "our
+    class" and "our timetable" mean that section: look classes up with section=<their section>. They cannot
+    change the timetable and you draft nothing for them:
+    - a question (when, where, who, free hours, the rules): look it up and answer;
+    - a clash they report: look up both classes in that week first and say whether they really overlap;
+      if they do, or the timetable looks wrong, escalate it;
+    - a change they want (a class moved or cancelled, an extra class, a room): check what they name, then
+      escalate with the class (course, teacher, day, hour, week), what they asked and why. Tell them the
+      office will reply here. Never promise the change."""
+
+
+def for_reps(base: AgentConfig) -> AgentConfig:
+    """The agent a class representative talks to: ``base``'s prompt (so a served adapter stays on what it was trained
+    on) with what a class representative may do, its reading and policy tools, and ending tools to answer, decline
+    or pass a request to the office. No draft tools: students ask, the office and teachers change."""
+    return replace(base, name="class-rep", scopes=base.scopes & frozenset({Scope.READ, Scope.POLICY, Scope.END}),
+                   prompt=base.prompt + REP_RULES)
+
+
+CLASS_REP = for_reps(COORDINATOR_V6)
+
 COORDINATOR = COORDINATOR_V3  # the latest with an adapter; serve an adapter with the version it was trained on (--agent)
 
-__all__ = ["COORDINATOR", "COORDINATOR_V1", "COORDINATOR_V2", "COORDINATOR_V3", "COORDINATOR_V4", "COORDINATOR_V5", "COORDINATOR_V6",
-           "READER"]
+__all__ = ["CLASS_REP", "COORDINATOR", "COORDINATOR_V1", "COORDINATOR_V2", "COORDINATOR_V3", "COORDINATOR_V4", "COORDINATOR_V5", "COORDINATOR_V6",
+           "READER", "for_reps"]

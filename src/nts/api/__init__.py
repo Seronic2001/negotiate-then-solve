@@ -3,7 +3,8 @@
     python -m nts serve --store runs/agentic/demo.jsonl --model llama --adapter <lora> --port 8100
     # then open http://127.0.0.1:8100/ (the page in nts/api/static), or call the API:
 
-    POST /api/login                 {"dept": "demo", "name": "Dr. Iyer" | "office", "password": "..."} -> a session cookie
+    POST /api/login                 {"dept": "demo", "name": "Dr. Iyer" | "office" | "club: Robotics" | "rep: Section 2",
+                                     "password": "..."} -> a session cookie
     POST /api/episodes              {"request": "...", "week": 5, "simulate": false}   (as the signed-in person)
     GET  /api/episodes/{id}/events  text/event-stream: model, tool, reply, waiting, end, decision
     GET  /api/episodes/{id}/poll?after=n   the same events as JSON (for clients without SSE)
@@ -20,7 +21,8 @@
 
 Several departments can be served at once (one store each, ``departments``); a session belongs to one.
 Who may do what is decided here, from the session (``auth``): a teacher sees their own requests and what
-waits for them; the office sees all, starts requests for the office and decides on drafts.
+waits for them; the office sees all, starts requests for the office and decides on drafts; a class
+representative sees the section's week, its requests and what changed in the section's timetable.
 """
 
 # no `from __future__ import annotations`: FastAPI must see the dependency types defined in create_app
@@ -38,7 +40,7 @@ from nts.fairness import standing
 from nts.state import InvalidChange
 from nts.state.events import ClassCancelled, TimetableSet
 from nts.tools import Refusal, Reply
-from nts.tools.draft import OFFICE
+from nts.tools.draft import OFFICE, REP
 from nts.tools.names import FULL_DAY, Directory, hour
 from nts.tools.read import _at
 from nts.tools.talk import REQUESTER
@@ -156,7 +158,8 @@ def create_app(departments: dict[str, Service] | Service, users: Users | None = 
         out = []
         for d, svc in depts.items():
             inst = svc.store.world.instance
-            out.append({"id": d, "teachers": [f.name for f in inst.faculty], "faculty": len(inst.faculty)})
+            out.append({"id": d, "teachers": [f.name for f in inst.faculty], "faculty": len(inst.faculty),
+                        "sections": [g.name for g in inst.groups]})
         return {"departments": out, "passwords": sessions.users.needs_password}
 
     @app.post("/api/login")
@@ -168,6 +171,12 @@ def create_app(departments: dict[str, Service] | Service, users: Users | None = 
         elif body.name.lower().startswith("club:") and body.name[5:].strip():
             name = body.name[5:].strip()
             person = f"{CLUB}{name}"
+        elif body.name.lower().startswith("rep:"):  # a section's class representative: "rep: Section 2"
+            try:
+                g = Directory(depts[body.dept].store.world.instance).section(body.name[4:].strip())
+            except Refusal:
+                raise HTTPException(401, "wrong name or password") from None
+            person, name = f"{REP}{g.id}", f"{g.name} class rep"
         else:
             try:
                 f = Directory(depts[body.dept].store.world.instance).teacher(body.name)

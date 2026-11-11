@@ -37,7 +37,8 @@ class Directory:
         self.instance = instance
         courses = sorted({s.course for s in instance.sessions})
         self._teachers = [(f, [f.id, f.name, f.name.split()[-1]]) for f in instance.faculty]
-        self._sections = [(g, [g.id, g.name]) for g in instance.groups]
+        # "Section 2" is also "2", as people write it
+        self._sections = [(g, [g.id, g.name] + ([g.name.split()[-1]] if len(g.name.split()) > 1 else [])) for g in instance.groups]
         self._rooms = [(r, [r.id, r.name]) for r in instance.rooms]
         self._courses = [(c, [c, instance.course_title(c)]) for c in courses]
 
@@ -46,6 +47,10 @@ class Directory:
     def teacher(self, text: str, actor: str | None = None) -> Faculty:
         if norm(text) in SELF:
             if actor not in self.instance.faculty_by_id:
+                g = self.instance.group_by_id.get((actor or "").removeprefix("rep:")) if (actor or "").startswith("rep:") else None
+                if g is not None:  # a class representative: "me", "we", "our" are the section
+                    raise Refusal("not_a_teacher", f"the person asking is {g.name}'s class representative, not a teacher: "
+                                  f"leave teacher out and give section={g.name!r}", section=g.name)
                 raise Refusal("not_a_teacher", "the person asking does not teach here, so 'me' names no teacher")
             return self.instance.faculty_by_id[actor]
         return _match("teacher", text, self._teachers, lambda f: f.name)

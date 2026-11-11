@@ -37,7 +37,7 @@ from nts.state.world import World
 from nts.telemetry import Span, Tracer, new_id, read_spans
 from nts.tools import ALL_TOOLS, Ask, Registry, Reply
 from nts.tools import words as wording
-from nts.tools.draft import OFFICE
+from nts.tools.draft import OFFICE, REP
 from nts.tools.talk import REQUESTER
 
 from .choices import choices
@@ -153,11 +153,12 @@ def to_event(span: Span) -> dict | None:
 
 class Service:
     def __init__(self, store: Store, model: Model, tracer: Tracer | None = None, *, agent: AgentConfig | None = None,
-                 simulate: bool = False, handbook=None, picker=None) -> None:
-        from nts.agents import COORDINATOR
+                 simulate: bool = False, handbook=None, picker=None, rep_agent: AgentConfig | None = None) -> None:
+        from nts.agents import COORDINATOR, for_reps
 
         self.store = store
         self.agent = agent or COORDINATOR
+        self.rep_agent = rep_agent or for_reps(self.agent)  # what class representatives talk to: asks, no drafts
         self.simulate = simulate
         self.episodes: dict[str, Episode] = {}
         self.tracer = Tracer([*(tracer.sinks if tracer else []), _Events(self)])
@@ -220,7 +221,7 @@ class Service:
             if eid in self.episodes or head is None or head.attrs.get("state_version") not in versions:
                 continue
             a = head.attrs
-            name = inst.faculty_by_id[a["actor"]].name if a.get("actor") in inst.faculty_by_id else "the timetable office"
+            name = self.name_of(a.get("actor", ""))
             ep = Episode(eid, a.get("request", ""), a.get("actor", ""), name, a.get("week"), head.start, busy=False,
                          thread=a.get("thread") or eid, kind=kind_of(head))
             for span in trace:
@@ -266,18 +267,27 @@ class Service:
             if last.status == "submitted" and last.decision is None:
                 last.status, last.detail = "replaced", "a later message in the conversation replaced this draft"
                 last.push({"type": "end", "status": "replaced", "text": "", "detail": last.detail})
-        inst = self.store.world.instance
-        name = inst.faculty_by_id[actor].name if actor in inst.faculty_by_id else "the timetable office"
+        name = self.name_of(actor)
         eid = new_id("ep-")
         ep = Episode(eid, request, actor, name, week, datetime.now(), thread=earlier[0].thread if earlier else eid)
         self.episodes[ep.id] = ep
         people = Cast() if (self.simulate if simulate is None else simulate) else None
         history = [(e.request, self.remembered(e)) for e in earlier[-MEMORY:]]
         changes = [f for e in earlier if (f := self.fate(e))]  # every change of the conversation, not only the last few
-        self._spawn(ep, lambda: self.harness.run(self.agent, request, self.store, actor, week, episode_id=ep.id,
+        agent = self.rep_agent if actor.startswith(REP) else self.agent
+        self._spawn(ep, lambda: self.harness.run(agent, request, self.store, actor, week, episode_id=ep.id,
                                                  people=people, history=history, thread=ep.thread, changes=changes,
                                                  cancel=ep.cancel))
         return ep
+
+    def name_of(self, actor: str) -> str:
+        """A requester as the page shows them: a teacher's name, "Section 2 class rep", or the office."""
+        inst = self.store.world.instance
+        if actor in inst.faculty_by_id:
+            return inst.faculty_by_id[actor].name
+        if actor.startswith(REP) and (g := inst.group_by_id.get(actor[len(REP):])) is not None:
+            return f"{g.name} class rep"
+        return "the timetable office"
 
     def stop(self, eid: str) -> Episode:
         """Stop a request while the agent works on it. It ends at once for the page; the harness finishes the step
@@ -301,7 +311,9 @@ class Service:
             return picked
         inst = self.store.world.instance
         if re.search(r"\bwhich (?:of your )?(?:class|course|lecture|lab|practical|session)", p.text, re.IGNORECASE):
-            mine = sorted({f"{inst.course_title(s.course)} {s.kind.value}" for s in inst.sessions if s.faculty == ep.actor})
+            gid = ep.actor[len(REP):] if ep.actor.startswith(REP) else None  # a class rep: the section's classes
+            mine = sorted({f"{inst.course_title(s.course)} {s.kind.value}" for s in inst.sessions
+                           if (gid in s.groups if gid else s.faculty == ep.actor)})
             return mine if 1 < len(mine) <= 8 else []
         return []
 

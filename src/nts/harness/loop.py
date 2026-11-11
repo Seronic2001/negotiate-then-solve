@@ -55,6 +55,7 @@ from nts.screen import REFUSED, screen
 from nts.state import Draft, Store, TimetableSet
 from nts.telemetry import Tracer, new_id
 from nts.tools import Ask, Context, Registry, Reply, Scope, settle
+from nts.tools.draft import REP
 
 from .agent import AgentConfig
 from .context import (
@@ -96,6 +97,10 @@ STOPPED = "Stopped. Nothing was changed."
 STUCK = ("I kept going round in circles on this one, so I stopped. Could you say it with a little more detail: "
          "which class (course, day and time), what you want done with it, and for which week?")
 
+
+# a class representative's episode, once it repeats a look-up: answer from what was found, or pass the request on
+REP_CLOSING = ("You have looked up what you need. Now answer the class representative in plain sentences from the "
+               "results above, or escalate their request to the office (decline if it cannot be done).")
 
 class Harness:
     def __init__(self, registry: Registry, model: Model, tracer: Tracer | None = None, *, handbook=None,
@@ -175,11 +180,16 @@ class Harness:
                 return
             n = run.turns + 1
             last = n == b.max_turns
-            allowed = {Scope.END} & run.agent.scopes if last else run.agent.scopes  # the last turn can still end it
+            # a class representative's episode has nothing to draft: once it repeats a look-up, it has what it needs
+            rep = run.ctx.actor.startswith(REP)  # a class representative has no draft to submit: answer, decline, escalate
+            closing = not last and rep and run.repeats > 0
+            run.closed = run.closed or closing
+            allowed = {Scope.END} & run.agent.scopes if last or closing else run.agent.scopes  # the last turn can still end it
             unchecked = last and run.unchecked()
             offered = [t for t in run.tools if self.registry.tools[t["function"]["name"]].scope in allowed
-                       and not (unchecked and t["function"]["name"] == "submit")]  # it would be refused
-            note = (UNCHECKED if unchecked else LAST_TURN) if last else WRAP_UP if n == b.max_turns - 1 > 1 else None
+                       and not ((unchecked or rep) and t["function"]["name"] == "submit")]  # it would be refused
+            note = ((UNCHECKED if unchecked else LAST_TURN) if last else REP_CLOSING if closing
+                    else WRAP_UP if n == b.max_turns - 1 > 1 else None)
             sent = list(run.transcript) + ([Message(role="user", content=note)] if note else [])  # Qwen allows one system message, first
             sent = fit(sent, b.context_tokens - schema_tokens(offered), b.keep_recent)
             with self.tracer.span("turn", f"turn {n}", index=n, last=last,
@@ -233,8 +243,8 @@ class Harness:
             run.stop("budget_exhausted", "the model still called tools on its last turn")
         elif reason := run.over_budget():
             run.stop("budget_exhausted", reason)
-        elif run.repeats >= b.max_repeats:
-            run.stop("stuck", f"{run.repeats} repeated calls", text=STUCK)
+        elif run.repeats >= b.max_repeats and not (run.ctx.actor.startswith(REP) and not run.closed):
+            run.stop("stuck", f"{run.repeats} repeated calls", text=STUCK)  # (a class rep first gets its closing turn)
 
     def _ask(self, run: _Run, sent: list[Message], offered: list[dict]) -> AssistantTurn | None:
         """The model's next turn. When the prompt overflows the model's context, every tool result but the latest is
@@ -275,7 +285,9 @@ class Harness:
             elif key in run.seen:
                 run.repeats += 1
                 if (first := run.refused.get(key)) is None:
-                    result = _refuse(call, "repeated_call", "you already made this exact call; its result is above")
+                    then = (": answer the class representative from it now, or escalate what they ask for"
+                            if run.ctx.actor.startswith(REP) else "")  # (others' wording is what adapters were trained on)
+                    result = _refuse(call, "repeated_call", f"you already made this exact call; its result is above{then}")
                 else:  # the same refused call again: say so, and how to get out of it
                     out = " or ask_requester" if Scope.TALK in allowed else " or decline"
                     result = _refuse(call, "repeated_call", f"this exact call was refused before ({first}); the same "
@@ -353,6 +365,7 @@ class _Run:
         self.seen: Counter = Counter()
         self.refused: dict = {}  # call key -> why it was refused
         self.repeats = 0
+        self.closed = False  # a class representative's episode was offered only its ending tools
         self.status, self.detail, self.text = "", "", ""
         self.elapsed = 0.0
         self.screened = False

@@ -8,6 +8,16 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 
 from nts.tools import Context, Scope
+from nts.tools.draft import REP
+
+
+def asker(inst, actor: str) -> str:
+    """Who the person asking is, in words: a teacher's name, a section's class representative, or the office."""
+    if actor in inst.faculty_by_id:
+        return inst.faculty_by_id[actor].name
+    if actor.startswith(REP) and actor[len(REP):] in inst.group_by_id:
+        return f"the class representative of {inst.group_by_id[actor[len(REP):]].name} (they speak for its students)"
+    return "the timetable office"
 
 
 @dataclass(frozen=True)
@@ -31,7 +41,7 @@ class AgentConfig:
 
     def system(self, ctx: Context) -> str:
         inst = ctx.world.instance
-        who = inst.faculty_by_id[ctx.actor].name if ctx.actor in inst.faculty_by_id else "the timetable office"
+        who = asker(inst, ctx.actor)
         week = f"week {ctx.week} of {inst.calendar.weeks}" if ctx.week else "outside term"
         return f"{self.prompt}\n\nThe person asking: {who}. It is {week}."
 

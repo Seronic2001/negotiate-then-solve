@@ -37,6 +37,7 @@ from .read import _class
 from .registry import Context, Refusal, Scope, tool
 
 OFFICE = "coordinator"
+REP = "rep:"  # a class representative's person id: "rep:" + the section's id ("rep:G-01")
 CANCEL = "cancel:"  # a cancellation among a draft's changes (``extend.cancel_class``): "cancel:<week>:<session>"
 
 
