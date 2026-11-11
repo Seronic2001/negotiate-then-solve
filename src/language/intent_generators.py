@@ -798,6 +798,119 @@ def out_for_me(ctx: _Ctx, t: int):
     return text, IntentOutput(action="compile", intents=[gold]), {}, False
 
 
+def _later_same_day(ctx: _Ctx, s) -> tuple[str, TimeSpec, str] | None:
+    """Somewhere else on the day ``s`` is on now, in words without the day: the other part of the day, or an
+    hour (not lunch, not where it is, room for its length)."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    d, _, _ = ctx.at(s)
+    q0, lunch = ctx.timetable[s.id].slot, cal.lunch_slot
+    morning = lunch is not None and q0 < lunch
+    hours = [q for q in range(cal.slots_per_day - s.duration + 1)
+             if q != q0 and (lunch is None or not q <= lunch < q + s.duration)]
+    options = [("the afternoon", TimeSpec(days=[d], part="afternoon"), "afternoon") if morning else
+               ("the morning", TimeSpec(days=[d], part="morning"), "morning")]
+    if hours:
+        q = rng.choice(hours)
+        options.append((hour(q), TimeSpec(days=[d], at=[clock(q)]), "hour"))
+    if morning:
+        options.append(("after lunch", TimeSpec(days=[d], part="afternoon"), "afternoon"))
+    w, to, how = rng.choice(options)
+    later = how == "afternoon" or (how == "hour" and minutes_of(to.at[0]) > minutes_of(clock(q0)))
+    return w, to, how, later
+
+
+def minutes_of(c: str) -> int:
+    h, m = c.split(":")
+    return int(h) * 60 + int(m)
+
+
+def same_day_part(ctx: _Ctx, t: int):
+    """A move to another time of the same day, said without the day again ("move my Friday 9 am class to the
+    afternoon"): the destination is that day. The v12 reader spread such moves over other days (the
+    head-to-head's move-afternoon); ``language.checks._same_day`` repairs it, this teaches it."""
+    mine = ctx.mine()
+    if not mine:
+        return None
+    s = ctx.rng.choice(mine)
+    d, _, h = ctx.at(s)
+    got = _later_same_day(ctx, s)
+    if got is None:
+        return None
+    w, to, how, later = got
+    k, T, D = ctx.kind_word(s), ctx.title(s), FULL_DAY[d]
+    at = "at " + w if how == "hour" else w if w == "after lunch" else "in " + w
+    texts = [f"Move my {D} {h} {k} to {w}.",
+             f"Could my {T} {k} on {D} at {h} move to {w}, same day?",
+             f"Please shift my {D} {h} {k} to {w} instead.",
+             f"My {D} {h} {T} {k} would suit me better {at}.",
+             f"Can the {k} I have on {D} at {h} be {'later' if later else 'earlier'} in the day, {at}?",
+             f"I'd like my {h} {k} on {D} moved to {w}, if possible.",
+             f"Keep my {D} {h} {k} on {D} but move it to {w}.",
+             f"Same day, different time: my {D} {h} {T} {k} to {w}, please."]
+    text = texts[t]
+    gold = Move(which=_ref(s, ctx, k, course=t in (1, 3, 7)), to=to, hard=placement_is_hard(text))
+    return text, IntentOutput(action="compile", intents=[gold]), {"move": s.id}, False
+
+
+ANSWER_LEAD, ANSWER_LEAD_HELD = _split(["", "", "It's ", "I mean ", "Sorry, ", "That would be ", "Oh, "], 2)
+
+
+def _lead(ctx: _Ctx, held: bool) -> str:
+    return ctx.rng.choice(ANSWER_LEAD_HELD if held else ANSWER_LEAD)
+
+
+def answered(ctx: _Ctx, t: int):
+    """A request too vague to act on, then its sender's answer to the question it was sent back with, as one
+    message (``web.world.joined``: the request, a space, the answer). Read whole: the answer fills what the
+    request left out. The v12 reader asked again or dropped the answer's details (the head-to-head's
+    move-no-class-named passed in one run of three); no training row had an answer after a question."""
+    cal, rng = ctx.instance.calendar, ctx.rng
+    mine = ctx.mine()
+    if not mine or ctx.week >= cal.weeks:
+        return None
+    s = rng.choice(mine)
+    d, c, h = ctx.at(s)
+    k, T, D = ctx.kind_word(s), ctx.title(s), FULL_DAY[d]
+    w = rng.randint(ctx.week + 1, cal.weeks)
+    to_day = ctx.other_day(d)
+    to_words, to = ctx.to_time(s, to_day)
+    q = rng.choice([x for x in range(cal.slots_per_day - s.duration + 1) if x != cal.lunch_slot])
+    x = rng.choice(cal.days)
+    lead = _lead(ctx, t >= 6)
+    cap = (lambda u: u[0].upper() + u[1:]) if not lead else (lambda u: u)
+    named = ClassRef(course=s.course, kind=None if k == "class" else s.kind.value, day=d, time=c)
+    texts = [  # (request, answer, gold)
+        ("Move my class to " + FULL_DAY[to_day] + ".",
+         cap(f"the {T} {k} on {D} at {h}, to {FULL_DAY[to_day]} {hour(q)} in week {w}."),
+         Move(which=named, to=TimeSpec(days=[to_day], at=[clock(q)]), period=Period(weeks=[w]))),
+        ("Please move one of my classes.", cap(f"my {T} {k} on {D} at {h}; {to_words} would be fine."),
+         Move(which=named, to=to)),
+        (f"I'll be away one of the days in week {w}.", cap(f"{FULL_DAY[x]}, the whole day."),
+         Unavailable(time=TimeSpec(days=[x]), period=Period(weeks=[w]))),
+        (f"Please cancel my {k}." if k != "class" else "Please cancel one of my classes.",
+         cap(f"the {T} {k} on {D} at {h}, in week {w}."),
+         Cancel(which=named, period=Period(weeks=[w]))),
+        (f"Could my {T} {k} move?", cap(f"the one on {D} at {h}, to {to_words}, in week {w} only."),
+         Move(which=named, to=to, period=Period(weeks=[w]))),
+        ("Something's come up and I can't teach one morning soon.", cap(f"{FULL_DAY[x]} morning of week {w}."),
+         Unavailable(time=TimeSpec(days=[x], part="morning"), period=Period(weeks=[w]))),
+        ("I'd like a different slot for one of my classes.",
+         cap(f"the {T} {k} on {D} at {h}. {to_words[0].upper() + to_words[1:]} would work."),
+         Move(which=named, to=to)),
+        (f"I won't be able to make it on one of the days in week {w}.", cap(f"{FULL_DAY[x]}."),
+         Unavailable(time=TimeSpec(days=[x]), period=Period(weeks=[w]))),
+    ]
+    request, answer, gold = texts[t]
+    if isinstance(gold, Move) and len([o for o in mine if o.course == s.course and o.kind == s.kind
+                                       and ctx.timetable[o.id].day == d and ctx.timetable[o.id].slot ==
+                                       ctx.timetable[s.id].slot]) != 1:
+        return None
+    text = f"{request} {lead}{answer}"
+    if isinstance(gold, Move | Avoid):
+        gold = gold.model_copy(update={"hard": placement_is_hard(text)})
+    return text, IntentOutput(action="compile", intents=[gold]), {"move": s.id} if isinstance(gold, Move) else {}, False
+
+
 REGISTRY: list[Generator] = [
     Generator("firmness", firmness, 6, (4, 5), "firmness"),
     Generator("only_firmness", only_firmness, 6, (4, 5), "firmness"),
@@ -831,15 +944,21 @@ REGISTRY: list[Generator] = [
     Generator("limit_firmness", limit_firmness, 8, (6, 7), "limit_firmness", since=6),
     Generator("relation_pairs", relation_pairs, 8, (6, 7), "relation_pairs", since=6),
     Generator("out_for_me", out_for_me, 8, (6, 7), "out_for_me"),
+    # intents-v13: what the head-to-head found the v12 reader missing (runs/head_to_head/v1, v3): a move to
+    # another time of the same day, and a request completed by the answer to its clarifying question
+    Generator("same_day_part", same_day_part, 8, (6, 7), "same_day_part"),
+    Generator("answered", answered, 8, (6, 7), "answered"),
 ]
 SENDERS = {"club_more": "student_or_teacher"}
 
 
 def generated(instance: Instance, per_generator: int = 60, held_per_generator: int = 30, seed: int = 200,
-              names: list[str] | None = None) -> list[IntentExample]:
+              names: list[str] | None = None, boost: dict[str, int] | None = None) -> list[IntentExample]:
     """Every registered generator's examples: ``per_generator`` on its train wordings (a tenth to val) and
     ``held_per_generator`` on its held-out ones, whose split is their suite's name. Each generator has its
-    own seed, so adding one leaves the others' rows as they were."""
+    own seed, so adding one leaves the others' rows as they were. ``boost``: a generator's own number of train
+    rows instead of ``per_generator`` (the newest and weakest kinds, upsampled instead of another epoch); its
+    first ``per_generator`` rows are the ones it makes without it."""
     from . import intent_corpus
 
     out: list[IntentExample] = []
@@ -849,7 +968,7 @@ def generated(instance: Instance, per_generator: int = 60, held_per_generator: i
         sender = SENDERS.get(g.name)
         if sender:
             intent_corpus.SENDERS.setdefault(g.name, sender)
-        train = _examples(instance, random.Random(seed + 10 * i), {g.name: (g.name, g.fn)}, per_generator, None,
+        train = _examples(instance, random.Random(seed + 10 * i), {g.name: (g.name, g.fn)}, (boost or {}).get(g.name, per_generator), None,
                           templates=g.train_templates)
         held = _examples(instance, random.Random(seed + 10 * i + 5), {f"{g.name}@{g.suite}": (g.name, g.fn)},
                          held_per_generator, None, templates=g.held_out)

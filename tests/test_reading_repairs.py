@@ -1,4 +1,4 @@
-"""Two near misses of the intents reader that the checks put right (language.checks), from the head-to-head
+"""Near misses of the intents reader that the checks put right (language.checks), from the head-to-head
 (runs/head_to_head/v1): a move to a part of the day with the day implied, and a cancellation whose day the
 reading left out."""
 
@@ -8,7 +8,7 @@ import pytest
 
 from core.schemas import Channel, Request, Role
 from language.checks import check_reading
-from language.intents import Cancel, ClassRef, IntentOutput, Move, Period, TimeSpec
+from language.intents import Cancel, ClassRef, IntentOutput, Move, Period, TimeSpec, Unavailable
 
 
 @pytest.fixture(scope="module")
@@ -52,3 +52,15 @@ def test_a_cancellation_gets_back_the_day_the_message_names(world):
     assert c.output.intents[0].which.day == day
     c = _read(world, teacher, "Cancel my AI lecture next week.", cancel)
     assert c.output.intents[0].which.day is None  # no day named: still asked which
+
+
+def test_alternate_weeks_from_a_week_keep_their_parity(world):  # intents v13b, suite week_patterns
+    who = world.instance.faculty[0].id
+    dropped = Unavailable(time=TimeSpec(days=["Wed"]), period=Period(from_week=9))
+    c = _read(world, who, "Alternate weeks from week 9: Wednesdays are out for me.", dropped)
+    assert c.output.intents[0].period.parity == "odd" and c.output.intents[0].period.from_week == 9
+    c = _read(world, who, "Every other week, starting in week 8, I can't do Wednesday.", dropped.model_copy(
+        update={"period": Period(from_week=8)}))
+    assert c.output.intents[0].period.parity == "even"
+    c = _read(world, who, "From week 9 on, Wednesdays are out for me.", dropped)
+    assert c.output.intents[0].period.parity is None  # every week: nothing to repair

@@ -151,7 +151,8 @@ def build(recipe: dict, *, refreeze: bool = False) -> tuple[dict[str, list[dict]
     g = recipe["generators"]
     add("generators", export_rows(instance, [], generated(instance, per_generator=g["per_generator"],
                                                           held_per_generator=g["held_per_generator"],
-                                                          seed=g["seed"], names=g.get("names"))))
+                                                          seed=g["seed"], names=g.get("names"),
+                                                          boost=g.get("boost"))))
     for name, spec in recipe.get("stored", {}).items():
         add(name, stored_rows(instance, spec))
     short = {}
