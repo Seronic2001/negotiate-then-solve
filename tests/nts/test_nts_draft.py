@@ -388,3 +388,52 @@ def test_a_swap_with_a_colleague_asks_them_and_holds_only_if_they_agree(store, a
     else:  # both halves taken out again: nothing to check, so the submit is refused and the agent declines
         assert not [c for c in out.draft.world.constraints if c not in store.world.constraints]
         assert results(out)["check_draft"].ok is False and out.status == "declined"
+
+
+def test_an_absence_sets_aside_the_requesters_own_standing_rule_for_its_week(store):
+    """A firm absence outranks the requester's own lower-tier rule that pins a class to the day they are away
+    (the head-to-head's away-day): check_draft sets the rule aside for that week only, and the class moves."""
+    from nts.kernel.schemas import Constraint, ConstraintType, Scope as Who, Tier, When
+
+    t = busy_teacher(store, "Tue")
+    inst, tt = store.world.instance, store.world.timetable()
+    sid, p = next((s, q) for s, q in tt.assignment.items() if q.day == "Tue" and inst.session_by_id[s].faculty == t)
+    pin = Constraint(id="PIN-1", type=ConstraintType.PREFER, hard=True, tier=Tier.OPERATIONAL, owner=t,
+                     scope=Who(session=sid), when=When(days=["Tue"], slots=[p.slot]))
+    d = store.draft("office")
+    d.add(ConstraintAdded(constraint=pin))
+    store.commit(d)
+    out, _ = episode(store, [
+        call("constrain", rule="unavailable", teacher="me", days=["Tuesday"], from_week=9, to_week=9,
+             reason="a conference"),
+        call("check_draft"),
+        call("submit", message="Your Tuesday classes in week 9 move."),
+    ], actor=t, week=5)
+    checked = results(out)["check_draft"].content
+    assert checked["ok"] and checked["set_aside"] and "week 9" in checked["set_aside"][0]
+    assert out.status == "submitted"
+    world = store.commit(out.draft)
+    assert not any(q.day == "Tue" and inst.session_by_id[s].faculty == t for s, q in world.timetable(9).assignment.items())
+    kept = [c for c in world.constraints.values() if c.id.startswith("PIN-1")]
+    assert kept and all(9 in c.valid.except_weeks for c in kept)  # still in force in every other week
+
+
+def test_another_teachers_rule_is_never_set_aside_by_an_absence(store):
+    from nts.kernel.schemas import Constraint, ConstraintType, Scope as Who, Tier, When
+
+    t = busy_teacher(store, "Tue")
+    other = next(f.id for f in store.world.instance.faculty if f.id != t)
+    inst, tt = store.world.instance, store.world.timetable()
+    sid, p = next((s, q) for s, q in tt.assignment.items() if q.day == "Tue" and inst.session_by_id[s].faculty == t)
+    pin = Constraint(id="PIN-2", type=ConstraintType.PREFER, hard=True, tier=Tier.OPERATIONAL, owner=other,
+                     scope=Who(session=sid), when=When(days=["Tue"], slots=[p.slot]))
+    d = store.draft("office")
+    d.add(ConstraintAdded(constraint=pin))
+    store.commit(d)
+    out, _ = episode(store, [
+        call("constrain", rule="unavailable", teacher="me", days=["Tuesday"], from_week=9, to_week=9,
+             reason="a conference"),
+        call("check_draft"), say("I cannot."),
+    ], actor=t, week=5)
+    checked = results(out)["check_draft"].content
+    assert not checked["ok"] and "set_aside" not in checked

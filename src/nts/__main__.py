@@ -106,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--max-tokens", type=int, help="token budget of an episode (default: the agent's for Gemini, "
                                                        "none for a local model)")
         q.add_argument("--handbook", type=Path, default=DEFAULT_HANDBOOK, help="the regulations, for the rules tool")
+        q.add_argument("--policies", type=Path, help="also the policy documents of this folder (data/policies: the "
+                       "examination regulations and the rest), read as the web app reads them")
         q.add_argument("--temperature", type=float, help="sampling (default 0, or 0.7 with --best-of)")
         q.add_argument("--pick-tools", action=argparse.BooleanOptionalAction, default=True, help="offer a question "
                        "only the tools that read (System One decides; nts.harness.pick); on by default, --no-pick-tools for all")
@@ -130,6 +132,12 @@ def init(args: argparse.Namespace) -> int:
 def handbook(args: argparse.Namespace):
     from nts.policy import Handbook
 
+    if getattr(args, "policies", None):
+        from agents.documents import load_corpus, ocr_backend
+        from nts.policy import Rule
+
+        rules, _ = load_corpus(args.handbook, args.policies, ocr_backend())
+        return Handbook([Rule(r.id, r.number, r.title, r.text) for r in rules])
     return Handbook.load(args.handbook) if args.handbook and args.handbook.exists() else None
 
 

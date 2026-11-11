@@ -1,0 +1,25 @@
+{
+  "id": "seronic2001/nts-agent-v6-dpo",
+  "id_no": 141614783,
+  "title": "nts-agent-v6-dpo",
+  "code_file": "nts-agent-v6-dpo.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "seronic2001/nts-agent-v6-data"
+  ],
+  "kernel_sources": [
+    "shubhadeepmandal/nts-agent-v6"
+  ],
+  "competition_sources": [],
+  "model_sources": [],
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:9a6bcfda6d03b2cd9aa347ee8c1bae62043328ed0f4afe9bda014e4f8bbf9435",
+  "machine_shape": "NvidiaTeslaT4"
+}

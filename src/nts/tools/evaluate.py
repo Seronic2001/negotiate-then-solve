@@ -88,6 +88,13 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
             return {"ok": False, "why": "the solver ran out of time; try a smaller change"}
         if not result.ok:
             ctx.scratch["check"] = Checked(after.version, False, [])
+            if not args_retry(ctx) and _set_aside(ctx, solver, ours, ws):
+                ctx.scratch["retry"] = True
+                try:
+                    out = check_draft.handler(ctx, args)
+                finally:
+                    ctx.scratch.pop("retry", None)
+                return {**out, "set_aside": ctx.scratch.get("set_aside", [])}
             return _clash(ctx, solver, ours, ws)
         assert result.assignment is not None
         sets += [TimetableSet(week=x, assignment=result.assignment, cancelled=sorted(skip.cancelled)) for x in ws]
@@ -111,6 +118,56 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
         out["cancelled"] = [{**_at(inst, inst.session_by_id[sid], base.timetable(w).assignment[sid]), "week": w}
                             for w, sids in sorted(cancels.items()) for sid in sorted(sids)]
     return out
+
+
+def args_retry(ctx: Context) -> bool:
+    return bool(ctx.scratch.get("retry"))
+
+
+def _set_aside(ctx: Context, solver: TimetableSolver, ours: dict[str, int], ws: list[int | None]) -> bool:
+    """A firm absence of the requester comes before their own standing rules for their classes (operational or
+    preference rules, which their owner may relax), as the request pipeline lets it: a rule of theirs that keeps a class where the absence
+    falls ("the practical only on Tuesday 2-5 pm") is set aside for the weeks of the absence, in the draft,
+    so the class can move. Only the requester's own rules, about only their own classes, and only for named
+    weeks; anything else stays a clash for the model to handle. True: the draft changed, check again."""
+    from nts.kernel.schemas import ConstraintType, Tier
+    from nts.state import ConstraintAdded, ConstraintRemoved
+
+    weeks = sorted(w for w in ws if w is not None)
+    if not weeks or None in ws:
+        return False
+    try:
+        core = solver.core(solver.hard_ids) or []
+    except SolverTimeout:
+        return False
+    after = ctx.state
+    inst = after.instance
+    absent = [c for c in core if c in ours and after.constraints[c].type == ConstraintType.UNAVAILABLE
+              and after.constraints[c].hard and after.constraints[c].scope.faculty == ctx.actor]
+    if not absent:
+        return False
+
+    def own(c) -> bool:
+        s = c.scope
+        session_mine = s.session is not None and inst.session_by_id[s.session].faculty == ctx.actor
+        course_mine = s.course is not None and all(x.faculty == ctx.actor for x in inst.sessions
+                                                   if x.course == s.course)
+        return (c.owner == ctx.actor and c.tier >= Tier.OPERATIONAL
+                and (session_mine or course_mine or s.faculty == ctx.actor))
+
+    theirs = [after.constraints[c] for c in core if c not in ours]
+    if not theirs or not all(own(c) for c in theirs):
+        return False
+    draft = ctx.draft
+    for c in theirs:
+        valid = c.valid.model_copy(update={"except_weeks": sorted({*c.valid.except_weeks, *weeks})})
+        aside = c.model_copy(update={"id": f"{c.id}~{draft.episode or 'draft'}", "valid": valid,
+                                     "source": c.source.model_copy(update={"request": "set aside: the requester is away"})})
+        draft.add(ConstraintRemoved(id=c.id))
+        draft.add(ConstraintAdded(constraint=aside))
+        ctx.scratch.setdefault("set_aside", []).append(
+            f"{words.constraint(inst, c)}: set aside in {_span([weeks])}, since you are away then (your own rule)")
+    return True
 
 
 def _asked_weeks(ctx: Context, added: list, cancels: dict[int, set[str]]) -> set[int | None]:

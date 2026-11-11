@@ -1,0 +1,20 @@
+{
+ "episodes": 279,
+ "good": 180,
+ "bad": 70,
+ "unjudged": 29,
+ "skipped_model": 0,
+ "sft-train": 151,
+ "sft-val": 25,
+ "dpo": 53,
+ "dpo_outcome": 48,
+ "lifted": {
+  "away_and_cancel:good": 12,
+  "away_part:good": 11,
+  "away_pinned:good": 20,
+  "exam_week:bad": 2,
+  "exam_week:good": 12,
+  "swap_colleague:bad": 2,
+  "swap_colleague:good": 38
+ }
+}

@@ -27,7 +27,10 @@ QUESTION_SCOPES = frozenset({Scope.READ, Scope.POLICY, Scope.TALK, Scope.END})
 # change too, whatever System One says (it called that one a question, p 0.81, and the agent had no add_class)
 CHANGE = re.compile(r"\b(?:extra|make[- ]?up|add|take|want|need|move|shift|swap|exchange|cancel|reschedul\w*|postpone|"
                     r"book|reserve|block|limit|away|leave|absent|unavailable|conference|can'?t|cannot|won'?t|instead|"
-                    r"change|put|schedule|keep|go (?:on|to|at))\b", re.IGNORECASE)
+                    r"change|put|schedule|keep|go (?:on|to|at)|"
+                    # a cap on the week ("Can my classes be packed into four days a week, at most?" read as a question)
+                    r"at most|no more than|(?:never|not) (?:have |teach )?more than|pack(?:ed)?|fewer|cap)\b",
+                    re.IGNORECASE)
 
 
 @dataclass(frozen=True)

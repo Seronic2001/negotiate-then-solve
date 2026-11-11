@@ -1008,6 +1008,260 @@ def weekend(world: World, rng: random.Random, now: int) -> Scenario:
                     [check])
 
 
+# -- v7: what the head-to-head (runs/head_to_head/v1, v3) found the v6 agent missing --------------------------------
+
+
+def _other_week(inst, target: int) -> int | None:
+    return next((w for w in (target + 2, target - 2, target + 3) if 1 <= w <= inst.calendar.weeks), None)
+
+
+def _ordinary(now: int, rng: random.Random, inst, *, ahead: tuple[int, ...] = (1, 2, 3, 4)) -> int:
+    """A week after ``now`` away from the examinations (weeks 7, 8, 15, 16 have rules of their own)."""
+    weeks = [now + a for a in ahead if now + a <= inst.calendar.weeks and now + a not in (7, 8, 15, 16)]
+    if not weeks:
+        raise LookupError("no ordinary week ahead")
+    return rng.choice(weeks)
+
+
+def _colleague_pair(world: World, rng: random.Random, target: int):
+    inst = world.instance
+    tt = world.timetable(target)
+    assert tt is not None
+    pairs = [(a, b) for a in inst.sessions if a.duration == 1 and a.id in tt.assignment
+             for b in inst.sessions if b.duration == 1 and b.id in tt.assignment and b.faculty != a.faculty
+             and (tt.assignment[a.id].day, tt.assignment[a.id].slot) != (tt.assignment[b.id].day, tt.assignment[b.id].slot)]
+    rng.shuffle(pairs)
+    for a, b in pairs[:40]:
+        pa, pb = tt.assignment[a.id], tt.assignment[b.id]
+        if _solvable(world, [_want(a, pb.day, pb.slot, (target, target)), _want(b, pa.day, pa.slot, (target, target))],
+                     target):
+            return a, b, pa, pb
+    raise LookupError("no two colleagues' classes that can swap")
+
+
+def _swap_colleague(world: World, rng: random.Random, now: int, agrees: bool) -> Scenario:
+    """A swap of the requester's class with a colleague's: the colleague's class moves only with their consent
+    (``swap_classes`` asks them). Agreed: both move that week. Refused: nothing changes, and the requester is told."""
+    inst = world.instance
+    target = _ordinary(now, rng, inst, ahead=(1, 2, 3))
+    a, b, pa, pb = _colleague_pair(world, rng, target)
+    c, other = inst.course_title, inst.faculty_by_id[b.faculty].name
+    texts = ([
+        "{o} and I have agreed to swap {w}: my {ca} {ka} on {da} at {ha} for the {cb} {kb} on {db} at {hb}.",
+        "{W}, please swap my {da} {ha} {ca} {ka} with {o}'s {cb} {kb} ({db}, {hb}); we've talked about it.",
+    ] if agrees else [
+        "Could my {ca} {ka} on {da} at {ha} swap with {o}'s {cb} {kb} on {db} at {hb} {w}?",
+        "{W} I'd like to swap my {da} {ha} {ca} {ka} with the {cb} {kb} {o} teaches on {db} at {hb}.",
+    ])
+    wp = week_phrase(rng, now, target)
+    text = rng.choice(texts).format(o=other, w=wp, W=wp[0].upper() + wp[1:], ca=c(a.course), ka=a.kind.value,
+                                    da=FULL_DAY[pa.day], ha=hour(pa.slot), cb=c(b.course), kb=b.kind.value,
+                                    db=FULL_DAY[pb.day], hb=hour(pb.slot))
+    text = text[0].upper() + text[1:]
+    cast = Cast(requester=Requester(f"Yes: my {c(a.course)} {a.kind.value} to {FULL_DAY[pb.day]} {hour(pb.slot)} and "
+                                    f"{other}'s class to {FULL_DAY[pa.day]} {hour(pa.slot)}, week {target} only."),
+                teachers={b.faculty: Teacher(accept=agrees, why="" if agrees else "I have a lab visit planned then")})
+
+    def check(out: Outcome, before: World, after: World | None) -> list[str]:
+        if not agrees:
+            if after is not None and after.timetable(target).assignment.get(b.id) != pb:
+                return [f"{other}'s class moved without their consent"]
+            return []
+        if after is None:
+            return ["not committed"]
+        bad = []
+        for x, p in ((a, pb), (b, pa)):
+            got = after.timetable(target).assignment.get(x.id)
+            if not got or (got.day, got.slot) != (p.day, p.slot):
+                bad.append(f"the {c(x.course)} {x.kind.value} is not on {p.day} at {hour(p.slot)}")
+        return bad
+
+    family = "swap_colleague" if agrees else "swap_colleague_refused"
+    return Scenario(f"{family}-{a.id}-{b.id}-w{target}", family, a.faculty, now, text,
+                    frozenset({"submitted"} if agrees else {"declined", "answered"}), [check], cast=cast)
+
+
+def swap_colleague(world: World, rng: random.Random, now: int) -> Scenario:
+    return _swap_colleague(world, rng, now, True)
+
+
+def swap_colleague_refused(world: World, rng: random.Random, now: int) -> Scenario:
+    return _swap_colleague(world, rng, now, False)
+
+
+def _away_check(t: str, target: int, day: str, slots: set[int] | None, inst) -> Check:
+    def check(out: Outcome, before: World, after: World | None) -> list[str]:
+        if after is None:
+            return ["not committed"]
+        bad = []
+        left = [x for x in classes(after, t, target, day) if slots is None or x[2] in slots]
+        if left:
+            bad.append(f"still {len(left)} class(es) then on {FULL_DAY[day]} in week {target}")
+        other = _other_week(inst, target)
+        if other and classes(after, t, other) != classes(before, t, other):
+            bad.append(f"week {other} changed too")
+        return bad
+    return check
+
+
+def away_pinned(world: World, rng: random.Random, now: int) -> Scenario:
+    """Away on a day when one of the requester's classes is pinned there by their own standing rule (a lab kept
+    on its day): the absence outranks it for that week (check_draft sets it aside), so the classes move."""
+    inst = world.instance
+    target = _ordinary(now, rng, inst)
+    def steady(sid: str, d: str, slot: int) -> bool:  # where it is in every timetable of the term: the pin holds
+        return all(sid not in t.assignment or (t.assignment[sid].day, t.assignment[sid].slot) == (d, slot)
+                   for t in world.timetables.values())
+
+    options = [(f.id, d, sid, slot) for f in inst.faculty for d in inst.calendar.days
+               for sid, _, slot in classes(world, f.id, target, d) if steady(sid, d, slot)]
+    if not options:
+        raise LookupError("no class to pin")
+    t, day, sid, slot = rng.choice(options)
+    pin = Constraint(id=f"pin-{sid}", type=ConstraintType.PREFER, hard=True, tier=Tier.OPERATIONAL, owner=t,
+                     scope=Who(session=sid),
+                     when=When(days=[day], slots=list(range(slot, slot + inst.session_by_id[sid].duration))),
+                     source=Source(request="the lab is kept on its day"))
+    off = _off(t, day, target)
+    off = off.model_copy(update={"tier": Tier.VERIFIED_UNAVAILABILITY})
+    pin_aside = pin.model_copy(update={"valid": Validity(except_weeks=[target])})
+    if not _solvable(world, [pin_aside, off], target):
+        raise LookupError("the classes cannot move that week")
+    text = rng.choice([
+        "I'm away at {r} on {d} {w}, please arrange my classes.",
+        "{W} I can't be on campus on {d} because of {r}. Please move my classes that day.",
+        "I have {r} on {d} {w}; my classes that day need to be moved.",
+    ])
+    wp = week_phrase(rng, now, target)
+    text = text.format(r=rng.choice(REASONS), d=FULL_DAY[day], w=wp, W=wp[0].upper() + wp[1:])
+    text = text[0].upper() + text[1:]
+    return Scenario(f"away_pinned-{t}-{day}-w{target}", "away_pinned", t, now, text, frozenset({"submitted"}),
+                    [_away_check(t, target, day, None, inst)], setup=[ConstraintAdded(constraint=pin)])
+
+
+def away_part(world: World, rng: random.Random, now: int) -> Scenario:
+    """Away for part of a day ("before noon", "in the afternoon"): only the classes then move."""
+    inst = world.instance
+    lunch = inst.calendar.lunch_slot or 4
+    target = _ordinary(now, rng, inst)
+    morning = rng.random() < 0.5
+    part = set(range(lunch)) if morning else set(range(lunch + 1, inst.calendar.slots_per_day))
+    options = [(f.id, d) for f in inst.faculty for d in inst.calendar.days
+               if any(x[2] in part for x in classes(world, f.id, target, d))]
+    if not options:
+        raise LookupError("no class in that part of a day")
+    t, day = rng.choice(options)
+    wp = week_phrase(rng, now, target)
+    text = rng.choice([
+        "I have {r} on {d} morning {w} and can't take classes before noon.",
+        "{W} I'm not available on {d} until 1 pm ({r}); please move my morning classes.",
+    ] if morning else [
+        "I have {r} on {d} afternoon {w}, so I can't teach after lunch that day.",
+        "{W} I'm away from 2 pm on {d} ({r}). Please move my afternoon classes.",
+    ]).format(r=rng.choice(REASONS), d=FULL_DAY[day], w=wp, W=wp[0].upper() + wp[1:])
+    return Scenario(f"away_part-{t}-{day}-{'am' if morning else 'pm'}-w{target}", "away_part", t, now, text,
+                    frozenset({"submitted"}), [_away_check(t, target, day, part, inst)])
+
+
+def away_and_cancel(world: World, rng: random.Random, now: int) -> Scenario:
+    """Two changes in two weeks, in one message: away on a day of one week, and one class cancelled in another."""
+    inst = world.instance
+    target = _ordinary(now, rng, inst, ahead=(1, 2, 3))
+    later = _ordinary(target, rng, inst, ahead=(1, 2, 3))
+    options = [(f.id, d) for f in inst.faculty for d in inst.calendar.days if classes(world, f.id, target, d)]
+    rng.shuffle(options)
+    for t, day in options[:30]:
+        mine = [s for s in inst.sessions if s.faculty == t and s.id in world.timetable(later).assignment]
+        if mine and _solvable(world, [_off(t, day, target)], target):
+            break
+    else:
+        raise LookupError("no teacher for both changes")
+    s = rng.choice(mine)
+    p = world.timetable(later).assignment[s.id]
+    text = rng.choice([
+        "In week {a} I'm away on {d}, and please cancel my {pd} {h} {c} {k} in week {b}.",
+        "Two things: I can't come in on {d} in week {a} ({r}); also my {c} {k} on {pd} at {h} won't happen in week {b}.",
+    ]).format(a=target, b=later, d=FULL_DAY[day], pd=FULL_DAY[p.day], h=hour(p.slot), c=inst.course_title(s.course),
+              k=s.kind.value, r=rng.choice(REASONS))
+    away_ok = _away_check(t, target, day, None, inst)
+
+    def check(out: Outcome, before: World, after: World | None) -> list[str]:
+        if after is None:
+            return ["not committed"]
+        bad = [b for b in away_ok(out, before, after) if not b.startswith("week")]
+        if s.id not in after.timetable(later).cancelled:
+            bad.append(f"the {inst.course_title(s.course)} {s.kind.value} is still held in week {later}")
+        return bad
+
+    return Scenario(f"away_and_cancel-{t}-{day}-w{target}-{s.id}-w{later}", "away_and_cancel", t, now, text,
+                    frozenset({"submitted"}), [check])
+
+
+_FREE_YES = re.compile(r"\b(yes|is free|are free|free then|free at|available|nothing scheduled|no class)", re.IGNORECASE)
+_FREE_NO = re.compile(r"\b(not free|isn't free|is not free|busy|not available|has an? (?:class|lecture|lab|practical|"
+                      r"tutorial)|is teaching)", re.IGNORECASE)
+
+
+def q_colleague_free(world: World, rng: random.Random, now: int) -> Scenario:
+    """Whether a colleague is free at one hour this week: the answer must match their timetable (v6 read a class
+    at 4 pm as one at 2 pm)."""
+    inst = world.instance
+    asker = rng.choice(inst.faculty)
+    other = rng.choice([f for f in inst.faculty if f.id != asker.id])
+    day = rng.choice(inst.calendar.days)
+    lunch = inst.calendar.lunch_slot
+    covered = {q + k for sid, _, q in classes(world, other.id, now, day)
+               for k in range(inst.session_by_id[sid].duration)}
+    slot = rng.choice([q for q in range(inst.calendar.slots_per_day) if q != lunch])
+    free = slot not in covered
+    text = rng.choice(["Is {o} free on {d} at {h}?", "Can I catch {o} on {d} at {h}, or are they teaching then?",
+                       "Is {o} available on {d} at {h} this week?"]).format(o=other.name, d=FULL_DAY[day], h=hour(slot))
+
+    def check(out: Outcome, before: World, after: World | None) -> list[str]:
+        said_no, said_yes = bool(_FREE_NO.search(out.text)), bool(_FREE_YES.search(out.text))
+        if said_no and said_yes:  # "not free ... available at 3 pm": the sentence about the hour asked decides
+            said_yes = not said_no
+        if free and said_no:
+            return [f"says {other.name} is busy at {hour(slot)}, but they are free"]
+        if not free and said_yes:
+            return [f"says {other.name} is free at {hour(slot)}, but they teach then"]
+        if not said_yes and not said_no:
+            return ["does not say whether they are free"]
+        return []
+
+    return Scenario(f"q_colleague_free-{asker.id}-{other.id}-{day}-{slot}", "q_colleague_free", asker.id, now, text,
+                    frozenset({"answered"}), [check])
+
+
+def exam_week(world: World, rng: random.Random, now: int) -> Scenario:
+    """A change in the weeks of the examinations (run with the policy documents, ``--policies``): in weeks 8 or 16
+    it is declined (no classes are held), in 7 or 15 escalated to the examination cell; nothing is submitted."""
+    inst = world.instance
+    weeks = [w for w in (7, 8, 15, 16) if now < w <= inst.calendar.weeks]
+    if not weeks:
+        raise LookupError("no examination week ahead")
+    target = rng.choice(weeks)
+    tt = world.timetable(target)
+    assert tt is not None
+    s = rng.choice([x for x in inst.sessions if x.id in tt.assignment and x.duration == 1])
+    p = tt.assignment[s.id]
+    to = rng.choice([d for d in inst.calendar.days if d != p.day])
+    text = rng.choice([
+        "Please move my {c} {k} on {d} at {h} to {t} in week {w}.",
+        "In week {w}, could my {d} {h} {c} {k} go to {t} instead?",
+        "I can't take my {c} {k} on {d} in week {w}; please cancel it.",
+    ]).format(c=inst.course_title(s.course), k=s.kind.value, d=FULL_DAY[p.day], h=hour(p.slot), t=FULL_DAY[to], w=target)
+    exam = target in (8, 16)
+
+    def check(out: Outcome, before: World, after: World | None) -> list[str]:
+        if after is not None and after.timetable(target).assignment.get(s.id) != p:
+            return ["changed the timetable in an examination week"]
+        return []
+
+    return Scenario(f"exam_week-{s.id}-w{target}", "exam_week", s.faculty, now, text,
+                    frozenset({"declined"} if exam else {"escalated"}), [check])
+
+
 FAMILIES: dict[str, Callable[[World, random.Random, int], Scenario]] = {
     "q_free": q_free, "q_classes": q_classes, "away": away, "preference": preference, "move": move,
     "room_closed": room_closed, "not_allowed": not_allowed, "impossible": impossible, "ambiguous": ambiguous,
@@ -1023,13 +1277,19 @@ FAMILIES: dict[str, Callable[[World, random.Random, int], Scenario]] = {
     # v5: the extend tools, counter-offers and other times, screening (only when asked for by name)
     "cancel_one": cancel_one, "make_up": make_up, "hour_limit": hour_limit, "club_booking": club_booking,
     "counter_offer": counter_offer, "refused_alternative": refused_alternative, "injection": injection,
+    # v7: colleague swaps with consent, absences that move pinned or part-day classes, two changes in two weeks,
+    # whether a colleague is free, and the examination weeks (only when asked for by name)
+    "swap_colleague": swap_colleague, "swap_colleague_refused": swap_colleague_refused, "away_pinned": away_pinned,
+    "away_part": away_part, "away_and_cancel": away_and_cancel, "q_colleague_free": q_colleague_free,
+    "exam_week": exam_week,
 }
 V1_FAMILIES = list(FAMILIES)[:9]  # what coordinator-v1 (no talk tools) was evaluated on
 V2_FAMILIES = list(FAMILIES)[:12]  # ... coordinator-v2 (talk, no rules)
 V3_FAMILIES = list(FAMILIES)[:14]  # ... coordinator-v3, before the harder families
 HARD_FAMILIES = list(FAMILIES)[14:19]
 STRESS_FAMILIES = list(FAMILIES)[19:23]
-V5_FAMILIES = list(FAMILIES)[23:]
+V5_FAMILIES = list(FAMILIES)[23:30]
+V7_FAMILIES = list(FAMILIES)[30:]
 DEFAULT_FAMILIES = list(FAMILIES)[:19]
 
 
