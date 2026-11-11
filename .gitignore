@@ -14,7 +14,7 @@ data/*.zip
 PROGRESS.md
 ROADMAP.md
 CHAT-PLAN.md
-models
+/models/
 # private notes: request flow diagrams
 diagrams.md
 
