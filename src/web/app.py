@@ -52,7 +52,7 @@ from core.graph import add_conflict, add_constraint, build_graph
 from core.instance import Session
 from core.schemas import DAYS, ConstraintType, Placement, Request, RequestStatus, Role, Tier
 from evaluation.stats import mean
-from language.corpus import FULL_DAY, hour
+from language.corpus import FULL_DAY, hour, hour_range
 from language.intents import IntentOutput, Unresolved
 from language.intents import weeks as period_weeks
 from language.llm import FREE_TIER, LLMError
@@ -89,12 +89,14 @@ TIER_EXAMPLES = {0: "No double-booking; room capacity; lab equipment", 1: "Max 3
 # ---------------------------------------------------------------------------
 
 
-def _placement(w: World, p: Placement | None) -> dict | None:
+def _placement(w: World, p: Placement | None, session: str | None = None) -> dict | None:
+    """A place in the timetable; given the ``session``, its time runs to when the class ends ("2–4 pm")."""
     if p is None:
         return None
     room = w.instance.room_by_id.get(p.room)
-    return {"day": p.day, "slot": p.slot, "room": p.room, "text": placement_text(w.instance, p),
-            "time": hour(p.slot), "room_name": room.name if room else p.room}
+    s = w.instance.session_by_id.get(session) if session else None
+    return {"day": p.day, "slot": p.slot, "room": p.room, "text": placement_text(w.instance, p, session),
+            "time": hour_range(p.slot, s.duration if s else 1), "room_name": room.name if room else p.room}
 
 
 def _constraint(w: World, c) -> dict:
@@ -131,7 +133,7 @@ def _message(w: World, m: Message | dict, case: Case | None = None) -> dict:
             "facts": [{**f, "text": plain(f["text"])} for f in m.get("facts", [])],
             "claims": [{**c, "text": plain(c["text"])} for c in m.get("claims", [])],
             "offers": [{**o, "placements": [{"session": s, "session_name": session_name(w.instance, s),
-                                              **_dated(w, _placement(w, Placement(**p)), weeks)}
+                                              **_dated(w, _placement(w, Placement(**p), s), weeks)}
                                              for s, p in o["placements"].items()]}
                        for o in m["offers"]]}
 
@@ -254,7 +256,7 @@ def _diff(w: World, before: dict[str, Placement], after: dict[str, Placement]) -
             out.append({"session": sid, "session_name": _session_name(w, sid, sessions), "extra": sid.startswith(EXTRA_PREFIX),
                         "faculty": s.faculty if s else None, "faculty_name": w.name_of(s.faculty) if s else None,
                         "groups": s.groups if s else [],
-                        "before": _placement(w, before.get(sid)), "after": _placement(w, after.get(sid))})
+                        "before": _placement(w, before.get(sid), sid), "after": _placement(w, after.get(sid), sid)})
     return out
 
 
@@ -1879,7 +1881,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                                   "kind": s.kind.value if s else "", "groups": s.groups if s else [],
                                   "faculty_name": w.name_of(s.faculty) if s else None,
                                   "faculty": s.faculty if s else None, "course": s.course if s else None,
-                                  "from": _placement(w, q), "to": _placement(w, p)})
+                                  "from": _placement(w, q, sid), "to": _placement(w, p, sid)})
             if u["role"] in OVERSIGHT:
                 seen: set[str] = set()
                 for x in w.store.versions():

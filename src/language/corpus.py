@@ -142,6 +142,16 @@ def hour(slot: int) -> str:
     return f"{h if h <= 12 else h - 12} {'am' if h < 12 else 'pm'}"
 
 
+def hour_range(slot: int, duration: int = 1, sep: str = "–") -> str:
+    """When a class runs: "2–4 pm", "11 am–1 pm"; a one-hour class is its start ("2 pm")."""
+    if duration <= 1:
+        return hour(slot)
+    start, end = hour(slot), hour(slot + duration)
+    if start.split()[1] == end.split()[1]:
+        start = start.split()[0]
+    return f"{start}{sep}{end}"
+
+
 def day_list(days: list[str]) -> str:
     names = [FULL_DAY[d] for d in days]
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]

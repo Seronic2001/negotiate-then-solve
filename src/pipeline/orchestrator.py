@@ -1391,7 +1391,7 @@ class Orchestrator:
         asked = [_when(self.instance, cons[cid]) for cid in sorted(given) if cid in cons and cons[cid].when.days]
         sessions = self.instance.session_by_id
         mine = [s for s in moved if s in assignment and sessions[s].faculty == sender]
-        where = "; ".join(f"{session_name(self.instance, s)} is now on {placement_text(self.instance, assignment[s])}"
+        where = "; ".join(f"{session_name(self.instance, s)} is now on {placement_text(self.instance, assignment[s], s)}"
                           for s in mine)
         if not where:
             return None
@@ -1983,7 +1983,7 @@ class Orchestrator:
             if mine:
                 week = f" (week {v.week})" if v.week else ""
                 out[person] = "Timetable change" + week + ": " + "; ".join(
-                    f"{session_name(self.instance, s)} is now on {placement_text(self.instance, v.assignment[s])}"
+                    f"{session_name(self.instance, s)} is now on {placement_text(self.instance, v.assignment[s], s)}"
                     for s in mine)
         return out
 
