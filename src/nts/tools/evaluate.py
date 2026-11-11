@@ -194,6 +194,10 @@ def _exams(ctx: Context, weeks: set[int | None], cancels: dict[int, set[str]]) -
     ruling = exam_ruling(weeks, rules, extra=extra)
     if ruling is None:
         return None
+    if ruling.action == "forward":
+        if ctx.exams_granted:  # the examination cell has approved it: the change goes ahead like any other
+            return None
+        ctx.scratch["exams"] = ruling  # the office reads it from the escalation: who the request goes to next
     end = ("decline, telling the person why" if ruling.action == "refuse" else
            "escalate, so the office passes it to the examination cell, and tell the person it was forwarded")
     return {"ok": False, "why": f"{ruling.message} Do not submit or change the weeks yourself: {end}.",

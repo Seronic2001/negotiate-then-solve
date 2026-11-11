@@ -63,7 +63,7 @@ from pipeline.ingest import UnknownSender
 from pipeline.orchestrator import Case, NotAuthorised
 from pipeline.store import EXTRA_PREFIX
 
-from .agentic import desk_of
+from .agentic import agent_case, desk_of
 from .wording import TIER_LABEL, plain
 from .wording import TIER_WHO as TIER_WHO_PLAIN
 from .world import (
@@ -205,7 +205,7 @@ def _case_detail(w: World, case: Case) -> dict:
                 "asked": plain(o.escalation.asked), "grant": plain(o.escalation.grant),
                 # what granting would set aside, and why it cannot be granted (None: it can)
                 "set_aside": [_constraint(w, c) for c in w.orch.overrides(case)],
-                "cannot_grant": w.orch.cannot_grant(case)},
+                "cannot_grant": None if agent_case(w, case.id) else w.orch.cannot_grant(case)},
             "solver": None if o.result is None else {"status": o.result.status, "wall_time": o.result.wall_time,
                                                      "moved": o.result.moved,
                                                      "soft_violations": o.result.soft_violations}}
@@ -1562,7 +1562,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             raise HTTPException(409, f"this request is not waiting for a decision ({c.status.value})")
         if not decides(u, c):
             raise HTTPException(403, "this decision was sent to someone else")
-        if body.grant and (why := w.orch.cannot_grant(c)):
+        if body.grant and not agent_case(w, case_id) and (why := w.orch.cannot_grant(c)):
             raise HTTPException(409, why)
         w.decide(case_id, u["id"], body.grant, body.note.strip())
         return {"status": "deciding"}

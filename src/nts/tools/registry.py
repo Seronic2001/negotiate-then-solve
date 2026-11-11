@@ -56,6 +56,7 @@ class Context:
     handbook: Any = None  # the department's regulations (nts.policy.Handbook), for the rules tool
     request: str = ""  # what the person asked, as they wrote it (screened: ``nts.screen``)
     scopes: frozenset = frozenset()  # the agent's tool scopes (some results say more to later agents)
+    exams_granted: bool = False  # the examination cell approved this request: a change next to the exams may go ahead
 
     @property
     def state(self) -> World:

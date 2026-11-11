@@ -42,7 +42,8 @@ import weakref
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from agents.negotiation import Message, Offer
+from agents.negotiation import EscalationBrief, Message, Offer
+from agents.negotiation import Outcome as Brief
 from agents.negotiation import Reply as DemoReply
 from core.schemas import Channel, ConcessionEntry, Constraint, Placement, Request, RequestStatus, Role
 from nts.api.service import Conflict, Episode, NotFound, Service
@@ -160,6 +161,13 @@ def desk_of(w: World) -> AgentDesk:
         return _desks[w]
 
 
+def agent_case(w: World, case_id: str) -> bool:
+    """Whether the agent's desk carries this case (without starting a desk for a world that has none)."""
+    with _desks_lock:
+        d = _desks.get(w)
+    return d is not None and d.owns_case(case_id)
+
+
 class AgentDesk:
     def __init__(self, w: World, model=None, *, agent=None, tracer=None, picker=None, ticker: bool = True) -> None:
         from nts.telemetry import default_tracer
@@ -177,6 +185,7 @@ class AgentDesk:
         self.offers: dict[str, str] = {}  # demo inbox item -> the episode whose ask it is
         self.asked: dict[tuple[str, int], str] = {}  # (episode, events when it asked) -> its inbox item
         self.proposed: set[str] = set()  # episodes whose draft is proposed as demo versions
+        self.declined: set[str] = set()  # cases the examination cell declined: their episode ended there
         if ticker:
             threading.Thread(target=self._tick, name="agent-desk", daemon=True).start()
 
@@ -339,12 +348,17 @@ class AgentDesk:
         case = self.w.orch.cases.get(cid)
         if case is None:  # the demo was reset: the case is gone
             return
+        if self.episode_of.get(cid) != ep.id or cid in self.declined:
+            return  # the examination cell decided it: a later episode carries the case on, or it ended declined
         if p is not None:
             status = S.CLARIFICATION if p.to == REQUESTER else S.NEGOTIATING
             if p.to != REQUESTER:
                 self._offer(ep, case)
         else:
             status = STATUS.get(ep.status, S.DENIED)
+        exams = self._exams(ep) if ep.status == "escalated" else None
+        if exams is not None:
+            status = S.ESCALATED
         if ep.status == "submitted" and ep.id not in self.proposed:
             self._propose(ep, case)
         if status == S.PUBLISHED:
@@ -354,9 +368,56 @@ class AgentDesk:
             if reply:
                 case.reply = reply
             if case.status != status:
-                self._advance(case, status, agent_status=ep.status, **({"reason": ep.detail} if ep.detail else {}))
+                if exams is not None:
+                    self._to_exam_cell(case, exams)
+                self._advance(case, status, agent_status=ep.status, **({"reason": ep.detail} if ep.detail else {}),
+                              **({"to": "exam_cell", "cited": exams.cited} if exams is not None else {}))
+                if exams is not None:
+                    self.w._on_escalated(case)
             if status in (S.WITHDRAWN, S.DENIED):
                 self._close_offers(ep.id)
+
+    @staticmethod
+    def _exams(ep: Episode):
+        """The examination regulations' ruling, when the agent passed the request on because a change next to the
+        examinations needs the Controller of Examinations' approval (``nts.tools.evaluate``); None otherwise."""
+        run = ep.outcome.run if ep.outcome is not None else None
+        return run.ctx.scratch.get("exams") if run is not None else None
+
+    def _to_exam_cell(self, case: Case, ruling) -> None:
+        """The request goes to the examination cell (role exam_cell) to decide, as in the pipeline: granted, the
+        agent makes the change and it goes to the office's approval (``decide``)."""
+        asked = case.request.raw_text.strip()
+        weeks = ", ".join(map(str, ruling.weeks))
+        brief = (f"{self.w.name_of(case.request.sender_id)} asks for a change in week{'s' if len(ruling.weeks) > 1 else ''}"
+                 f" {weeks}, next to the examinations: \"{asked}\". Under {', '.join(ruling.cited)} no change may take "
+                 "effect in the weeks around the examinations without the Controller of Examinations' written "
+                 "approval: grant it if no examination is affected.")
+        case.outcome = Brief(status="escalated", step=0, escalation=EscalationBrief(
+            to="exam_cell", reason=ruling.reason, text=brief, rule=ruling.cited[0] if ruling.cited else None,
+            asked=asked, grant="The assistant makes the change and it goes to the timetable office for approval."))
+
+    def decide(self, case_id: str, decider: str, grant: bool, note: str = "", name: str = "") -> None:
+        """The examination cell's decision on a request sent to it. Granted: the agent works on the request again
+        with the examination check lifted, and the change goes to the office's approval like any other.
+        Declined: the sender is told, and the agent remembers it."""
+        case = self.w.orch.cases[case_id]
+        if case.status != S.ESCALATED:
+            raise ValueError(f"case {case_id} is not escalated ({case.status.value})")
+        name = name or self.w.name_of(decider)
+        with self.lock:
+            old = self.episode(case_id)
+            case.decision = {"by": decider, "granted": grant, "note": note, "set_aside": []}
+            if not grant:
+                self.declined.add(case_id)
+                case.reply = f"Your request was declined by {name}" + (f": {note}" if note else ".")
+                self.svc.note(old.id, case.reply)
+                self._advance(case, S.DENIED, decided_by=decider, note=note)
+                return
+            self.svc.note(old.id, f"Approved by {name}" + (f": {note}" if note else "."))
+            ep = self.svc.start(old.request, old.actor, old.week, exams_granted=True)
+            self.episode_of[case_id], self.case_of[ep.id] = ep.id, case_id
+            self._advance(case, S.COMPILED, decided_by=decider, granted=True, note=note, set_aside=[], episode=ep.id)
 
     def _reply(self, ep: Episode) -> str:
         if ep.status in UNFINISHED:

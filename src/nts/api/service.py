@@ -250,7 +250,7 @@ class Service:
         return n
 
     def start(self, request: str, actor: str, week: int | None = None, *, simulate: bool | None = None,
-              thread: str | None = None, keep_drafts: bool = False) -> Episode:
+              thread: str | None = None, keep_drafts: bool = False, exams_granted: bool = False) -> Episode:
         """A new request, or with ``thread`` the next message of that conversation: the agent sees the earlier
         messages and what came of them (``MEMORY`` of them). A message to a conversation whose agent waits for the
         requester's answer is that answer. A draft of the conversation still waiting for the office is replaced:
@@ -278,7 +278,7 @@ class Service:
         agent = self.rep_agent if actor.startswith(REP) else self.agent
         self._spawn(ep, lambda: self.harness.run(agent, request, self.store, actor, week, episode_id=ep.id,
                                                  people=people, history=history, thread=ep.thread, changes=changes,
-                                                 cancel=ep.cancel))
+                                                 cancel=ep.cancel, exams_granted=exams_granted))
         return ep
 
     def name_of(self, actor: str) -> str:

@@ -293,3 +293,69 @@ def test_a_change_in_the_weeks_around_the_examinations_is_escalated_not_submitte
     assert "Controller of Examinations" in str(tools["check_draft"]["result"])
     assert tools["submit"]["ok"] is False  # the failed check stops the submit
     assert msg["status"] != "submitted"
+
+
+def _to_exam_cell(c, world, desk, play, me, day_index):
+    day = FULL_DAY[world.instance.calendar.days[day_index]]
+    play.load([call("constrain", rule="unavailable", teacher="me", days=[day], from_week=7, to_week=7,
+                    reason="a conference"),
+               call("check_draft"),
+               call("escalate", message="A change in week 7 needs the Controller of Examinations.")])
+    send(c, me, f"I am at a conference on {day} in week 7")
+    cid = settled(c, desk, me)[-1]["case"]
+    case = world.orch.cases[cid]
+    return cid, case, day
+
+
+def test_a_change_next_to_the_exams_goes_to_the_exam_cell_and_granted_is_made_and_sent_for_approval(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 6)
+    cid, case, day = _to_exam_cell(c, world, desk, play, me, 1)
+    assert case.status.value == "escalated" and case.outcome.escalation.to == "exam_cell", case.status
+    cell = {"X-User": world.exam_cell()}
+    detail = c.get(f"/api/cases/{cid}", headers=cell).json()
+    assert detail["can_decide"] and detail["outcome"]["escalation"]["cannot_grant"] is None
+    assert not c.get(f"/api/cases/{cid}", headers={"X-User": COORDINATOR}).json()["can_decide"]
+    # granted: the agent works on it again, the examination check lifted, and submits the change
+    play.load([call("constrain", rule="unavailable", teacher="me", days=[day], from_week=7, to_week=7,
+                    reason="a conference"),
+               call("check_draft"), call("submit", message="Your classes that day move.")])
+    assert c.post(f"/api/cases/{cid}/decide", json={"grant": True, "note": "fine"}, headers=cell).status_code == 200
+    settled(c, desk, me)
+    assert case.status.value == "awaiting_approval" and case.proposal, (case.status, case.reply)
+    assert case.decision["by"] == world.exam_cell() and case.decision["granted"]
+    assert any(p["id"] == cid for p in c.get("/api/approvals", headers={"X-User": COORDINATOR}).json())
+
+
+def test_the_exam_cell_declines_and_the_sender_is_told(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 7)
+    cid, case, _ = _to_exam_cell(c, world, desk, play, me, 2)
+    cell = {"X-User": world.exam_cell()}
+    r = c.post(f"/api/cases/{cid}/decide", json={"grant": False, "note": "an exam is in that room"}, headers=cell)
+    assert r.status_code == 200
+    settled(c, desk, me)
+    assert case.status.value == "denied" and "an exam is in that room" in case.reply
+
+
+def test_the_exam_cell_on_autopilot_answers_the_agents_request(demo):
+    c, world, desk, play = demo
+    me = teacher(world, 4)
+    world.autopilot[world.exam_cell()] = True
+    old = world.autopilot_delay
+    world.autopilot_delay = 0.1
+    try:
+        cid, case, day = _to_exam_cell(c, world, desk, play, me, 4)
+        play.load([call("constrain", rule="unavailable", teacher="me", days=[day], from_week=7, to_week=7,
+                        reason="a conference"),
+                   call("check_draft"), call("submit", message="Sent.")])
+        for _ in range(100):
+            if case.status.value not in ("escalated", "compiled"):
+                break
+            time.sleep(0.2)
+            settled(c, desk, me)
+        assert case.status.value == "awaiting_approval", (case.status, case.reply)
+        assert "simulated" in case.decision["note"]
+    finally:
+        world.autopilot[world.exam_cell()] = False
+        world.autopilot_delay = old

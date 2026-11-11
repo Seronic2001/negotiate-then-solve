@@ -120,7 +120,7 @@ class Harness:
     def run(self, agent: AgentConfig, request: str, store: Store, actor: str, week: int | None = None,
             *, episode_id: str | None = None, people: People | None = None,
             history: Sequence[tuple[str, str]] = (), thread: str | None = None, changes: Sequence[str] = (),
-            cancel: threading.Event | None = None) -> Outcome:
+            cancel: threading.Event | None = None, exams_granted: bool = False) -> Outcome:
         """``history``: the earlier requests of the same conversation (``thread``) and what came of each, oldest first;
         the model sees them as earlier turns, so "and on Tuesday?" or "move that one instead" can be read.
         ``changes``: every change the conversation drafted and whether it is in the timetable, however long ago."""
@@ -128,7 +128,8 @@ class Harness:
         draft = store.draft(actor, eid)
         screened = screen(request)  # instructions to the system are never read
         read = screened.text or ""
-        ctx = Context(store.world, actor, week, draft, handbook=self.handbook, request=read, scopes=agent.scopes)
+        ctx = Context(store.world, actor, week, draft, handbook=self.handbook, request=read, scopes=agent.scopes,
+                      exams_granted=exams_granted)
         # the whole conversation decides the tools: "2 pm" after "I want an extra class" is still a change
         asks = "\n".join([*(asked for asked, _ in history), read])
         pick = self.picker(asks, actor in store.world.instance.faculty_by_id) if self.picker and read else None

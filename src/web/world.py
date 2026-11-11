@@ -1121,7 +1121,14 @@ class World:
         return waiting
 
     def decide(self, case_id: str, decider: str, grant: bool, note: str = "", wait: bool = False) -> None:
-        """Settle an escalation; granting re-solves, so it runs in the background like ``submit``."""
+        """Settle an escalation; granting re-solves, so it runs in the background like ``submit``. A request the
+        agent passed on (the agentic desk) is decided there: granted, the agent makes the change."""
+        from .agentic import agent_case, desk_of
+
+        if agent_case(self, case_id):
+            desk_of(self).decide(case_id, decider, grant, note, name=self.name_of(decider))
+            return
+
         def run() -> None:
             _local.case = case_id
             try:
