@@ -306,3 +306,33 @@ def test_cancellations_in_one_message_stay_one_request(world):
     assert not case.parts and "+split" not in case.route, (case.route, case.reply)
     assert case.status.value == "awaiting_approval", case.reply
     assert {first.id, second.id} <= set(case.proposal.cancelled)
+
+
+@pytest.mark.parametrize("slip", ["empty clash", "one-course clash", "swap with nobody"])
+def test_an_intent_naming_nothing_beside_a_request_is_dropped_and_alone_it_stays(world, slip):
+    """The reader sometimes tacks on an intent that names nothing: "move my DS lecture on Monday to Thursday
+    afternoon" read as the move and a clash report (which became a request of its own, "clash report.", waiting for
+    approval with no change), or the move and a swap with nobody."""
+    a, _, tt = _pair(world)
+    extra = {"empty clash": ClashReport(), "one-course clash": ClashReport(courses=[a.course]),
+             "swap with nobody": Swap(mine=ClassRef(**where(a, tt)), theirs=ClassRef())}[slip]
+    case = submit(world, a.faculty, f"I'd rather keep Friday at 3 pm free ({slip}).", IntentOutput(
+        action="compile", intents=[Avoid(time=TimeSpec(days=["Fri"], at=["15:00"])), extra]))
+    assert not case.parts and "+split" not in case.route, (case.route, case.reply)
+    assert len(case.understood) == 1, case.understood
+    alone = compile_intents(world.instance, world.intake.from_portal(f"ST-{a.groups[0]}", f"We have a clash ({slip})."),
+                            IntentOutput(action="investigate", intents=[ClashReport()]))
+    assert len(alone.output.intents) == 1 and len(alone.clashes) == 1
+
+
+def test_a_clash_report_split_from_a_request_is_looked_into_not_approved(world):
+    a, b, tt = _overlap(world)
+    p = tt[a.id]
+    text = "Keep my Friday 3 pm free please; also two of my classes clash on that day."
+    case = submit(world, a.faculty, text, IntentOutput(action="compile", intents=[
+        Avoid(time=TimeSpec(days=["Fri"], at=["15:00"])),
+        ClashReport(time=TimeSpec(days=[p.day], at=[clock(p.slot)]), courses=[a.course, b.course])]))
+    assert "+split" in case.route and len(case.parts) == 2, (case.route, case.reply)
+    clash = world.orch.cases[case.parts[1]]
+    assert "+clash" in clash.route and clash.status.value == "forwarded", (clash.route, clash.reply)
+    assert clash.proposal is None
