@@ -193,6 +193,8 @@ def turns_of(chat: list[dict], today: date | None = None) -> list[Turn]:
             text = f"Request {m.get('case')} sent" + (f": “{m['request_text']}”" if m.get("request_text") else "") + "."
         elif m["kind"] == "confirm":
             text = f"Send this as a request? “{m.get('text', '')}”"
+        elif m.get("about"):  # a question back about one part of a message (memory v2): which part it is about
+            text = f"About “{m['about']}”: {m.get('text', '')}"
         else:
             text = m.get("answer") or m.get("text") or ""
         if text:

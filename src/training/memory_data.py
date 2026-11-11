@@ -25,7 +25,10 @@ or a question about something the reply gave. Kinds (``SHARES``):
 - ``each``: "each on its own" or "together" switched in a follow-up ("and separately?");
 - ``same``: a message that stands on its own, a third right after a question on the same subject: {"same": true};
 - ``ask``: leaning on something the conversation doesn't have: asked back; ``mixed``: a follow-up and a question
-  of its own in one message.
+  of its own in one message;
+- ``plural`` (v1.1, ``training.memory_data_v1_1``): a plural word means all of it: "these days" (every day just
+  asked about), "those times" (every free span the reply gave; "then" after several is asked back), "the same
+  time" (on another day, next week, for someone else).
 
 Askers: teachers, class representatives ("we", "our") and the timetable office. An unrelated exchange often comes
 first. Departments: the team's and renamed copies (other names, the same timetable, so the replies are real), and,
@@ -170,6 +173,39 @@ ABOUT_TIME_REP = [  # the same, asked by a class representative
     ("any classroom free then?", "is any classroom free on {D} {H}?"),
     ("can we have an extra {course} class then?", "can we have an extra {course} class on {D} {H}?"),
 ]
+# v1.1, kind "plural": what a plural word points at is ALL of it, not one to ask about ("then" after several free
+# spans is asked back; "those times" is every span)
+THESE_DAYS = [  # after a question about several days -> those days: {D} the days as asked ("Monday and Wednesday")
+    ("is {section} free on these days too?", "is {section} free on {D}?"),
+    ("what about {teacher} on those days?", "when is {teacher} free on {D}?"),
+    ("any lab free on those days?", "which labs are free on {D}?"),
+    ("what do I teach on these days?", "what do I teach on {D}?"),
+    ("and {teacher}, same days?", "when is {teacher} free on {D}?"),
+    ("is {section} also free those days?", "is {section} free on {D}?"),
+    ("any classroom free those days?", "which classrooms are free on {D}?"),
+    ("how about {section} on the same days?", "is {section} free on {D}?"),
+    ("check {teacher} for those days too", "when is {teacher} free on {D}?"),
+]
+THOSE_TIMES = [  # after free spans of one day -> all of them: {D} the day, {H} every span ("9–11 am and 2–4 pm")
+    ("is {section} free at those times?", "is {section} free on {D} {H}?"),
+    ("is {teacher} free at those times too?", "is {teacher} free on {D} {H}?"),
+    ("any lab free in those slots?", "is any lab free on {D} {H}?"),
+    ("are those times free for {section} as well?", "is {section} free on {D} {H}?"),
+    ("is {teacher} around during those hours?", "is {teacher} free on {D} {H}?"),
+    ("any classroom free at those times?", "is any classroom free on {D} {H}?"),
+    ("check {section} at those times", "is {section} free on {D} {H}?"),
+    ("and {teacher} in those slots?", "is {teacher} free on {D} {H}?"),
+]
+SAME_TIME = [  # after one day and hour -> that hour again: {d} {h} as asked, {d2} another day, {who} what was asked
+    ("same time on {d2}?", "is {who} free on {d2} at {h}?"),
+    ("and the same time next week?", "is {who} free on {d} at {h} next week?"),
+    ("what about {section} at the same time?", "is {section} free on {d} at {h}?"),
+    ("the same time for {teacher}?", "is {teacher} free on {d} at {h}?"),
+    ("same slot on {d2}?", "is {who} free on {d2} at {h}?"),
+    ("{section} at that same time?", "is {section} free on {d} at {h}?"),
+    ("{d2}, same time?", "is {who} free on {d2} at {h}?"),
+    ("same slot for {section}?", "is {section} free on {d} at {h}?"),
+]
 ABOUT_REQUEST = [  # a request just sent -> it, by its number {R}
     ("has it been approved?", "has {R} been approved?"),
     ("what's the status of that?", "what's the status of {R}?"),
@@ -291,13 +327,13 @@ class Builder:
     ``shared``: departments with courses of two teachers (only their facts are used, not a timetable)."""
 
     def __init__(self, store, departments: list[tuple[str, Instance]], shared: list[tuple[str, Instance]],
-                 pool: list[dict], requests: list[dict], test: bool, seed: int) -> None:
+                 pool: list[dict], requests: list[dict], test: bool, seed: int, tag: str = "") -> None:
         self.store, self.departments, self.shared = store, departments, shared
-        self.pool, self.requests, self.test, self.seed = pool, requests, test, seed
+        self.pool, self.requests, self.test, self.seed, self.tag = pool, requests, test, seed, tag
         self.skipped: Counter = Counter()
 
     def row(self, k: int, kind: str) -> dict | None:
-        self.r = r = random.Random(f"memory-{self.seed}-{self.test}-{kind}-{k}")
+        self.r = r = random.Random(f"memory-{self.seed}{self.tag}-{self.test}-{kind}-{k}")
         self.dept_name, self.dept = self.departments[k % len(self.departments)]
         now, self.week = a_moment(r, self.dept.calendar.weeks)
         self.now = now.replace(hour=r.randint(9, 17))
@@ -312,7 +348,7 @@ class Builder:
         for t in history:
             t.at, at = at, at + timedelta(minutes=r.randint(0, 2))
         prompt = Memory(self.dept, None, asker, self.week, now=self.now).prompt(message, history)
-        return {"id": f"{kind}-{k}", "task": "memory", "kind": kind, "department": self.dept_name,
+        return {"id": f"{self.tag}{kind}-{k}", "task": "memory", "kind": kind, "department": self.dept_name,
                 "meta": {"asker": asker, "now": self.now.isoformat(), "week": self.week, "message": message,
                          "history": [[t.who, t.text, t.at.isoformat()] for t in history],
                          "answer": answer.model_dump(exclude_defaults=True)},
@@ -574,6 +610,67 @@ class Builder:
                 Rewrite(ask=f"Which time do you mean: {', '.join(spans[:-1])} or {spans[-1]}?"), False
         return asker, history, follow.format(**fill), Rewrite(message=full.format(**fill)), False
 
+    # -- v1.1: plural words point at all of it ---------------------------------------------------------------
+
+    def _plural(self):
+        """ "these days", "those times", "the same time": every day or span the conversation gave, filled in."""
+        return getattr(self, self.r.choice(["_these_days", "_these_days", "_those_times", "_same_time"]))()
+
+    def _others(self, asker: str) -> dict:
+        d = self.dept
+        return {"section": self.r.choice(d.groups).name,
+                "teacher": self.r.choice([f for f in d.faculty if f.id != asker]).name}
+
+    def _these_days(self):
+        r, d = self.r, self.dept
+        asker = self._teaching()
+        days = sorted(r.sample(d.calendar.days, r.choice([2, 2, 3])), key=d.calendar.days.index)
+        said = _listed([self._day(x) for x in days])
+        q, tool, args = r.choice([(f"when am I free on {said}?", "free_hours", {"teachers": [asker], "days": days}),
+                                  (f"my free slots on {said}?", "free_hours", {"teachers": [asker], "days": days}),
+                                  (f"what do I teach on {said}?", "classes_of", {"teacher": asker, "days": days})])
+        follow, full = r.choice(_forms(THESE_DAYS, self.test))
+        fill = self._others(asker) | {"D": said}
+        return asker, [Turn("you", q), Turn("assistant", self._say_answer(asker, tool, args))], \
+            follow.format(**fill), Rewrite(message=full.format(**fill)), r.random() < 0.3
+
+    def _those_times(self):
+        r, d = self.r, self.dept
+        asker, day = self._teaching(), r.choice(d.calendar.days)
+        free = sorted(s for _, s in WeekTimetable(d, self.store, self.week).free_hours([asker], [], [], [day]))
+        runs: list[list[int]] = []  # as _time: the free hours as the reply says them, spans of hours in a row
+        for s in free:
+            if runs and s == runs[-1][-1] + 1:
+                runs[-1].append(s)
+            else:
+                runs.append([s])
+        if len(runs) < 2:
+            raise Skip("one free span: 'those times' needs several")
+        said = self._day(day)
+        q = r.choice([f"when am I free on {said}?", f"my free slots on {said}?", f"free hours on {said}?"])
+        answer = self._say_answer(asker, "free_hours", {"teachers": [asker], "days": [day]})
+        follow, full = r.choice(_forms(THOSE_TIMES, self.test))
+        fill = self._others(asker) | {"D": said, "H": _listed([_range(x[0], x[-1] + 1) for x in runs])}
+        return asker, [Turn("you", q), Turn("assistant", answer)], follow.format(**fill), \
+            Rewrite(message=full.format(**fill)), r.random() < 0.3
+
+    def _same_time(self):
+        r, d = self.r, self.dept
+        asker, day, slot = self._teaching(), r.choice(d.calendar.days), self._slot()
+        said, h = self._day(day), hour(slot)
+        if r.random() < 0.5:
+            room = r.choice(d.rooms)
+            who, args = room.name, {"rooms": [room.id], "days": [day], "slots": [slot]}
+        else:
+            teacher = r.choice([f for f in d.faculty if f.id != asker])
+            who, args = teacher.name, {"teachers": [teacher.id], "days": [day], "slots": [slot]}
+        q = f"is {who} free on {said} at {h}?"
+        fill = {"section": r.choice(d.groups).name, "teacher": r.choice([f for f in d.faculty if f.name != who]).name,
+                "who": who, "d": said, "h": h, "d2": self._day(r.choice([x for x in d.calendar.days if x != day]))}
+        follow, full = r.choice(_forms(SAME_TIME, self.test))
+        return asker, [Turn("you", q), Turn("assistant", self._say_answer(asker, "free_hours", args))], \
+            follow.format(**fill), Rewrite(message=full.format(**fill)), r.random() < 0.3
+
     def _list(self):
         return self._people() if self.r.random() < 0.5 else self._classes()
 
@@ -819,8 +916,10 @@ def build_departments(instance: Instance, test: bool, seed: int = 0) -> list[tup
            [(f"shared-s{s}", renamed(department(instance, s, shared=True), rng, first_names=s % 2 == 0)) for s in (4, 5)]
 
 
-def build(instance: Instance, store, n: int, test: bool, seed: int = 0) -> tuple[list[dict], Counter, Counter]:
-    """``n`` conversations, kinds as ``SHARES``; the test set (``test``) from the test templates and wordings."""
+def build(instance: Instance, store, n: int, test: bool, seed: int = 0, shares: dict[str, int] | None = None,
+          tag: str = "") -> tuple[list[dict], Counter, Counter]:
+    """``n`` conversations, kinds as ``shares`` (default ``SHARES``); the test set (``test``) from the test templates
+    and wordings. ``tag``: other conversations in the same departments (memory v1.1's new rows: "v1_1-")."""
     every = build_departments(instance, test, seed)
     departments = [x for x in every if "shared" not in x[0]]
     shared = [x for x in every if "shared" in x[0]]
@@ -831,11 +930,11 @@ def build(instance: Instance, store, n: int, test: bool, seed: int = 0) -> tuple
     if not requests:
         requests = [x for x in (json.loads(y) for y in TRAIN_V2.read_text(encoding="utf-8").splitlines() if y.strip())
                     if x["tool"] is None and x.get("group") == "request"]
-    b = Builder(store, departments, shared, pool, requests, test, seed)
-    kinds = [k for k, share in SHARES.items() for _ in range(share)]
+    b = Builder(store, departments, shared, pool, requests, test, seed, tag)
+    kinds = [k for k, share in (shares or SHARES).items() for _ in range(share)]
     out, cover, k = [], Counter(), 0
     while len(out) < n and k < n * 4:
-        kind = kinds[k % len(kinds)] if test else random.Random(f"{seed}-{k}").choice(kinds)
+        kind = kinds[k % len(kinds)] if test else random.Random(f"{seed}{tag}-{k}").choice(kinds)
         if (row := b.row(k, kind)) is not None:
             out.append(row)
             cover[kind] += 1
