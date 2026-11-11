@@ -197,6 +197,13 @@ class InboxResponder:
 # ---------------------------------------------------------------------------
 
 
+def joined(request: str, answer: str) -> str:
+    """A request and the sender's answer to the question it was sent back with, as one message for the reader.
+    (Tried on the head-to-head, 2026-11-06: "<request> I mean: <answer>" and "<answer> (<request>)" read the same as
+    this, so the plain join stays; the reader needs training rows of answered questions, docs/improvement-plan.md.)"""
+    return f"{request.rstrip()} {answer.strip()}"
+
+
 def _profiles(instance: Instance, seed: int) -> dict[str, Profile]:
     rng = random.Random(seed)
     days = instance.calendar.days
@@ -1064,7 +1071,7 @@ class World:
         if not answer.strip():
             raise ValueError("write an answer first")
         r = case.request.model_copy(deep=True)
-        r.raw_text = f"{r.raw_text.rstrip()} {answer.strip()}"
+        r.raw_text = joined(r.raw_text, answer)
         r.advance(RequestStatus.RECEIVED)
         self.store.save_request(r)
         self.store.log(case_id, "clarified", answer=answer.strip(), question=case.reply)

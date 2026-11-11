@@ -101,6 +101,8 @@ from language.intents import Fallback as FallbackIntent
 from language.intents import Swap as SwapIntent
 from language.parsing import STUDENTS_REPORT, ParseResult
 from language.rule_parser import RuleParser, injected, request_part, surname
+from pipeline.exams import OFFICE as EXAM_OFFICE
+from pipeline.exams import exam_ruling
 
 from .store import EXTRA_PREFIX, Store
 
@@ -499,6 +501,8 @@ class Orchestrator:
         if (parts := self._parts(case)) is not None:
             return self._split(case, parts)
         action = case.parse.action
+        if (ruled := self._exam_weeks(case)) is not None:
+            return ruled
 
         if case.form is None and (amended := self._amend(case)) is not None:
             return amended
@@ -580,6 +584,40 @@ class Orchestrator:
             self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
                           obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
             return self._solve(case)
+
+    def _rules(self) -> dict[str, str]:
+        """The rules in force (id -> text), from the policy check (or, behind the web app's fallback, its
+        rule-based stand-in, which is given the same corpus)."""
+        for p in (self.policy, getattr(self.policy, "backup", None)):
+            if isinstance(rules := getattr(p, "rules", None), dict):
+                return {rid: r.text for rid, r in rules.items()}
+        return {}
+
+    def _exam_weeks(self, case: Case) -> Case | None:
+        """A teacher's change in the weeks around the examinations, decided by the examination regulations
+        themselves (``pipeline.exams``): refused in an examination week, escalated to the examination cell (the Controller's approval) in
+        the weeks next to one. None: not a change, no week near an examination, or the regulations are not loaded."""
+        c = case.compiled
+        refs = [*c.swaps, *c.extras, *c.cancels] if c is not None else []
+        if (case.request.role not in TEACHERS or case.form is not None
+                or (case.parse.action != ExpectedAction.COMPILE and not refs)):
+            return None
+        weeks = [w for x in case.parse.constraints for w in (x.when.weeks or [])]
+        weeks += [w for r in refs for w in (getattr(r, "weeks", None) or [])]
+        ruling = exam_ruling(weeks, self._rules(), extra=bool(c is not None and c.extras))
+        if ruling is None:
+            return None
+        case.route += "+exams"
+        case.reply = ruling.message
+        refused = ruling.action == "refuse"
+        case.policy = PolicyDecision(Verdict.FORBIDDEN if refused else Verdict.NEEDS_APPROVAL, cited=ruling.cited,
+                                     explanation=ruling.message)
+        self._advance(case, S.POLICY_CHECKED, verdict=case.policy.verdict.value, exams=ruling.weeks)
+        if refused:
+            self._advance(case, S.DENIED, cited=ruling.cited, reason=ruling.reason)
+        else:
+            self._advance(case, S.ESCALATED, to=EXAM_OFFICE, cited=ruling.cited, reason=ruling.reason)
+        return case
 
     def _passed(self, constraints: Iterable[Constraint]) -> str | None:
         """The question to ask when a request names a week that is over (the form refuses the same)."""
