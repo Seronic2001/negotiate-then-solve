@@ -1,0 +1,11 @@
+{
+ "name": "a-v13-misses",
+ "account": "shubhadeepmandal",
+ "kernel_sources": ["shubhadeepmandal/nts-eval-tools", "shubhadeepmandal/nts-intents-v13", "shubhadeepmandal/nts-intents-v12"],
+ "budget_hours": 2,
+ "server": {"np": 4, "ctx": 32768},
+ "jobs": [
+  {"id": "misses/v13", "kind": "suites", "adapter": "nts-intents-v13", "workers": 4, "only": ["out_for_me", "compound", "relations", "exceptions", "clubs", "same_day_part", "test"]},
+  {"id": "misses/v12-e3", "kind": "suites", "adapter": "nts-intents-v12-read-100", "workers": 4, "only": ["out_for_me", "compound", "relations", "exceptions", "clubs", "same_day_part", "test"]}
+ ]
+}

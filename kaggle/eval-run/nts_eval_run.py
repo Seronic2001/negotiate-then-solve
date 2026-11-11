@@ -47,8 +47,10 @@ def sh(cmd: str) -> None:
 # -- the plan, the code, the tools ---------------------------------------------------------------------------------
 # the dataset's top folder: the one holding plans/ (Kaggle unpacks an uploaded zip into a folder of the same name,
 # and the unpacked trees carry copies of kaggle/plans too, so take the shortest path)
-code = min((p.parent.parent for p in find(f"{PLAN}.json") if p.parent.name == "plans"), key=lambda p: len(p.parts))
-plan = json.loads((code / "plans" / f"{PLAN}.json").read_text())
+code = min((p.parent for p in find("bundle.json")), key=lambda p: len(p.parts))
+# the dataset upload skips folders, so plans/ may be only in the unpacked tree's own kaggle/plans
+plan_file = min((p for p in find(f"{PLAN}.json") if p.parent.name == "plans"), key=lambda p: len(p.parts))
+plan = json.loads(plan_file.read_text())
 jobs = plan["jobs"]
 END = T0 + plan["budget_hours"] * 3600
 log(f"plan {PLAN}: {len(jobs)} jobs, budget {plan['budget_hours']} h")
@@ -64,8 +66,10 @@ for kind in kinds:
     else:  # unpacked by Kaggle on upload
         shutil.copytree(code / trees[kind], t, dirs_exist_ok=True)
     deps |= set(tomllib.loads((t / "pyproject.toml").read_text())["project"]["dependencies"])
-sh(f"{sys.executable} -m venv /tmp/venv")
-sh("/tmp/venv/bin/pip install -q " + " ".join(f"'{d}'" for d in sorted(deps)))
+# the image's python has no ensurepip, so `python -m venv` fails: uv makes the venv and installs into it
+sh(f"{sys.executable} -m pip install -q uv || {sys.executable} -m pip install -q --break-system-packages uv")
+sh(f"{sys.executable} -m uv venv -q --python {sys.executable} /tmp/venv")
+sh(f"{sys.executable} -m uv pip install -q --python /tmp/venv/bin/python " + " ".join(f"'{d}'" for d in sorted(deps)))
 PY = "/tmp/venv/bin/python"
 
 tools = find("llama-server")
@@ -158,12 +162,14 @@ def command(job: dict, port: int, d: Path) -> list[str]:
     url = f"http://127.0.0.1:{port}/v1"
     if job["kind"] == "suites":
         return [PY, "-m", "evaluation.suites", "--parser", "local", "--local", url, "--adapter", job["adapter"],
-                "--workers", str(job["workers"]), "--note", job["id"]]
+                "--workers", str(job["workers"]), "--note", job["id"],
+                "--misses", str(RES / "misses" / f"{safe(job['id'])}.jsonl")] + (
+                ["--only", ",".join(job["only"])] if job.get("only") else [])
     return [PY, "-m", "nts", "eval", "--model", "llama", "--url", url, "--adapter", job["adapter"],
             "--agent", job["agent"], "--store", f"runs/agentic/{job['store']}.jsonl", "--seed", str(job["seed"]),
             "--per-family", str(job["per_family"]), "--max-seconds", "900", "--telemetry",
             str(WORK / "telemetry" / safe(job["id"])), "--out", str(RES / "agent" / f"{safe(job['id'])}.json"),
-            "--families", *job["families"]]
+            "--families", *job["families"]] + (["--policies", "data/policies"] if job.get("policies") else [])
 
 
 free = {p: NP for p in ports}

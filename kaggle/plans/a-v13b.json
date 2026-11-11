@@ -1,0 +1,40 @@
+{
+ "name": "a-v13b",
+ "account": "shubhadeepmandal",
+ "kernel_sources": [
+  "shubhadeepmandal/nts-eval-tools",
+  "shubhadeepmandal/nts-intents-v13b",
+  "shubhadeepmandal/nts-intents-v12"
+ ],
+ "budget_hours": 4,
+ "server": {
+  "np": 4,
+  "ctx": 32768
+ },
+ "jobs": [
+  {
+   "id": "suites/v13b-e1",
+   "kind": "suites",
+   "adapter": "nts-intents-v13b-read-033",
+   "workers": 4
+  },
+  {
+   "id": "suites/v13b-e2",
+   "kind": "suites",
+   "adapter": "nts-intents-v13b-read-067",
+   "workers": 4
+  },
+  {
+   "id": "suites/v13b-e3",
+   "kind": "suites",
+   "adapter": "nts-intents-v13b-read-100",
+   "workers": 4
+  },
+  {
+   "id": "suites/v12-e3",
+   "kind": "suites",
+   "adapter": "nts-intents-v12-read-100",
+   "workers": 4
+  }
+ ]
+}

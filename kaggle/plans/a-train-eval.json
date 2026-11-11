@@ -3,10 +3,9 @@
  "account": "shubhadeepmandal",
  "kernel_sources": [
   "shubhadeepmandal/nts-eval-tools",
-  "shubhadeepmandal/nts-intents-v12-cos3",
-  "shubhadeepmandal/nts-intents-v12-cos1"
+  "shubhadeepmandal/nts-intents-v12-cos3"
  ],
- "budget_hours": 10.5,
+ "budget_hours": 2,
  "server": {
   "np": 4,
   "ctx": 32768
@@ -19,9 +18,9 @@
    "workers": 4
   },
   {
-   "id": "suites/v12-cos1",
+   "id": "suites/v12-cos3/r1",
    "kind": "suites",
-   "adapter": "nts-intents-v12-cos1",
+   "adapter": "nts-intents-v12-cos3",
    "workers": 4
   }
  ]

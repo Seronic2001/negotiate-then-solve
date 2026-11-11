@@ -6,7 +6,8 @@ Two zips, from the working trees as they are (tracked and untracked files git do
 data and other large files the evaluations never read:
 
     intents.zip   negotiate-then-solve-agentic-demo: evaluation.suites, the frozen test and data/suites (intents-v12)
-    agent.zip     negotiate-then-solve-agentic: nts eval with all 42 families, and its eval departments
+    agent.zip     negotiate-then-solve-agentic-demo: nts eval with the Phase 1 fixes and all 49 families (v7), and
+                  the eval departments copied from negotiate-then-solve-agentic
                   (runs/agentic/eval.jsonl, eval-big.jsonl, which git does not track)
 
 and the plans (kaggle/plans/*.json).
@@ -22,11 +23,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[1]
-TREES = {"intents": PROJECT / "negotiate-then-solve-agentic-demo", "agent": PROJECT / "negotiate-then-solve-agentic"}
+TREES = {"intents": PROJECT / "negotiate-then-solve-agentic-demo", "agent": PROJECT / "negotiate-then-solve-agentic-demo"}
 EXTRA = {"agent": ["runs/agentic/eval.jsonl", "runs/agentic/eval-big.jsonl"]}
 SKIP_DIRS = ("data/lookup-train", "data/memory-train", "data/multitask", "data/distill", "data/agent-v", "notebooks/",
              "report/", "frontend/", "course-offering/", "before_after/", "kaggle/push/", "proposal/", "docs/")
-SKIP_FILES = ("data/compiler-intents/train.jsonl", "data/compiler-intents/mined.jsonl")
+SKIP_FILES = ("data/compiler-intents/mined.jsonl",)  # train.jsonl stays: the tool picker (nts.harness.pick) trains on it
 MAX_BYTES = 8_000_000
 ACCOUNTS = ("shubhadeepmandal", "seronic2001")
 

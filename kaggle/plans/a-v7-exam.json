@@ -1,0 +1,68 @@
+{
+ "server": {
+  "np": 4,
+  "ctx": 32768
+ },
+ "budget_hours": 2,
+ "name": "a-v7-exam",
+ "account": "shubhadeepmandal",
+ "kernel_sources": [
+  "shubhadeepmandal/nts-eval-tools",
+  "seronic2001/nts-agent-v7",
+  "seronic2001/nts-agent-v7-dpo"
+ ],
+ "jobs": [
+  {
+   "id": "agent/v7-sft/eval/exam_week/pol",
+   "kind": "agent",
+   "adapter": "nts-agent-v7",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "exam_week"
+   ],
+   "per_family": 5,
+   "seed": 0,
+   "policies": true
+  },
+  {
+   "id": "agent/v7-dpo/eval/exam_week/pol",
+   "kind": "agent",
+   "adapter": "nts-agent-v7-dpo",
+   "agent": "coordinator-v6",
+   "store": "eval",
+   "families": [
+    "exam_week"
+   ],
+   "per_family": 5,
+   "seed": 0,
+   "policies": true
+  },
+  {
+   "id": "agent/v7-sft/eval-big/exam_week/pol",
+   "kind": "agent",
+   "adapter": "nts-agent-v7",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "exam_week"
+   ],
+   "per_family": 5,
+   "seed": 0,
+   "policies": true
+  },
+  {
+   "id": "agent/v7-dpo/eval-big/exam_week/pol",
+   "kind": "agent",
+   "adapter": "nts-agent-v7-dpo",
+   "agent": "coordinator-v6",
+   "store": "eval-big",
+   "families": [
+    "exam_week"
+   ],
+   "per_family": 5,
+   "seed": 0,
+   "policies": true
+  }
+ ]
+}
