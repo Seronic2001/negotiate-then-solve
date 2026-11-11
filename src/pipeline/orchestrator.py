@@ -259,6 +259,8 @@ class Orchestrator:
         # being read as a change: ``lookup(text, request)`` gives (the answer, who read it), or None when the message
         # is not a timetable question. Set by the web app (web.world); without it every message is read as a request.
         self.lookup: Callable[[str, Request], tuple[str, str] | None] | None = None
+        # called with each case escalated (after it is logged): the web app answers for a simulated decider
+        self.on_escalated: Callable[[Case], None] | None = None
         # called with a case once its change is published (``case.notices`` written): the web app puts each notice
         # in its person's chat (web.world); None: the notices are only on the request
         self.on_published: Callable[[Case], None] | None = None
@@ -314,6 +316,8 @@ class Orchestrator:
         case.request.advance(status)
         self.store.save_request(case.request)
         self.store.log(case.id, status.value, **info)
+        if status == S.ESCALATED and self.on_escalated is not None:
+            self.on_escalated(case)  # the web app's simulated deciders (the exam cell's autopilot)
 
     def _parse(self, case: Case) -> ParseResult:
         r = case.read_as or case.request
@@ -574,9 +578,7 @@ class Orchestrator:
             self._advance(case, S.DENIED, cited=case.policy.cited)
             return case
         if case.policy and case.policy.verdict == Verdict.NEEDS_APPROVAL:
-            case.reply = f"Your request needs approval and has been sent up: {case.policy.explanation}"
-            self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
-            return case
+            return self._needs_approval(case)
 
         with self._solving:
             case.constraints = (case.parse.constraints if case.compiled is not None else
@@ -586,6 +588,36 @@ class Orchestrator:
             self._advance(case, S.COMPILED, constraints=[c.id for c in case.constraints],
                           obligations=case.policy.obligations if case.policy else [], superseded=case.superseded)
             return self._solve(case)
+
+    def _needs_approval(self, case: Case) -> Case:
+        """Sent up because the policy check found the request needs approval: to whoever the cited rule says
+        approves it (``_approver``), as an escalation they can grant (it is then solved, or an extra class placed,
+        and goes to the office's approval) or decline. Before, it was sent up to nobody."""
+        r, cited = case.request, case.policy.cited
+        to, by = self._approver(cited)
+        brief = (f"{self._name(r.sender_id)} asks: \"{r.raw_text.strip()}\". The policy check found it needs "
+                 f"approval{' under ' + ', '.join(cited) if cited else ''}: {case.policy.explanation}")
+        case.outcome = Outcome(status="escalated", step=0, escalation=EscalationBrief(
+            to=to, reason="needs approval", text=brief, rule=cited[0] if cited else "needs approval",
+            asked=r.raw_text.strip(),
+            grant="The request is solved like any other change and then goes to the timetable office for approval."))
+        case.reply = f"Your request needs approval and has been sent to {by}: {case.policy.explanation}"
+        self._advance(case, S.ESCALATED, to=to, reason="needs approval", cited=cited, brief=brief)
+        return case
+
+    def _approver(self, cited: list[str]) -> tuple[str, str]:
+        """Who approves what the cited rules need approval for, as the rule says it ("the prior approval of the Head
+        of Department"), and in words: hod, exam_cell (the Controller of Examinations), dean, or the timetable
+        office (the coordinator, also for a rule that names nobody)."""
+        rules = self._rules()
+        for rid in cited:
+            text = rules.get(rid, "")
+            for pattern, to, by in ((r"head of (?:the )?department|hod", "hod", "the Head of Department"),
+                                    (r"controller of examinations|examination cell", EXAM_CELL, "the examination cell"),
+                                    (r"dean", "dean", "the Dean")):
+                if re.search(pattern, text, re.IGNORECASE):
+                    return to, by
+        return "coordinator", "the timetable office"
 
     def _rules(self) -> dict[str, str]:
         """The rules in force (id -> text), from the policy check (or, behind the web app's fallback, its
@@ -1051,9 +1083,7 @@ class Orchestrator:
             self._advance(case, S.DENIED, cited=case.policy.cited)
             return case
         if case.policy and case.policy.verdict == Verdict.NEEDS_APPROVAL:
-            case.reply = f"Your request needs approval and has been sent up: {case.policy.explanation}"
-            self._advance(case, S.ESCALATED, reason="needs approval", cited=case.policy.cited)
-            return case
+            return self._needs_approval(case)
         return self._place_extra(case)
 
     @_one_at_a_time

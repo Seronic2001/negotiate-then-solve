@@ -125,7 +125,7 @@ export default function Inbox() {
                 Mark all read
               </Button>
             )}
-            {teaches && auto && (
+            {(teaches || user?.role === "exam_cell") && auto && (
               <button
                 onClick={async () => {
                   await api.setAutopilot(user!.id, !auto[user!.id]);
