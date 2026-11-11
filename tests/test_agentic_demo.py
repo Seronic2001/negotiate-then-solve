@@ -359,3 +359,30 @@ def test_the_exam_cell_on_autopilot_answers_the_agents_request(demo):
     finally:
         world.autopilot[world.exam_cell()] = False
         world.autopilot_delay = old
+
+
+def test_a_change_that_moves_others_is_told_the_hours_that_move_nobody(demo):
+    """Dr. Iyer's Thursday 3 pm lecture to 12 pm moves Dr. Sharma's class there; 9 and 10 am that day are free for
+    Dr. Iyer and Section 2, so the check says so (and to use one when the request allows a range)."""
+    c, world, desk, play = demo
+    week = ahead(world, 2)
+    play.load([call("move_class", course="Compiler Design", kind="lecture", on_day="Thursday", at_hour="3 pm",
+                    to_day="Thursday", to_hour="12 pm", from_week=week),
+               call("check_draft"), say("Done.")])
+    send(c, "F-103", f"can you shift my 3pm class to before lunch on thursday week {week}")
+    msg = settled(c, desk, "F-103")[-1]
+    result = next(r.content for r in desk.svc.get(msg["episode"]).outcome.calls if r.name == "check_draft")
+    assert "Dr. Sharma" in result["others_affected"], result
+    assert "Thursday 9 am" in result["moves_nobody_else"] and "move no other class" in result["next"], result
+
+
+def test_a_change_that_moves_nobody_else_gets_no_hint(demo):
+    c, world, desk, play = demo
+    week = ahead(world, 3)
+    play.load([call("move_class", course="Compiler Design", kind="lecture", on_day="Thursday", at_hour="3 pm",
+                    to_day="Thursday", to_hour="9 am", from_week=week),
+               call("check_draft"), say("Done.")])
+    send(c, "F-103", f"can you shift my 3pm class to the morning on thursday week {week}")
+    msg = settled(c, desk, "F-103")[-1]
+    result = next(r.content for r in desk.svc.get(msg["episode"]).outcome.calls if r.name == "check_draft")
+    assert result["classes_moved"] == 1 and "moves_nobody_else" not in result and "next" not in result, result

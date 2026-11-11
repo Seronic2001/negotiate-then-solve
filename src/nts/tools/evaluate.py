@@ -21,7 +21,8 @@ from nts.state import TimetableSet, World
 from nts.state.store import touched
 
 from . import words
-from .extend import EXTRA
+from .extend import EXTRA, free_placements
+from .names import FULL_DAY, hour
 from .read import _at
 from .registry import Context, Refusal, Scope, tool
 from .talk import number_theirs, waived
@@ -114,10 +115,34 @@ def check_draft(ctx: Context, args: CheckDraft) -> dict:
            "not_met": [words.constraint(inst, after.constraints[c]) for c in sorted(unmet)]}
     if len(rows) > MAX_LISTED:
         out["more_moves"] = len(rows) - MAX_LISTED
+    # another teacher's class moves (its sections are always "affected", so they are no sign of it)
+    theirs = any(inst.session_by_id[sid].faculty != ctx.actor for sid in moved)
+    if theirs and (free := _moves_nobody(base, moved, ctx.actor, min(weeks, key=lambda x: 0 if x is None else x))):
+        out["moves_nobody_else"] = free
+        out["next"] = (f"This moves other people's classes. {' or '.join(free)} would move no other class. If the "
+                       "request allows one of them (a range such as \"before lunch\", \"in the morning\", "
+                       "\"any time\"), retract this change, move it there instead and check again; submit this one "
+                       "only if the person named this exact hour.")
     if cancels:
         out["cancelled"] = [{**_at(inst, inst.session_by_id[sid], base.timetable(w).assignment[sid]), "week": w}
                             for w, sids in sorted(cancels.items()) for sid in sorted(sids)]
     return out
+
+
+def _moves_nobody(base: World, moved: dict[str, tuple[Placement, Placement]], actor: str, week: int | None,
+                  limit: int = 4) -> list[str]:
+    """The hours on the day the person's own class moves to where it could go without moving anyone else's (the
+    teacher, the sections and a room all free in the timetable as it is), e.g. ["Thursday 9 am", "Thursday 10 am"]."""
+    inst = base.instance
+    out: list[str] = []
+    for sid, (_, to) in sorted(moved.items()):
+        s = inst.session_by_id[sid]
+        if s.faculty != actor:
+            continue
+        for p in free_placements(base, s, week, days=[to.day]):
+            if p.slot != to.slot and (at := f"{FULL_DAY.get(p.day, p.day)} {hour(p.slot)}") not in out:
+                out.append(at)
+    return out[:limit]
 
 
 def args_retry(ctx: Context) -> bool:
