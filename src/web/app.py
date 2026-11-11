@@ -42,7 +42,7 @@ from agents.documents import SUFFIXES, ingest
 from agents.explainer import TIER_NAME, describe, placement_text, session_name
 from agents.ledger import ConcessionLedger
 from agents.lookup import WeekTimetable
-from agents.memory import turns_of
+from agents.memory import Turn, turns_of
 from agents.negotiation import Message, Reply
 from agents.policy import RETRIEVERS, Rule, make_retriever, tokens
 from agents.priority import JUSTIFICATION, ROLE_AUTHORITY, Weights
@@ -876,6 +876,10 @@ FINISHED = frozenset({RequestStatus.PUBLISHED, RequestStatus.REFUSED, RequestSta
                       RequestStatus.FORWARDED, RequestStatus.WITHDRAWN})
 
 # a message that is only a greeting or thanks: the chat says what it can do instead of filing it as a request
+# memory v2's check: the spans of time an answer gives ("9 am–12 pm", "2–5 pm", "11 am"), and a request that
+# points at one of them ("there", "then", "that slot"; not "those times", which is all of them)
+SPAN = re.compile(r"\b\d{1,2}(?::\d\d)?(?: ?[ap]m)?–\d{1,2}(?::\d\d)? ?[ap]m\b")
+ONE_TIME = re.compile(r"\b(there|then|that (time|slot|hour|period))\b", re.IGNORECASE)
 SMALL_TALK = re.compile(r"^\s*(hi+|hello+|hey+|hii+|good (morning|afternoon|evening)|thanks?( you)?|thank u|thx|"
                         r"ok(ay)?|cool|bye|great)\b[\s!.?,]*$", re.IGNORECASE)
 
@@ -1263,7 +1267,7 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
             reply = ("other", {"text": follow.ask})
         elif (q := w.read_message(read, me)) and q[0] is not None:
             reply = ("lookup", _lookup_answer(w, q[0], me, q[1]))
-            rest = _other_parts(w, me, read, q[2], body.makeup, q[1])
+            rest = _other_parts(w, me, read, q[2], body.makeup, q[1], reply[1]["answer"])
         elif (rule := w.answer_rule(read, me)) is not None:
             reply = ("rule", rule)
         elif SMALL_TALK.match(text):
@@ -1286,24 +1290,64 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
                 out.append(w.store.add_chat(me, "assistant", "other", {"text": "You have sent this request already."}))
         return out
 
-    def _other_parts(w: World, me: str, text: str, others: list, makeup: bool,
-                     reader: str) -> list[tuple[str, dict]]:
+    def _other_parts(w: World, me: str, text: str, others: list, makeup: bool, reader: str,
+                     answer: str | None = None) -> list[tuple[str, dict]]:
         """The replies to what a message asks besides its timetable questions (``World.read_message``'s other
         parts, ``Other``s): each rule question answered from the rules; the requests offered as one card, every
         request part in it (the request reader turns them into an intent each); anything else left out. v4 says
         which a part is, in its own words. v3 does not ("none", no words): rule words make it a rule question,
-        request words (or no rule found) a request, and the whole message is what is read."""
+        request words (or no rule found) a request, and the whole message is what is read.
+        A request that leans on the ``answer`` just given ("when am I free on Friday? move my DS lecture there") is
+        filled in from it first (``_resolved``, memory v2), or asked about instead of offered."""
         rules = [o for o in others if o.kind == "rule"]
         requests = [o for o in others if o.kind == "request"]
         unsure = [o for o in others if o.kind is None]
         out = [("rule", rule) for o in rules if (rule := w.answer_rule(o.text or text, me, known=True)) is not None]
-        if unsure and not rules and (rule := w.answer_rule(text, me)) is not None and rule["rules"]:
+        for o in [o for o in unsure if o.text]:  # v3.2: a "none" with its words, not said which: they tell
+            if (rule := w.answer_rule(o.text, me)) is not None and rule["rules"]:
+                out.append(("rule", rule))
+                unsure.remove(o)
+            else:
+                requests.append(unsure.pop(unsure.index(o)))
+        if unsure and not rules and not out and (rule := w.answer_rule(text, me)) is not None and rule["rules"]:
             out.append(("rule", rule))
         if requests or (unsure and (REQUEST.search(text) or not out)):
-            words = [o.text for o in requests + unsure if o.text]
+            said = [o.text for o in requests + unsure if o.text]
+            words, ask = _resolved(w, me, text, others, answer, said) if said and answer else (said, None)
+            if ask:  # "there" after several free times: which one? The request waits for the answer
+                out.append(("other", {"text": ask, "about": "; ".join(said)}))
+                return out
             out.append(("send", {"text": "; ".join(words) if words else text, "makeup": makeup,
-                                 "reader": reader, "part": True}))
+                                 "reader": reader, "part": True}
+                        | ({"said": "; ".join(said)} if words != said else {})))
         return out
+
+    def _resolved(w: World, me: str, text: str, others: list, answer: str,
+                  said: list[str]) -> tuple[list[str], str | None]:
+        """Memory v2: each request part read as a follow-up of the message's questions and their answer, as if they
+        had been asked just before it (memory's own task: "move my DS lecture there" after "You are free on Friday
+        2–3 pm" is "move my DS lecture to Friday 2–3 pm"). The request parts in full, or the question back when it
+        leans on something the answer doesn't settle ("there" after two free times). Memory off or unreachable: the
+        words as said."""
+        asked = text
+        for o in others:  # the questions alone: the message without its other parts
+            if o.text:
+                asked = asked.replace(o.text, " ")
+        asked = re.sub(r"\s+", " ", asked).strip(" ;,.")
+        asked = re.sub(r"(?:[;,.]?\s*\b(?:and|also)\b)+$", "", asked).strip(" ;,.")  # "…on Friday, and" -> "…on Friday"
+        now = datetime.now(UTC)
+        history = [Turn("you", asked or text, now), Turn("assistant", answer, now)]
+        spans = SPAN.findall(answer)
+        out = []
+        for words in said:
+            got = w.followup(words, me, history)
+            if got is not None and got.ask:
+                return said, got.ask
+            if got is not None and got.changed and len(spans) > 1 and ONE_TIME.search(words):
+                # "there" after several free times is not one of them picked: checked, as memory checks names
+                return said, f"Which time do you mean: {', '.join(spans[:-1])} or {spans[-1]}?"
+            out.append(got.text if got is not None and got.changed else words)
+        return out, None
 
     @app.post("/api/chat/confirm")
     def chat_confirm(body: ConfirmBody, u: dict = Depends(user)) -> list[dict]:
@@ -1340,7 +1384,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         # what was asked kept with the card: a follow-up ("has it been approved?") sees which request it was, and
         # "it's a question" reads it again; ``part``: the request part of a message whose questions were answered
         card = w.store.add_chat(me, "assistant", "request",
-                                {"case": r.id, "request_text": m["text"], **({"part": True} if m.get("part") else {})})
+                                {"case": r.id, "request_text": m["text"], **({"part": True} if m.get("part") else {}),
+                                 **({"said": m["said"]} if m.get("said") else {})})
         w.read_by_chat.add(r.id)  # the chat has read it already: the pipeline does not ask again if it is a question
         w.submit(r)
         return card

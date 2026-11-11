@@ -17,3 +17,5 @@ CHAT-PLAN.md
 models
 # private notes: request flow diagrams
 diagrams.md
+*.gguf
+before_after

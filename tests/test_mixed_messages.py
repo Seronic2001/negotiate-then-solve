@@ -109,6 +109,19 @@ def test_a_question_and_a_rule_question_get_both_answers(chat_with):
     assert [m["kind"] for m in replies] == ["text", "lookup", "rule"] and replies[2]["rules"]
 
 
+def test_v3_2s_parts_are_read_in_their_own_words(chat_with):
+    model = FakeV3()
+    c, world = chat_with(model, adapter="nts-lookup-v3_2")
+    week = world.current_week()
+    model.lookups = (free_friday(world), ChoiceV3(tool="none", request="how many online classes are allowed in a week", week=week),
+                     ChoiceV3(tool="none", request="please move my Data Structures lecture to Thursday", week=week))
+    replies = send(c, menon(world), "When am I free on Friday, how many online classes are allowed in a week, and "
+                                    "please move my Data Structures lecture to Thursday?")
+    assert [m["kind"] for m in replies] == ["text", "lookup", "rule", "request"]
+    assert "P-ONLINE" in [x["id"] for x in replies[2]["rules"]]  # the rule question alone, not the whole message
+    assert replies[3]["request_text"] == "please move my Data Structures lecture to Thursday"
+
+
 def test_with_the_model_down_request_words_make_it_a_request(chat_with):
     c, world = chat_with(FakeV3(error=ConnectionError("server gone")))
     _, card = send(c, menon(world), MIXED)  # the regex must not read it as a question
