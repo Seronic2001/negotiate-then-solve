@@ -146,7 +146,7 @@ def test_transparency_endpoints(client):
     s = c.get("/api/handbook/search?q=1pm lunch", headers=h).json()
     assert s["results"][0]["id"] == "P-LUNCH" and "h13" in s["tokens"]
     t = c.get("/api/transparency", headers=h).json()
-    assert len(t["tiers"]) == 6 and t["ladder"][2]["name"] == "Negotiate"
+    assert len(t["tiers"]) == 6 and t["ladder"][2]["name"] == "Ask the owner"
     assert "gini" in c.get("/api/ledger", headers=h).json()
     office = as_(COORDINATOR)
     g = c.get("/api/graph", headers=office).json()
