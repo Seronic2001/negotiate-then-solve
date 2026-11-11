@@ -4,7 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\host.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\host.ps1 -Offline     # never use the GPU
 param(
-    [string]$GpuUrl = "http://10.1.25.94:8080/v1",
+    [string]$GpuUrl = "http://10.1.25.191:8080/v1",
     [string]$Model = "Qwen3.5-4B-Finetune-NTS-Q8_0",
     [int]$Port = 8000,
     [switch]$Offline
