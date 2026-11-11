@@ -22,7 +22,7 @@ export default function Settings() {
       <PageHeader title="Settings" subtitle="Your choices for this browser, and what you look after for everyone." />
       <Appearance />
       <Layout research={RESEARCH.some(sees)} home={sees("home")} />
-      {teaches && <Messages />}
+      {(teaches || user?.role === "exam_cell") && <Messages teaches={teaches} />}
       {sees("settings") && <ForEveryone />}
       <System />
     </div>
@@ -94,7 +94,7 @@ function Layout({ research, home }: { research: boolean; home: boolean }) {
   );
 }
 
-function Messages() {
+function Messages({ teaches }: { teaches: boolean }) {
   const { user } = useAuth();
   const [makeup, setMakeup] = usePref(PREFS.makeupDefault);
   const { data: auto, refresh } = useApi(() => api.autopilot(), []);
@@ -102,15 +102,20 @@ function Messages() {
   const on = !!user && !!auto?.[user.id];
   return (
     <Section title="Requests and messages" icon={Send}>
-      <Row title="Hold make-up classes" text="When you write that you are away: on, the classes you miss move to other times that week; off, they are cancelled. Where it starts in the chat; you can still change it for one message.">
-        <Switch on={makeup} onChange={setMakeup} label="Hold make-up classes" />
-      </Row>
+      {teaches && (
+        <Row title="Hold make-up classes" text="When you write that you are away: on, the classes you miss move to other times that week; off, they are cancelled. Where it starts in the chat; you can still change it for one message.">
+          <Switch on={makeup} onChange={setMakeup} label="Hold make-up classes" />
+        </Row>
+      )}
       <Row
         title="Answer messages automatically"
         text={
           <>
             <Bot size={12} className="mr-1 inline" />
-            The simulator answers what is sent to you (a clash, a time to choose) as you would. Kept by the server; also in the Inbox.
+            {teaches
+              ? "The simulator answers what is sent to you (a clash, a time to choose) as you would."
+              : "The simulator decides the changes near the examinations sent to you, as the exam cell would."}{" "}
+            Kept by the server; also in the Inbox.
           </>
         }
       >

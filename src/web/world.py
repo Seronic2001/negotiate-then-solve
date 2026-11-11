@@ -294,6 +294,7 @@ class World:
         self.orch.lookup = self.answer_question  # a timetable question sent as a request is answered, not read as one
         self.read_by_chat: set[str] = set()  # requests the chat sent: it decided they were not timetable questions
         self.orch.on_published = self._tell_in_chat
+        self.orch.on_escalated = self._on_escalated  # the exam cell on autopilot answers what is sent to it
         self.orch.bootstrap(policy_constraints(self.instance), approved_by=COORDINATOR)
         self.started = datetime.now(UTC)
         self.threads: dict[str, threading.Thread] = {}
@@ -1092,6 +1093,32 @@ class World:
         if cell is None:
             raise ValueError("this department has no examination cell")
         self.decide(case_id, cell, True, self.EXAM_CELL_NOTE, wait=wait)
+
+    def _waiting_on_exam_cell(self) -> list[str]:
+        return [c.id for c in self.orch.cases.values() if c.status == RequestStatus.ESCALATED and c.outcome
+                and c.outcome.escalation and c.outcome.escalation.to == "exam_cell"]
+
+    def _on_escalated(self, case) -> None:
+        """The exam cell on autopilot answers an escalation sent to it, as a teacher on autopilot answers a message:
+        after the same pause, and not while the start-up history replays or the demo state is restored."""
+        cell = self.exam_cell()
+        to = case.outcome.escalation.to if case.outcome and case.outcome.escalation else ""
+        if to != "exam_cell" or cell is None or not self.autopilot.get(cell) or self.seeding or self.restoring:
+            return
+
+        def answer() -> None:
+            time.sleep(self.autopilot_delay)
+            if case.id in self._waiting_on_exam_cell():  # nobody answered it meanwhile
+                self.simulate_exam_cell(case.id)
+
+        threading.Thread(target=answer, daemon=True).start()
+
+    def answer_waiting_exam_cell(self) -> list[str]:
+        """Autopilot switched on for the exam cell: what already waits on it is answered too."""
+        waiting = self._waiting_on_exam_cell()
+        for cid in waiting:
+            self.simulate_exam_cell(cid)
+        return waiting
 
     def decide(self, case_id: str, decider: str, grant: bool, note: str = "", wait: bool = False) -> None:
         """Settle an escalation; granting re-solves, so it runs in the background like ``submit``."""

@@ -1779,7 +1779,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
     @app.get("/api/autopilot")
     def autopilot(u: dict = Depends(user)) -> dict:
         w = W()
-        return {f.id: w.autopilot.get(f.id, False) for f in w.instance.faculty}
+        people = [f.id for f in w.instance.faculty] + [x for x in (w.exam_cell(),) if x]  # the exam cell answers too
+        return {p: w.autopilot.get(p, False) for p in people}
 
     @app.post("/api/autopilot")
     def set_autopilot(body: AutopilotBody, u: dict = Depends(user)) -> dict:
@@ -1787,6 +1788,8 @@ def create_web_app(world: World | None = None, *, worlds_dir: Path | None = None
         if u["id"] not in (body.person, COORDINATOR):
             raise HTTPException(403)
         w.autopilot[body.person] = body.on
+        if body.on and body.person == w.exam_cell():
+            w.answer_waiting_exam_cell()  # what already waits on the exam cell is answered as well
         return {body.person: body.on}
 
     # -- approvals and versions -------------------------------------------------------------------
