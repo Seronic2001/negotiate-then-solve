@@ -1,0 +1,24 @@
+% Ablations picture: two of the clearest ablations, drawn at 16 x 9 cm.
+\documentclass[border=4pt]{standalone}
+\input{style}
+\begin{document}
+\fontsize{15}{18}\selectfont
+\begin{tikzpicture}
+\begin{axis}[
+  name=leaks, ybar, bar width=30pt, width=8cm, height=8.6cm,
+  ymin=0, ymax=15, ylabel={private reasons leaked},
+  symbolic x coords={grounded, free text}, xtick=data, enlarge x limits=0.45,
+  title={A2: explanations}, ymajorgrids, grid style={gray!25},
+  nodes near coords, every node near coord/.append style={font=\fontsize{14}{16}\selectfont}]
+\addplot[fill=modelfill, draw=modelline, line width=1pt] coordinates {(grounded,0) (free text,12)};
+\end{axis}
+\begin{axis}[
+  at={(leaks.east)}, anchor=west, xshift=1.9cm, ybar, bar width=30pt, width=8cm, height=8.6cm,
+  ymin=0, ymax=110, ylabel={replies read right (\%)},
+  symbolic x coords={keywords, fine-tuned}, xtick=data, enlarge x limits=0.45,
+  title={A3: reading replies}, ymajorgrids, grid style={gray!25},
+  nodes near coords, every node near coord/.append style={font=\fontsize{14}{16}\selectfont}]
+\addplot[fill=codefill, draw=codeline, line width=1pt] coordinates {(keywords,66) (fine-tuned,100)};
+\end{axis}
+\end{tikzpicture}
+\end{document}

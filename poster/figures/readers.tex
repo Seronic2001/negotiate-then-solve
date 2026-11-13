@@ -1,0 +1,32 @@
+% Readers picture, drawn at 16 x 9 cm. Left: the output-format ablation (v3.2 and v4 trained on the same rows,
+% only the answer's format differs). Right: follow-ups looked up right without and with memory.
+\documentclass[border=4pt]{standalone}
+\input{style}
+\begin{document}
+\fontsize{15}{18}\selectfont
+\begin{tikzpicture}
+\begin{axis}[
+  name=fmt, ybar, bar width=15pt, width=10.4cm, height=8.6cm,
+  ymin=0, ymax=118, ylabel={\% right}, title={lookup format},
+  symbolic x coords={long messages, requests found}, xtick=data, enlarge x limits=0.32,
+  ymajorgrids, grid style={gray!25},
+  legend style={at={(0.5,0.98)}, anchor=north, legend columns=3, draw=none, fill=white,
+    font=\fontsize{13}{15}\selectfont, /tikz/every even column/.append style={column sep=5pt}},
+  nodes near coords, every node near coord/.append style={font=\fontsize{12}{14}\selectfont,
+    /pgf/number format/fixed, /pgf/number format/precision=0}]
+\addplot[fill=codefill, draw=codeline, line width=1pt] coordinates {(long messages,55.5) (requests found,91.1)};
+\addplot[fill=solverfill, draw=solverline, line width=1pt] coordinates {(long messages,59.5) (requests found,95.1)};
+\addplot[fill=modelfill, draw=modelline, line width=1pt] coordinates {(long messages,70.0) (requests found,99.2)};
+\legend{v3, v3.2, v4}
+\end{axis}
+\begin{axis}[
+  at={(fmt.east)}, anchor=west, xshift=1.2cm, ybar, bar width=24pt, width=6.4cm, height=8.6cm,
+  ymin=0, ymax=118, title={follow-ups}, yticklabels={},
+  symbolic x coords={without, with}, xtick=data, xlabel={memory}, enlarge x limits=0.45,
+  ymajorgrids, grid style={gray!25},
+  nodes near coords, every node near coord/.append style={font=\fontsize{12}{14}\selectfont,
+    /pgf/number format/fixed, /pgf/number format/precision=0}]
+\addplot[fill=peoplefill, draw=peopleline, line width=1pt] coordinates {(without,36.5) (with,97.0)};
+\end{axis}
+\end{tikzpicture}
+\end{document}

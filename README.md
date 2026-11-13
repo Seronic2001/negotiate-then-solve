@@ -14,6 +14,27 @@ Every LLM-backed component has a deterministic path (template explanations,
 scripted simulators, stub parsers), so the whole system can be developed and
 tested without API calls; the Gemini free-tier quota is kept for experiments.
 
+## Documentation
+
+The system is documented in [`docs/system/`](docs/system/overview.md), one page per area:
+
+| Page | About |
+|---|---|
+| [Overview](docs/system/overview.md) | The problem, the approach, who uses it, results at a glance |
+| [Architecture](docs/system/architecture.md) | The layers, a request's life, the chat's path, models and fallbacks |
+| [The chat: lookups and memory](docs/system/chat-lookups-memory.md) | Timetable questions, the lookup vocabulary, mixed messages, follow-ups |
+| [Web app](docs/system/web-app.md) | The pages, the request builders, the API |
+| [Models and training](docs/system/models-and-training.md) | One base and an adapter per task, serving, training data, Kaggle |
+| [Datasets](docs/system/datasets.md) | Every dataset: what it is for, how it was made, its size |
+| [Evaluation](docs/system/evaluation.md) | The main experiment, baselines, ablations, component benchmarks |
+| [Reading requests](docs/system/reading-requests.md) | System One, the intent vocabulary, checks, tiers, the rule parser |
+| [Policy](docs/system/policy.md) | Rules, retrieval, verdicts with citations |
+| [Solving and negotiation](docs/system/solving-and-negotiation.md) | CP-SAT, conflicts, the resolution ladder, fairness, the semester planner |
+| [Running it](docs/system/running.md) | Setup, the model server, configuration, tests |
+| [Limitations](docs/system/limitations.md) | What doesn't work yet, and the fix for each |
+
+The sections below are the original working notes.
+
 ## Setup
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).

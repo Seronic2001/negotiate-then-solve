@@ -11,6 +11,10 @@ data/*.zip
 *.aux
 *.log
 *.out
+*.fls
+*.fdb_latexmk
+# Office lock files, written while a document is open
+~$*
 PROGRESS.md
 ROADMAP.md
 CHAT-PLAN.md
