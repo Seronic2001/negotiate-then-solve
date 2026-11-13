@@ -1,0 +1,30 @@
+% Results picture: the main experiment, drawn at 35 x 12.5 cm.
+\documentclass[border=4pt]{standalone}
+\input{style}
+\begin{document}
+\fontsize{17}{20}\selectfont
+\begin{tikzpicture}
+\begin{axis}[
+  name=left, ybar, bar width=22pt, width=21cm, height=12cm,
+  ymin=0, ymax=105, ylabel={\% of 180 runs},
+  symbolic x coords={B1, B2, B3, B4, ours}, xtick=data,
+  xticklabels={{LLM only\\(B1)}, {solver only\\(B2)}, {invented,\\unchecked (B3)}, {invented +\\filtered (B4)}, {\textbf{ours}}},
+  xticklabel style={align=center},
+  legend style={at={(0.02,0.98)}, anchor=north west, draw=none, fill=white}, legend cell align=left,
+  enlarge x limits=0.12, ymajorgrids, grid style={gray!25},
+  nodes near coords, every node near coord/.append style={font=\fontsize{14}{16}\selectfont,
+    /pgf/number format/fixed, /pgf/number format/precision=1}]
+\addplot[fill=codefill, draw=codeline, line width=1pt] coordinates {(B1,0) (B2,31.7) (B3,83.3) (B4,75.6) (ours,89.4)};
+\addplot[fill=modelfill, draw=modelline, line width=1pt] coordinates {(B1,0) (B2,0) (B3,66.7) (B4,51.1) (ours,78.9)};
+\legend{correct outcome, agreement reached}
+\end{axis}
+\begin{axis}[
+  at={(left.east)}, anchor=west, xshift=2.4cm, ybar, bar width=28pt, width=12.5cm, height=12cm,
+  ymin=0, ymax=0.75, ylabel={oracle gap (lower is better)},
+  symbolic x coords={B2, B3, B4, ours}, xtick=data, enlarge x limits=0.18, ymajorgrids, grid style={gray!25},
+  nodes near coords, every node near coord/.append style={font=\fontsize{14}{16}\selectfont,
+    /pgf/number format/fixed, /pgf/number format/precision=2}]
+\addplot[fill=solverfill, draw=solverline, line width=1pt] coordinates {(B2,0.131) (B3,0.443) (B4,0.628) (ours,0.041)};
+\end{axis}
+\end{tikzpicture}
+\end{document}

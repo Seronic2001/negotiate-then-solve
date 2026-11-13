@@ -1,0 +1,28 @@
+% Methodology picture: the request pipeline and the resolution ladder, drawn at 21 x 15 cm.
+\documentclass[border=4pt]{standalone}
+\input{style}
+\begin{document}
+\fontsize{16}{19}\selectfont
+\begin{tikzpicture}[x=1cm, y=1cm]
+\tikzset{w/.style={text width=8.4cm}, r/.style={text width=8.0cm}}
+% the pipeline, down the left
+\node[ppl, w] (msg) at (4.6,0) {a request in plain words: portal, chat, email};
+\node[mdl, w] (rd) at (4.6,-2.0) {\textbf{read}: fine-tuned adapter, message $\to$ intents};
+\node[cde, w] (ck) at (4.6,-4.0) {\textbf{check \& compile} (code): names, weeks, tiers, authority};
+\node[mdl, w] (pol) at (4.6,-6.0) {\textbf{policy}: retrieve the rules, cite the verdict};
+\node[slv, w] (sv) at (4.6,-8.0) {\textbf{CP-SAT}: minimal-change repair};
+\node[dec] (fit) at (4.6,-10.4) {fits?};
+\node[okb, w] (pub) at (4.6,-12.9) {fairness audit $\to$ office approves $\to$ published};
+% negotiation, up the right, starting level with the decision
+\node[slv, r] (neg) at (15.4,-10.4) {\textbf{negotiate}: MUS $\to$ every MCS, each re-solved $\to$ ranked};
+\node[mdl, r] (ask) at (15.4,-8.0) {offer 2--3 \emph{verified} options + a grounded explanation};
+\node[mdl, r] (rep) at (15.4,-5.6) {each reply $\to$ exactly one typed tool call};
+\node[bad, r] (esc) at (15.4,-3.2) {no reply or deadlock $\to$ escalate to a person};
+\draw[arr] (msg) -- (rd); \draw[arr] (rd) -- (ck); \draw[arr] (ck) -- (pol); \draw[arr] (pol) -- (sv);
+\draw[arr] (sv) -- (fit);
+\draw[arr] (fit) -- node[lb, right]{yes} (pub);
+\draw[arr] (fit) -- node[lb, above]{no} (neg);
+\draw[arr] (neg) -- (ask); \draw[arr] (ask) -- (rep); \draw[arr] (rep) -- (esc);
+\draw[arr] (rep.east) -- ++(0.6,0) |- node[lb, pos=0.3, right]{accept} (pub.east);
+\end{tikzpicture}
+\end{document}
