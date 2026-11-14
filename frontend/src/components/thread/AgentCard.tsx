@@ -3,6 +3,8 @@ import { Bot, Check, ChevronRight, CircleAlert, Hourglass, MessageCircleQuestion
 import { useState } from "react";
 import type { AgentReply, AgentStep, CaseSummary } from "../../lib/types";
 import { LiveDot } from "../ui";
+import { studyStep } from "../../lib/study";
+import { StudyAnswerCheck } from "../StudyBanner";
 import { AgentText } from "./AgentText";
 import { CardFrame, Tag } from "./Bubble";
 
@@ -84,6 +86,10 @@ export function AgentCard({ m, x }: { m: AgentReply & { n: number }; x: AgentCon
     >
       <Thinking steps={m.steps} busy={m.busy} />
       {m.latest && <Outcome m={m} x={x} />}
+      {/* study: an answer (not a request, not a question back) gets the tour's "was it right?" check */}
+      {m.latest && !m.busy && m.text && !m.pending && !m.case && m.status !== "submitted" && (
+        <StudyAnswerCheck n={m.n} step={studyStep() === "rules" ? "rules" : "timetable"} answer={m.text} />
+      )}
     </CardFrame>
   );
 }
