@@ -3,6 +3,7 @@ import { Bot, Check, ChevronRight, CircleAlert, Hourglass, MessageCircleQuestion
 import { useState } from "react";
 import type { AgentReply, AgentStep, CaseSummary } from "../../lib/types";
 import { LiveDot } from "../ui";
+import { AgentText } from "./AgentText";
 import { CardFrame, Tag } from "./Bubble";
 
 /** The agent's reply in the chat (web/agentic.py): its work folded into one line (open it for every step), then
@@ -93,13 +94,13 @@ function Outcome({ m, x }: { m: AgentReply; x: AgentContext }) {
   const failed = UNFINISHED[m.status];
   return (
     <div className="space-y-2">
-      {m.text && !p && <p className="whitespace-pre-wrap">{m.text}</p>}
+      {m.text && !p && <AgentText text={m.text} />}
       {p && p.to_requester && (
         <div>
-          <p className="flex items-start gap-1.5 whitespace-pre-wrap">
+          <div className="flex items-start gap-1.5">
             <MessageCircleQuestion size={14} className="mt-0.5 shrink-0 text-warn" />
-            {p.text}
-          </p>
+            <AgentText text={p.text} className="min-w-0 flex-1" />
+          </div>
           {m.options.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1">
               {m.options.map((o) => (
@@ -117,7 +118,7 @@ function Outcome({ m, x }: { m: AgentReply; x: AgentContext }) {
           <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-info">
             <Hourglass size={12} /> Waiting for {p.to_name} to answer
           </p>
-          <p className="mt-1 whitespace-pre-wrap text-[12.5px] text-ink-2">{p.text}</p>
+          <AgentText text={p.text} className="mt-1 text-[12.5px] text-ink-2" />
           {p.rule && <p className="mt-1 text-[12px] text-ink-3">Their rule: {p.rule}</p>}
         </div>
       )}
