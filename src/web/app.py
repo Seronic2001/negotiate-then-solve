@@ -906,7 +906,7 @@ def _experiments() -> list[dict]:
                                 "Policy: 109 test requests. Swaps: 120 requests (no model was trained on swaps)."})
     from .experiments import sections
 
-    out += sections(ROOT)  # same model check, ablations, fairness, RAG, safety (web.experiments)
+    out += sections(ROOT, agentic=True)  # pipeline vs agent, agent adapters, then the shared sections (web.experiments)
     return out
 
 
