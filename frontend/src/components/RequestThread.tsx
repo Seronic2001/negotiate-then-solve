@@ -1,13 +1,15 @@
 import clsx from "clsx";
-import { ArrowRight, Check, Clock3, HelpCircle, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Clock3, HelpCircle, Undo2, X, XCircle, type LucideIcon } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { ago, EVENT_LABEL } from "../lib/meta";
+import { ago, EVENT_LABEL, OUTCOME_DOT, OUTCOME_TEXT, outcomeOf, PLAIN_STATUS, stepOutcome } from "../lib/meta";
 import type { CaseDetail, DiffRow, EventRow, InboxItem } from "../lib/types";
 import { changedWeeks, groupWeeks, weeksLabel } from "../lib/weeks";
-import { OfferCard } from "./Negotiation";
+import { OfferCard, SwapDetails } from "./Negotiation";
 import { ReplyBubble, StepList, Tag, YouBubble } from "./thread/Bubble";
+import { ReplyText } from "./thread/ReplyText";
 import { Button, LiveDot } from "./ui";
 
 /** Steps worth a line in the conversation; the rest (parsing, compiling, solving) stay on the case page. */
@@ -33,8 +35,27 @@ const SHOWN = new Set([
 
 const VERDICT: Record<string, string> = { allowed: "allowed", needs_approval: "needs approval", forbidden: "not allowed" };
 
+/** The reply's colour and label, from where the request stands now. */
+function verdict(c: CaseDetail): { tone: "ok" | "bad" | "warn" | "plain"; icon?: LucideIcon; label?: string } {
+  const o = outcomeOf(c.status);
+  if (o === "ok")
+    return { tone: "ok", icon: CheckCircle2, label: c.status === "answered" ? "Answered" : c.proposal ? "Approved · in the timetable" : "Done" };
+  if (o === "bad") return { tone: "bad", icon: XCircle, label: c.status === "refused" ? "Couldn't be done" : "Not approved" };
+  if (o === "pending") return { tone: "warn", icon: Clock3, label: PLAIN_STATUS[c.status].label };
+  return { tone: "plain" };
+}
+
+/** A reply written while the change waited for approval still says so once it is published: say what happened. */
+function current(reply: string, c: CaseDetail): string {
+  if (c.status !== "published") return reply;
+  return reply
+    .replace(/The change is waiting for the coordinator's approval\./, "The coordinator approved it, and it is now in the timetable.")
+    .replace(/It is waiting for the coordinator's approval\./, "The coordinator approved it, and it is now in the timetable.");
+}
+
 function stepText(e: EventRow, c: CaseDetail): string {
   if (e.kind === "published" && e.unmet) return "Nothing changed";
+  if (e.kind === "answered" && c.part_details?.length) return `Split into ${c.part_details.length} requests`;
   if (e.kind === "policy_checked") {
     const v = (e.verdict as string | undefined) ?? c.policy?.verdict;
     return v && VERDICT[v] ? `Rules checked: ${VERDICT[v]}` : EVENT_LABEL[e.kind];
@@ -47,6 +68,9 @@ function stepText(e: EventRow, c: CaseDetail): string {
 export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () => void }) {
   const { user } = useAuth();
   const steps = (c.events ?? []).filter((e) => SHOWN.has(e.kind)).filter((e, i, all) => i === 0 || all[i - 1].kind !== e.kind);
+  // the reply card is labelled with how it ended ("Answered"): the same word as the last step only repeats it
+  if (!c.running && c.reply && !c.part_details?.length && steps.length
+      && stepText(steps[steps.length - 1], c) === verdict(c).label) steps.pop();
   const asking = c.status === "clarification_requested" && c.sender === user?.id;
   const forMe = (c.inbox ?? []).filter((i) => i.to === user?.id);
   const waitingOnMe = forMe.some((i) => !i.reply);
@@ -56,13 +80,21 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
     <div className="space-y-3">
       <YouBubble text={c.text} note={ago(c.received_at)} />
 
-      <StepList steps={steps.map((e) => ({ key: e.n, text: stepText(e, c) }))} />
+      <StepList
+        steps={steps.map((e, i) => ({
+          key: e.n,
+          text: stepText(e, c),
+          // the step the request stands at is coloured; earlier ones (a wait that is over) stay grey
+          outcome: c.part_details?.length && e.kind === "answered" ? null
+            : i === steps.length - 1 || e.kind === "denied" || e.kind === "refused" ? stepOutcome(e.kind) : null,
+        }))}
+      />
 
       {c.running ? (
         <p className="flex items-center gap-2 pl-1 text-[12.5px] text-ink-2">
           {waitingOnMe ? (
             <>
-              <LiveDot tone="brand" pulse={false} /> Waiting for your choice
+              <LiveDot tone="brand" pulse={false} /> Waiting for your answer
             </>
           ) : (
             <>
@@ -72,12 +104,14 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
             </>
           )}
         </p>
+      ) : c.part_details?.length ? (
+        <SplitParts parts={c.part_details} />
       ) : (
         c.reply && (
           <ReplyBubble
-            tone={asking ? "warn" : "plain"}
-            icon={asking ? HelpCircle : undefined}
-            label={asking ? "A question for you. Answer it below." : undefined}
+            tone={asking ? "warn" : verdict(c).tone}
+            icon={asking ? HelpCircle : verdict(c).icon}
+            label={asking ? "A question for you. Answer it below." : verdict(c).label}
             footer={
               (c.answer || rules.length > 0) && (
                 <>
@@ -95,7 +129,7 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
               )
             }
           >
-            {c.reply}
+            <ReplyText text={current(c.reply, c)} />
           </ReplyBubble>
         )
       )}
@@ -109,6 +143,49 @@ export function RequestThread({ c, onChanged }: { c: CaseDetail; onChanged: () =
       <div className="flex items-center gap-2 pt-1">
         {c.can_withdraw && <Withdraw id={c.id} onDone={onChanged} />}
       </div>
+    </div>
+  );
+}
+
+/** A message that asked for several things: one row per request it was split into, with where that request
+ * stands and, while it waits on the sender, its question and a way to answer it. */
+function SplitParts({ parts }: { parts: NonNullable<CaseDetail["part_details"]> }) {
+  const navigate = useNavigate();
+  return (
+    <div className="max-w-[92%] rounded-lg border border-line">
+      <div className="border-b border-line px-3 py-2">
+        <p className="text-[12.5px] font-medium">Your message asks for {parts.length} things</p>
+        <p className="text-[11.5px] text-ink-3">Each is handled as a request of its own.</p>
+      </div>
+      <ol className="divide-y divide-line/60">
+        {parts.map((p, i) => {
+          const o = outcomeOf(p.status);
+          const asking = p.status === "clarification_requested";
+          return (
+            <li key={p.id} className="flex gap-3 px-3 py-2.5">
+              <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-line text-[11px] text-ink-2">{i + 1}</span>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p className="text-[13px] font-medium">{p.text.replace(/^./, (x) => x.toUpperCase())}</p>
+                  <span className={clsx("flex shrink-0 items-center gap-1.5 text-[11.5px] font-medium", OUTCOME_TEXT[o])}>
+                    <span className={clsx("size-1.5 rounded-full", OUTCOME_DOT[o])} />
+                    {PLAIN_STATUS[p.status].label}
+                  </span>
+                </div>
+                {p.reply && (
+                  <p className={clsx("rounded-md px-2.5 py-1.5 text-[12.5px] leading-relaxed", asking ? "bg-warn/8 text-ink" : "bg-panel-2/70 text-ink-2")}>
+                    {asking && <HelpCircle size={12} className="mr-1 inline -translate-y-px text-warn" />}
+                    {p.reply}
+                  </p>
+                )}
+                <Button size="sm" variant={asking ? "primary" : "ghost"} icon={asking ? undefined : ArrowRight} onClick={() => navigate(`/requests/${p.id}`)}>
+                  {asking ? "Answer" : "Open"}
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -162,7 +239,9 @@ function Change({ c, me }: { c: CaseDetail; me?: string }) {
           </ul>
         </div>
       ))}
-      <p className="border-t border-line px-3 py-1.5 text-[11.5px] text-ink-3">{state}</p>
+      <p className={clsx("flex items-center gap-1.5 border-t border-line px-3 py-1.5 text-[11.5px]", c.status === "published" ? "text-ok" : "text-warn")}>
+        {c.status === "published" ? <CheckCircle2 size={12} /> : <Clock3 size={12} />} {state}
+      </p>
     </div>
   );
 }
@@ -213,18 +292,26 @@ export function Withdraw({ id, onDone }: { id: string; onDone: () => void }) {
  * clash): chosen here, through the same reply the Inbox sends. A reply in their own words (another time,
  * a question) goes through the composer under the thread. */
 export function Options({ item, onDone }: { item: InboxItem; onDone: () => void }) {
+  const { user } = useAuth();
   const [choice, setChoice] = useState<string | null>(null);
   const [busy, setBusy] = useState<"accept" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const m = item.message;
   const choosing = m.explanation_mode === "choice"; // their own request fits in more than one way
+  const swap = m.explanation_mode === "swap" && m.offers.length === 1; // a colleague asks to swap: yes or no
   const act = async (kind: "accept" | "reject") => {
     setBusy(kind);
     setError(null);
     try {
       await api.reply(
         item.id,
-        kind === "accept" ? { decision: "accept", choice: choice!, text: `Option ${choice} works for me.` } : { decision: "reject", text: "None of these work for me." },
+        swap
+          ? kind === "accept"
+            ? { decision: "accept", choice: "A", text: "I agree to the swap." }
+            : { decision: "reject", text: "I don't agree to the swap." }
+          : kind === "accept"
+            ? { decision: "accept", choice: choice!, text: `Option ${choice} works for me.` }
+            : { decision: "reject", text: "None of these work for me." },
       );
       onDone();
     } catch (e) {
@@ -239,7 +326,13 @@ export function Options({ item, onDone }: { item: InboxItem; onDone: () => void 
       <p className="flex items-center gap-2 pl-1 text-[12.5px] text-ink-2">
         <Check size={14} className="text-ok" />
         {item.answered_by === "deadline" || item.reply.decision === "no_reply"
-          ? "No answer before the deadline, so the first option was used"
+          ? swap
+            ? "No answer before the deadline, so the swap was not made"
+            : "No answer before the deadline, so the first option was used"
+          : swap
+            ? item.reply.decision === "accept"
+              ? "You agreed to the swap"
+              : "You declined the swap"
           : item.reply.decision === "accept" && item.reply.choice
             ? `You chose option ${item.reply.choice}`
             : item.reply.decision === "reject"
@@ -249,13 +342,41 @@ export function Options({ item, onDone }: { item: InboxItem; onDone: () => void 
       </p>
     );
 
+  const deadline = (
+    <span className="flex items-center gap-1 text-[11px] text-ink-3">
+      <Clock3 size={11} /> reply by {new Date(item.deadline).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    </span>
+  );
+
+  if (swap) {
+    const from = m.offers[0].placements.find((p) => p.faculty !== user?.id)?.faculty_name;
+    return (
+      <div className="space-y-2.5 rounded-lg border border-brand/40 bg-brand/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[12.5px] font-medium text-brand">{from ? `${from} asks to swap classes` : "A request to swap classes"}</p>
+          {deadline}
+        </div>
+        <p className="text-[13.5px] leading-relaxed">{m.text.split("\n\n")[0]}</p>
+        <SwapDetails offer={m.offers[0]} me={user?.id} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" size="sm" icon={Check} loading={busy === "accept"} onClick={() => act("accept")}>
+            Agree to swap
+          </Button>
+          <Button variant="ghost" size="sm" icon={X} loading={busy === "reject"} onClick={() => act("reject")}>
+            Decline
+          </Button>
+          <span className="ml-auto text-[11.5px] text-ink-3">or reply in your own words below</span>
+        </div>
+        {error && <p className="text-[12.5px] text-bad">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2.5 rounded-lg border border-brand/40 bg-brand/5 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12.5px] font-medium text-brand">{choosing ? "Choose a time" : "A clash with your timetable"}</p>
-        <span className="flex items-center gap-1 text-[11px] text-ink-3">
-          <Clock3 size={11} /> reply by {new Date(item.deadline).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-        </span>
+        {deadline}
       </div>
       <p className="whitespace-pre-line text-[13px] leading-relaxed">{m.text.split("\n\nOptions:")[0]}</p>
       <div className="space-y-2">

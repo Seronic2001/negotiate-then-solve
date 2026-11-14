@@ -241,10 +241,17 @@ def check_reading(instance: Instance, request: Request, out: IntentOutput,
     if (question is None and intents and not any(map(_about_classes, intents))
             and not all(isinstance(i, (Limit, LoadLimit)) for i in intents)):
         named = _own_courses_named(instance, text, sender)
-        if len(named) == 1 and _FOR_COURSE(named[0]).search(normalise(text)):
+        said = _scope_said(text, named[0]) if len(named) == 1 else None
+        if len(named) == 1 and (_FOR_COURSE(named[0]).search(normalise(text)) or said == "course"):
             notes.append(f"the reading is about all your times, in a message that says it is for your {named[0]} "
                          "classes: read as about them")
             intents = [_for_course(x, named[0], instance.calendar.days, text, notes) for x in intents]
+        elif len(named) == 1 and said == "all":
+            notes.append(f"the reading is about all your times, in a message about {named[0]} that says all your "
+                         "classes: left as read")
+        elif len(named) == 1 and _teaches_only(instance, sender, named[0]):
+            notes.append(f"the reading is about all your times, in a message about {named[0]}, all you teach: "
+                         "left as read")
         elif len(named) == 1:
             notes.append(f"the reading is about all your times, in a message about {named[0]}")
             question, missing = (f"Should this apply to your {named[0]} classes only, or to all your classes?",
@@ -376,6 +383,13 @@ def _own_courses_named(instance: Instance, text: str, sender: str) -> list[str]:
     return sorted(t for t in titles if _names(text, t))
 
 
+
+def _teaches_only(instance: Instance, sender: str, title: str) -> bool:
+    """Every class the sender teaches is of ``title`` (a guest who comes for Cloud Computing alone): "your
+    Cloud Computing classes" and "all your classes" are then the same classes, and nothing is asked."""
+    return {instance.course_title(s.course) for s in instance.sessions if s.faculty == sender} == {title}
+
+
 def _names(text: str, title: str) -> bool:
     return mentions(text, title) or (len(a := acronym(title).upper()) >= 2
                                      and re.search(rf"(?<![\w.]){a}(?![\w.])", text) is not None)
@@ -385,6 +399,24 @@ def _FOR_COURSE(title: str) -> re.Pattern:
     """ "... works for my Data Structures classes": the message says whose times it is about."""
     return re.compile(rf"\bfor (?:my|the) {re.escape(normalise(title))} (?:class|lecture|lab|practical|tutorial|session)",
                       re.IGNORECASE)
+
+
+_ALL_CLASSES = re.compile(r"\b(?:all|every|each)\s+(?:of\s+)?(?:my\s+|your\s+|the\s+)?(?:classes|class|lectures|"
+                          r"courses|sessions|of them)\b|\beverything\b|\ball\s+(?:my|your)\s+(?:teaching|timetable)\b",
+                          re.IGNORECASE)
+
+
+def _scope_said(text: str, title: str) -> str | None:
+    """Whether the message (with the sender's answer, which comes last) says the times are for all their classes
+    ("all classes", "every class") or for the one course ("Cloud Computing only", "just Cloud Computing"): the
+    answer to "should this apply to your ... classes only, or to all your classes?". The last one said counts."""
+    t = normalise(text)
+    name = re.escape(normalise(title))
+    course = re.compile(rf"\b(?:only|just)\s+(?:(?:my|the|for)\s+)?{name}\b|\b{name}\s+(?:(?:classes|class|lectures?|"
+                        rf"courses?)\s+)?only\b", re.IGNORECASE)
+    last = max(((m.start(), what) for what, rx in (("all", _ALL_CLASSES), ("course", course)) for m in rx.finditer(t)),
+               default=None)
+    return last[1] if last else None
 
 
 def _for_course(intent, title: str, week: list[str], text: str, notes: list[str]):

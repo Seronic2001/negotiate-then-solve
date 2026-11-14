@@ -7,7 +7,7 @@ import { ClarifyForm } from "../components/Clarify";
 import { EscalationPanel } from "../components/Escalation";
 import { ForwardedPanel } from "../components/Forwarded";
 import { ApprovalCard } from "./Approvals";
-import { GroundedExplanation, OfferCard } from "../components/Negotiation";
+import { GroundedExplanation, OfferCard, SwapDetails } from "../components/Negotiation";
 import { Badge, Button, Card, CardHeader, Collapse, EmptyState, LiveDot, PageHeader, Skeleton, Tabs, Toast } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -356,6 +356,9 @@ function Thread({
   const answered = !!item.reply;
   // the sender's own request fits in more than one way: they pick a time, there is nothing to give up
   const choosing = m.explanation_mode === "choice";
+  // a colleague asks to swap classes: a yes or no, shown as the two classes before and after
+  const swap = m.explanation_mode === "swap" && m.offers.length === 1;
+  const asker = swap ? m.offers[0].placements.find((p) => p.faculty !== item.to)?.faculty_name : null;
 
   const act = async (label: string, fn: () => Promise<unknown>, msg: string) => {
     setBusy(label);
@@ -377,6 +380,8 @@ function Thread({
           title={
             choosing
               ? mine ? "Choose a time for your request" : `A time for ${item.to_name} to choose`
+              : swap
+                ? mine ? `${asker ?? "A colleague"} asks to swap classes` : `A swap for ${item.to_name} to agree to`
               : mine ? "A clash with your timetable" : `A clash for ${item.to_name}`
           }
           subtitle={
@@ -393,18 +398,27 @@ function Thread({
           }
         />
         <div className="space-y-5 p-5">
-          <p className="whitespace-pre-line text-[14px] leading-relaxed">{m.text.split("\n\nOptions:")[0]}</p>
-          <div className="grid gap-3 md:grid-cols-3">
-            {m.offers.map((o) => (
-              <OfferCard
-                key={o.key}
-                offer={o}
-                selected={choice === o.key && mode === "pick"}
-                accepted={item.reply?.decision === "accept" && item.reply.choice === o.key}
-                onSelect={mine && !answered ? () => { setChoice(o.key); setMode("pick"); } : undefined}
-              />
-            ))}
-          </div>
+          {swap ? (
+            <div className="max-w-xl space-y-3">
+              <p className="text-[14px] leading-relaxed">{m.text.split("\n\n")[0]}</p>
+              <SwapDetails offer={m.offers[0]} me={item.to} />
+            </div>
+          ) : (
+            <>
+              <p className="whitespace-pre-line text-[14px] leading-relaxed">{m.text.split("\n\nOptions:")[0]}</p>
+              <div className="grid gap-3 md:grid-cols-3">
+                {m.offers.map((o) => (
+                  <OfferCard
+                    key={o.key}
+                    offer={o}
+                    selected={choice === o.key && mode === "pick"}
+                    accepted={item.reply?.decision === "accept" && item.reply.choice === o.key}
+                    onSelect={mine && !answered ? () => { setChoice(o.key); setMode("pick"); } : undefined}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
           {answered ? (
             <div className="flex items-center gap-2.5 rounded-md border border-line bg-panel-2 px-4 py-3 text-[13.5px]">
@@ -461,7 +475,35 @@ function Thread({
                 </AnimatePresence>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                {mine && (
+                {mine && swap && (
+                  <>
+                    <Button
+                      variant="primary"
+                      icon={Check}
+                      loading={busy === "accept"}
+                      onClick={() =>
+                        act(
+                          "accept",
+                          () => api.reply(item.id, { decision: "accept", choice: "A", text: "I agree to the swap." }),
+                          "You agreed. The swap goes to the timetable coordinator for approval.",
+                        )
+                      }
+                    >
+                      Agree to swap
+                    </Button>
+                    <Button
+                      variant="danger"
+                      icon={X}
+                      loading={busy === "reject"}
+                      onClick={() =>
+                        act("reject", () => api.reply(item.id, { decision: "reject", text: "I don't agree to the swap." }), "Declined. Your colleague is told the swap was not made.")
+                      }
+                    >
+                      Decline
+                    </Button>
+                  </>
+                )}
+                {mine && !swap && (
                   <>
                     <Button
                       variant="primary"

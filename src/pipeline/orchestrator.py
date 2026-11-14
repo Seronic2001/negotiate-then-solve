@@ -70,7 +70,7 @@ from core.schemas import (
     TimetableVersion,
     When,
 )
-from core.semantics import PLACEMENT_TYPES, room_compatible, sessions_in_scope, violates
+from core.semantics import PLACEMENT_TYPES, room_compatible, room_satisfies, sessions_in_scope, violates
 from core.solver import TimetableSolver
 from core.validator import validate_constraint, verify_timetable
 from language.shorthand import expand as expand_shorthand
@@ -91,6 +91,8 @@ from language.intents import (
     Relate,
     RoomClosed,
     Unavailable,
+    Unresolved,
+    classes,
     compile_intents,
     say,
     unaccounted,
@@ -175,17 +177,27 @@ def closures(instance: Instance, constraints: Iterable[Constraint], week: int | 
     """Classes a room closure leaves nowhere to go in ``week``, and the closed rooms. A lab in-charge
     reporting "Lab 3 is closed in week 9" states a fact, not a request anyone can turn down: when every
     room a class can use is closed for that whole week, the class is cancelled for the week (a make-up is
-    owed) rather than left in a closed room or the closure escalated."""
+    owed) rather than left in a closed room or the closure escalated. The rooms a class can use are those
+    its own equipment allows and, as well, any hard room requirement in force that week ("my practical
+    needs the routers"): such a need is not something the office can grant away against a closure."""
     if week is None:
         return set(), []
+    constraints = list(constraints)
     closed = {c.scope.room for c in constraints
               if c.hard and c.type == ConstraintType.UNAVAILABLE and c.scope.room and c.active_in(week)
               and (c.when.weeks is None or week in c.when.weeks) and not c.when.days and not c.when.slots}
     if not closed:
         return set(), []
+    needs: dict[str, list] = {}  # session -> the hard room requirements on it that week
+    for c in constraints:
+        if (c.hard and c.type == ConstraintType.REQUIRE_ROOM and c.room is not None and c.active_in(week)
+                and (c.when.weeks is None or week in c.when.weeks)):
+            for s in sessions_in_scope(instance, c.scope):
+                needs.setdefault(s.id, []).append(c.room)
     out = set()
     for s in instance.sessions:
-        rooms = [r.id for r in instance.rooms if room_compatible(instance, s, r)]
+        rooms = [r.id for r in instance.rooms if room_compatible(instance, s, r)
+                 and all(room_satisfies(req, r) for req in needs.get(s.id, []))]
         if rooms and set(rooms) <= closed:
             out.add(s.id)
     return out, sorted(instance.room_by_id[r].name for r in closed)
@@ -204,6 +216,14 @@ def _one_at_a_time(method):
             return method(self, *args, **kwargs)
     return run
 
+
+# a message taking back an earlier request says so: a reading of "withdraw" for anything else is not acted on
+SAYS_WITHDRAW = re.compile(
+    r"\b(withdraw\w*|retract\w*|take (?:it|that|this|them) back|take back|never ?mind|nevermind|scrap|"
+    r"forget (?:it|about|that|my|the)|ignore (?:my|that|the|this)\b|disregard|"
+    r"(?:cancel|drop|delete|remove) (?:my|that|the|this) (?:\w+ )?(?:request|message)|"
+    r"(?:no longer|don't|do not) need (?:it|that|this|the change)|not needed any ?more)",
+    re.IGNORECASE)
 
 class Orchestrator:
     def __init__(
@@ -613,9 +633,9 @@ class Orchestrator:
         rules = self._rules()
         for rid in cited:
             text = rules.get(rid, "")
-            for pattern, to, by in ((r"head of (?:the )?department|hod", "hod", "the Head of Department"),
+            for pattern, to, by in ((r"head of (?:the )?department|\bhod\b", "hod", "the Head of Department"),
                                     (r"controller of examinations|examination cell", EXAM_CELL, "the examination cell"),
-                                    (r"dean", "dean", "the Dean")):
+                                    (r"\bdean\b", "dean", "the Dean")):
                 if re.search(pattern, text, re.IGNORECASE):
                     return to, by
         return "coordinator", "the timetable office"
@@ -722,19 +742,45 @@ class Orchestrator:
         timetable = _regular(base.assignment) if base else {}
         week = self.current_week() if self.current_week else None
         together, cancels, apart = [], [], []
+        unclear = 0
+        unclear_ones = []
         for i in intents:
             alone = compile_intents(self.instance, case.read_as or case.request,
                                     IntentOutput(action="compile", intents=[i]), timetable=timetable, current_week=week)
             if alone.question is not None:
                 apart.append(i)  # unclear: its own question
+                unclear += 1
+                unclear_ones.append(i)
             elif isinstance(i, CONSTRAINT_INTENTS):
                 together.append(i)
             elif isinstance(i, CancelIntent):
                 cancels.append(i)  # every cancellation of the message: one request for the office to approve
             else:
                 apart.append(i)
+        if unclear == len(intents):
+            # nothing could go ahead on its own: splitting would only turn one question into several, each
+            # about a fragment of the message, so the message is asked about whole
+            return None
+        about = [self._about(case, i, timetable) for i in intents]
+        if any(about[n] & about[m] for n, i in enumerate(intents) if i in unclear_ones
+               for m in range(len(intents)) if m != n):
+            # an unclear part is about a class another part is also about ("my practical needs the routers, and
+            # it has to be on Tuesday afternoon", from someone who teaches it to two sections): split, the other
+            # part would go ahead on its own and the answer would reach only the unclear one, so the message is
+            # asked about whole and the answer is read into every part
+            return None
         parts = ([together] if together else []) + ([cancels] if cancels else []) + [[i] for i in apart]
         return parts if len(parts) > 1 else None
+
+    def _about(self, case: Case, intent, timetable: Mapping[str, Placement]) -> set[str]:
+        """The classes a part of a message is about, every one its reference fits (none when it names none)."""
+        ref = getattr(intent, "which", None) or getattr(intent, "mine", None)
+        if ref is None:
+            return set()
+        try:
+            return set(classes(self.instance, ref, case.request.sender_id, timetable))
+        except Unresolved:
+            return set()
 
     def _split(self, case: Case, parts: list[list]) -> Case:
         """Each part goes through the pipeline as a request of its own, its intents as read and its words
@@ -1022,9 +1068,15 @@ class Orchestrator:
 
     def _withdraw_by_message(self, case: Case) -> Case:
         """"Please ignore my earlier request": the sender's one open request is taken back. With several
-        open, nothing is withdrawn on a guess: they are listed for the sender to choose."""
+        open, nothing is withdrawn on a guess: they are listed for the sender to choose. A reading of withdraw
+        for a message that says nothing of the kind ("x", "ok") withdraws nothing: it is not understood."""
         sender = case.request.sender_id
         case.route += "+withdraw"
+        if not SAYS_WITHDRAW.search((case.read_as or case.request).raw_text):
+            case.reply = ("Your message did not say what you need, so nothing was done. Write the change you would "
+                          "like, or ask a question about the timetable.")
+            self._advance(case, S.ANSWERED, withdrew=None, unclear=True)
+            return case
         open_ = [c for c in self.cases.values()
                  if c.request.sender_id == sender and c.id != case.id and self.withdrawable(c) is None]
         if len(open_) == 1:

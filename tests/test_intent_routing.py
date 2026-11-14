@@ -165,6 +165,26 @@ def test_withdrawing_by_message_takes_back_the_one_open_request(world):
         assert "open requests" in case.reply and first.status.value != "withdrawn"
 
 
+@pytest.mark.parametrize("text", ["x", "ok", "Please move my lecture."])
+def test_a_message_read_as_withdraw_that_does_not_say_so_withdraws_nothing(world, text):
+    """"x" once read as "withdraw": with one request open, that would have taken it back unasked. (The
+    requests earlier tests left open are the sender's open ones; none may change.)"""
+    a, _, _ = _pair(world)
+    before = {c.id: c.status for c in world.orch.cases.values()}
+    case = submit(world, a.faculty, text, IntentOutput(action="withdraw"))
+    assert case.status.value == "answered" and "nothing was done" in case.reply
+    assert all(world.orch.cases[i].status == s for i, s in before.items())
+
+
+@pytest.mark.parametrize("text", ["Please withdraw my last request.", "Never mind, forget it.",
+                                  "Ignore my earlier message.", "I no longer need that change.",
+                                  "Cancel my previous request please."])
+def test_ways_of_taking_a_request_back_are_recognised(text):
+    from pipeline.orchestrator import SAYS_WITHDRAW
+
+    assert SAYS_WITHDRAW.search(text)
+
+
 def test_messages_the_parser_has_no_intents_for_are_parsed_as_before(world):
     case = world.orch.submit(world.intake.from_portal("F-101", "Can two faculty members swap their slots?"))
     assert "+intents" not in case.route and "+swap" not in case.route

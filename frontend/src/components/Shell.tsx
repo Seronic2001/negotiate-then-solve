@@ -28,7 +28,7 @@ import {
   type LucideIcon,
   ExternalLink,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api, tabLinkAs } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -161,7 +161,9 @@ export function Shell({ children }: { children: ReactNode }) {
         <main className={clsx("flex-1", fullscreen ? "overflow-y-auto lg:overflow-hidden" : "overflow-y-auto")}>
           <div className={fullscreen ? "px-4 py-4 sm:px-6 lg:h-full" : "mx-auto max-w-[1280px] px-4 py-7 sm:px-8"}>
             <StudyBanner />
-            {children}
+            {/* a new person (the demo sign-in switcher) gets the page afresh: its data and its state (the week,
+                whose classes) were loaded for whoever was signed in before */}
+            <Fragment key={user?.id ?? ""}>{children}</Fragment>
           </div>
         </main>
       </div>

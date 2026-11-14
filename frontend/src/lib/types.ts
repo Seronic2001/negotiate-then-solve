@@ -74,6 +74,8 @@ export interface CaseSummary {
   stand_in?: boolean;
   /** a message of several requests: the requests it was split into (its own status only says it was split) */
   parts?: string[] | null;
+  /** where each of those parts stands */
+  parts_status?: Status[] | null;
 }
 
 export interface ConstraintView {
@@ -109,7 +111,16 @@ export interface OfferView {
   moved: number;
   verified: boolean;
   /** ``date`` (ISO) is the first day it happens, in week ``week``; ``weeks`` is how many weeks it covers. */
-  placements: (PlacementView & { session: string; session_name: string; date?: string; week?: number; weeks?: number })[];
+  placements: (PlacementView & {
+    session: string;
+    session_name: string;
+    /** who teaches the class */
+    faculty?: string | null;
+    faculty_name?: string | null;
+    date?: string;
+    week?: number;
+    weeks?: number;
+  })[];
 }
 
 export interface Claim {
@@ -198,6 +209,8 @@ export interface DiffRow {
   groups: string[];
   before: PlacementView | null;
   after: PlacementView | null;
+  /** A class the request did not ask to move, moved to free a time one of its classes needs (proposals only). */
+  made_room_for?: { session: string; session_name: string; shared: string[]; text: string } | null;
 }
 
 export interface CaseDetail extends CaseSummary {
@@ -207,6 +220,8 @@ export interface CaseDetail extends CaseSummary {
   unused?: string[];
   /** The requests a message of several parts was split into. */
   parts?: string[];
+  /** Each of those parts: its words, where it stands and its reply (a question back while it needs an answer). */
+  part_details?: { id: string; text: string; status: Status; reply: string | null }[];
   routing: {
     request_type: string;
     type_p: number;

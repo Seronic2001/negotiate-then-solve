@@ -561,6 +561,26 @@ def test_a_fine_tuned_reader_gets_a_short_prompt_and_gemini_the_whole_vocabulary
     ("I'm away from week 15 to week 16.", [Unavailable(period=Period(from_week=15, to_week=16))], []),
     ("I'm away in weeks 15 and 16.", [Unavailable(period=Period(weeks=[15]))], ["week 16"]),
     ("If possible no classes before 10 am on Wednesdays.", [Avoid(time=TimeSpec(days=["Wed"], before="10:00"))], []),
+    # whole day names are heard too: "Wednesday", "Tuesdays"
+    ("Please keep Wednesday and Tuesdays free.", [Avoid(time=TimeSpec(days=["Tue"]))], ["Wednesday"]),
+    # an "only" settles every day: the days it leaves out are the days ruled out, not dropped
+    ("I can't teach on Mondays, Wednesdays or Fridays; I am only on campus on Tuesdays and Thursdays this semester.",
+     [Only(time=TimeSpec(days=["Tue", "Thu"]), hard=True)], []),
+    # full day names are heard: "Wednesday" and "Tuesdays" too
+    ("Please keep Wednesday and Tuesdays free.", [Avoid(time=TimeSpec(days=["Tue"]))], ["Wednesday"]),
+    # an "only" settles every day: the days it leaves out are the days ruled out, not dropped
+    ("I can't teach on Mondays, Wednesdays or Fridays; I am only on campus on Tuesdays and Thursdays this semester.",
+     [Only(time=TimeSpec(days=["Tue", "Thu"]), hard=True)], []),
+    # "before 1 pm" is where the morning ends: read as the morning, it is used
+    ("In week 12 I can only come in the mornings; please keep my lecture before 1 pm that week.",
+     [Only(time=TimeSpec(part="morning"), period=Period(weeks=[12]), hard=True)], []),
+    ("From week 15 I can only teach after 12 pm.",
+     [Only(time=TimeSpec(part="afternoon"), period=Period(from_week=15), hard=True)], []),
+    # a time in the afternoon is not the morning, whatever word comes before it
+    ("In week 12 I can only come in the mornings, and at 1 pm.",
+     [Only(time=TimeSpec(part="morning"), period=Period(weeks=[12]), hard=True)], ["1 pm"]),
+    ("In week 12 I can only teach in the mornings, before 3 pm.",
+     [Only(time=TimeSpec(part="morning"), period=Period(weeks=[12]), hard=True)], ["3 pm"]),
 ])
 def test_what_a_message_says_and_its_reading_does_not_use_is_noted(text, intents, notes):
     from language.intents import unaccounted
@@ -593,3 +613,53 @@ def test_the_office_names_a_class_by_what_it_is_whoever_teaches_it(instance):
     other = next(f.id for f in instance.faculty if f.id != s.faculty and any(x.faculty == f.id for x in instance.sessions))
     c = compile_(instance, other, Move(which=ref, to=TimeSpec(days=["Fri"])), timetable=tt)
     assert c.missing == ["session"] and "could not find" in c.question
+
+
+def test_equipment_read_as_a_closed_room_is_the_class_need(instance):
+    """"My practical needs the routers, and it has to be on Tuesday afternoon" once read as "routers is closed on
+    Tuesday afternoon" plus a move: no room is called routers, some room has them, so the class needs them."""
+    lab = next(r for r in instance.rooms if r.equipment)
+    s = next(x for x in instance.sessions if x.kind.value == "practical")
+    move = Move(which=ClassRef(session=s.id), to=TimeSpec(days=["Tue"], part="afternoon"))
+    c = compile_(instance, s.faculty, RoomClosed(room=f"the {lab.equipment[0]}", time=TimeSpec(days=["Tue"], part="afternoon")),
+                 move)
+    assert [type(i).__name__ for i in c.output.intents] == ["NeedsRoom", "Move"]
+    assert c.output.intents[0].equipment == [lab.equipment[0]]
+    # a real room stays closed
+    real = compile_(instance, s.faculty, RoomClosed(room=lab.id, time=TimeSpec(days=["Tue"])), move)
+    assert isinstance(real.output.intents[0], RoomClosed)
+
+
+@pytest.mark.parametrize("answer, picked", [
+    ("section a", "Computer Programming practical for B.Tech I year CSE+ECE - Section A"),
+    ("B", "Computer Programming practical for B.Tech I year CSE+ECE - Section B"),
+    ("the second one", "Computer Programming practical for B.Tech I year CSE+ECE - Section B"),
+    ("the practical", None),  # says only what every option says
+    ("either", None),
+])
+def test_an_answer_picks_one_of_the_classes_the_question_listed(answer, picked):
+    from language.intents import picked_option
+
+    q = ("Which class do you mean: Computer Programming practical for B.Tech I year CSE+ECE - Section A; "
+         "Computer Programming practical for B.Tech I year CSE+ECE - Section B?")
+    assert picked_option(q, answer) == picked
+    # "section 2" is Section 2 wherever it is listed, not the second option
+    q2 = "Which class do you mean: Algorithms lecture for Section 2; Algorithms lecture for Section 1?"
+    assert picked_option(q2, "section 2") == "Algorithms lecture for Section 2"
+    assert picked_option("Which weeks do you mean?", answer) is None
+
+
+def test_a_section_the_message_names_picks_the_class(instance):
+    """F-102 teaches the Computer Graphics lecture to Section 3 and Section 9: the message (the answer to "which
+    class do you mean", in full) names the section, so the reference takes it and the class is found."""
+    from language.intents import classes, ground_references
+
+    move = Move(which=ClassRef(course="C-031", kind="lecture"), to=TimeSpec(days=["Fri"]))
+    out = IntentOutput(action="compile", intents=[move])
+    said = request("F-102", text="Move my Computer Graphics lecture to Friday. Computer Graphics lecture for Section 9")
+    ref = ground_references(instance, said, out).intents[0].which
+    assert ref.group == "G-09"
+    assert {instance.session_by_id[sid].course for sid in classes(instance, ref, "F-102")} == {"C-095"}
+    # no section named: left to the question
+    assert ground_references(instance, request("F-102", text="Move my Computer Graphics lecture to Friday."),
+                             out).intents[0].which.group is None

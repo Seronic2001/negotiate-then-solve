@@ -347,6 +347,42 @@ def test_a_message_for_one_courses_classes_is_read_as_about_them(instance, lectu
     assert c.question and title in c.question
 
 
+
+def test_a_teacher_of_one_course_is_not_asked_which_classes():
+    """ "In week 12 I can only come in the mornings; please keep my Cloud Computing lecture before 1 pm", from a
+    guest who teaches nothing else: "your Cloud Computing classes only, or all your classes?" asks about one
+    set of classes twice."""
+    from semester.campus import campus_offerings
+    from semester.department import instance_from_offerings
+
+    campus = instance_from_offerings(campus_offerings(), {}, name="Campus")
+    titles: dict[str, set[str]] = {}
+    for s in campus.sessions:
+        titles.setdefault(s.faculty, set()).add(campus.course_title(s.course))
+    who, [title] = next((f, sorted(t)) for f, t in titles.items() if len(t) == 1)
+    out = IntentOutput(action="compile", intents=[Only(time=TimeSpec(part="morning"), hard=True)])
+    c = check_reading(campus, request(who, f"I can only come in the mornings; please keep my {title} lecture "
+                                           "before 1 pm."), out)
+    assert c.question is None, c.question
+
+def test_the_answer_to_which_classes_is_read(instance, lecture):
+    """"Should this apply to your X classes only, or to all your classes?": the answer comes after the request
+    (``web.world.joined``) and is read, not asked about again."""
+    title = instance.course_title(lecture.course)
+    text = f"In week 12 I can only come in the mornings; please keep my {title} lecture before 1 pm that week."
+    out = IntentOutput(action="compile", intents=[Only(time=TimeSpec(part="morning"), period=Period(weeks=[12]),
+                                                       hard=True)])
+    asked = check_reading(instance, request(lecture.faculty, text), out)
+    assert asked.question and title in asked.question
+    for answer in ("all all classes", "All my classes.", "every class", "everything"):
+        c = check_reading(instance, request(lecture.faculty, f"{text} {answer}"), out)
+        assert c.question is None and c.output.intents == out.intents, answer
+    for answer in (f"{title} only", f"just {title}", f"Only {title}, please."):
+        c = check_reading(instance, request(lecture.faculty, f"{text} {answer}"), out)
+        assert c.question is None, answer
+        assert [i.who for i in c.output.intents] == [Who(kind="course", id=title)], answer
+
+
 def test_a_clash_that_is_why_a_class_moves_is_not_a_clash_report(instance, lecture):
     text = "My Wednesday 2 pm lecture has to move to Monday morning; where it is now clashes with a meeting."
     out = IntentOutput(action="compile", intents=[
