@@ -41,6 +41,8 @@ class Ask(BaseModel):
     rule_text: str | None = None
     weeks: list[int] = Field(default_factory=list)  # an offer: the weeks it would be waived in; empty: dropped
     consent: bool = False  # a swap with a colleague's class (swap_classes): ``rule`` is their half of the change
+    # a swap: where each of the two classes would be after it, session -> {day, slot, room} (the web app's card)
+    swap: dict[str, dict] | None = None
 
     @property
     def waits(self) -> bool:

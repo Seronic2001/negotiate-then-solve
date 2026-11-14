@@ -126,6 +126,11 @@ def _dated(w: World, p: dict, weeks: list[int] | None) -> dict:
     return p | {"date": _date_of(w, weeks[0], p["day"]).isoformat(), "weeks": len(weeks), "week": weeks[0]}
 
 
+def _teacher(w: World, sid: str) -> str | None:
+    s = w.instance.session_by_id.get(sid)
+    return s.faculty if s else None
+
+
 def _message(w: World, m: Message | dict, case: Case | None = None) -> dict:
     m = m if isinstance(m, dict) else m.model_dump()
     weeks = _case_weeks(case)
@@ -133,6 +138,7 @@ def _message(w: World, m: Message | dict, case: Case | None = None) -> dict:
             "facts": [{**f, "text": plain(f["text"])} for f in m.get("facts", [])],
             "claims": [{**c, "text": plain(c["text"])} for c in m.get("claims", [])],
             "offers": [{**o, "placements": [{"session": s, "session_name": session_name(w.instance, s),
+                                              "faculty": _teacher(w, s), "faculty_name": w.name_of(_teacher(w, s)),
                                               **_dated(w, _placement(w, Placement(**p), s), weeks)}
                                              for s, p in o["placements"].items()]}
                        for o in m["offers"]]}
@@ -161,7 +167,14 @@ def _summary(w: World, r: Request, case: Case | None) -> dict:
             "stand_in": bool(case and case.routing.get("reader") == "rules" and w.parser_mode in ("gemini", "local")),
             # a message of several requests: the requests it was split into (its own status, "answered", only says
             # it was split; where it stands is theirs)
-            "parts": list(case.parts) if case and case.parts else None}
+            "parts": list(case.parts) if case and case.parts else None,
+            # where each part stands, so the message's own status can say "2 need your answer" rather than "done"
+            "parts_status": [_part_status(w, p) for p in case.parts] if case and case.parts else None}
+
+
+def _part_status(w: World, part_id: str) -> str:
+    part = w.orch.cases.get(part_id)
+    return part.status.value if part else RequestStatus.RECEIVED.value
 
 
 def _case_detail(w: World, case: Case) -> dict:
@@ -213,7 +226,8 @@ def _case_detail(w: World, case: Case) -> dict:
         before = w.store.version(case.proposal.parent) if case.proposal.parent else None
         under = w.orch.builds_on(case)  # an earlier change still waiting: it is approved first
         d["proposal"] = {"version": case.proposal.version, "week": case.proposal.week,
-                         "diff": _diff(w, before.assignment if before else {}, case.proposal.assignment),
+                         "diff": _made_room(w, case, _diff(w, before.assignment if before else {},
+                                                           case.proposal.assignment)),
                          "builds_on": under.id if under else None,
                          # a request over several weeks: the change for each further week, approved with it
                          "more": [{"version": v.version, "week": v.week, "cancelled": v.cancelled,
@@ -231,6 +245,9 @@ def _case_detail(w: World, case: Case) -> dict:
     d["notices"] = {k: plain(v) for k, v in case.notices.items()}
     d["notice_names"] = {k: w.name_of(k) for k in case.notices}  # who each notice went to, by name
     d["inbox"] = [_inbox_item(w, i) for i in w.inbox.items.values() if i.case_id == case.id]
+    # a message split into several requests: each part's words, where it stands and its reply (a question back)
+    d["part_details"] = [{"id": p.id, "text": p.request.raw_text, "status": p.status.value, "reply": plain(p.reply)}
+                         for p in (w.orch.cases.get(pid) for pid in case.parts or []) if p is not None]
     d["events"] = w.store.events(case.id)
     return d
 
@@ -258,6 +275,56 @@ def _diff(w: World, before: dict[str, Placement], after: dict[str, Placement]) -
                         "groups": s.groups if s else [],
                         "before": _placement(w, before.get(sid), sid), "after": _placement(w, after.get(sid), sid)})
     return out
+
+
+def _asked(w: World, case: Case) -> set[str]:
+    """The classes a request is about: those its constraints are on (a class, a course, a teacher's classes, the
+    classes it places), else the sender's own."""
+    inst = w.instance
+    out: set[str] = set()
+    for c in case.constraints:
+        s = c.scope
+        out |= {x.id for x in inst.sessions if x.id == s.session or (s.course and x.course == s.course)
+                or (s.faculty and x.faculty == s.faculty)}
+        out |= set(c.sessions or [])
+    return out or {x.id for x in inst.sessions if x.faculty == case.request.sender_id}
+
+
+def _made_room(w: World, case: Case, rows: list[dict]) -> list[dict]:
+    """``rows`` (a proposal's changes), each class the request did not ask to move saying which asked-for class
+    took its place ("made_room_for"): the solver moves another's class only to free a time one of the request's
+    classes needs, with the same section, teacher or room; without it, the approver sees a colleague's class
+    moved for no reason given. None for the request's own classes, and for a move no asked-for class explains."""
+    asked = _asked(w, case)
+    sessions = _sessions(w)
+
+    def cells(sid: str, p: dict | None) -> set[tuple[str, int]]:
+        n = sessions[sid].duration if sid in sessions else 1
+        return {(p["day"], p["slot"] + k) for k in range(n)} if p else set()
+
+    mine = [r for r in rows if r["session"] in asked and r["after"]]
+    for r in rows:
+        r["made_room_for"] = None
+        if r["session"] in asked or not r["before"]:
+            continue
+        freed = cells(r["session"], r["before"])
+        for m in mine:
+            when = freed & cells(m["session"], m["after"])
+            if not when:
+                continue
+            shared = [what for what, same in (
+                ("section", set(r["groups"]) & set(m["groups"])),
+                ("teacher", r["faculty"] and r["faculty"] == m["faculty"]),
+                ("room", r["before"]["room"] == m["after"]["room"])) if same]
+            if not shared:
+                continue
+            day = FULL_DAY.get(m["after"]["day"], m["after"]["day"])
+            r["made_room_for"] = {
+                "session": m["session"], "session_name": m["session_name"], "shared": shared,
+                "text": plain(f"Moved to free {day} at {hour(min(s for _, s in when))} for {m['session_name']}, "
+                              f"which needs that time; the two share {' and '.join('a ' + s for s in shared)}.")}
+            break
+    return rows
 
 
 def _inbox_item(w: World, i: InboxItem) -> dict:
@@ -373,8 +440,11 @@ def _feed(w: World, u: dict, decides, handles) -> list[dict]:
         case = w.orch.cases.get(i.case_id) if i.case_id else None
         item = _inbox_item(w, i)
         choice = i.message.explanation_mode == "choice"
+        swap = i.message.explanation_mode == "swap"
         add(f"msg:{i.id}", n, "negotiation", case,
-            "Choose a time for your request" if choice else "A clash with your timetable",
+            "Choose a time for your request" if choice
+            else f"{w.name_of(case.request.sender_id)} asks to swap classes" if swap and case
+            else "A clash with your timetable",
             i.message.text.split("\n")[0], item["created"], sender=COORDINATOR, needs_you=i.reply is None,
             message=item)
 

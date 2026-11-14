@@ -102,9 +102,36 @@ const FULL_DAY: Record<string, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "
 /** "a", "a and b", "a, b and c" */
 const listed = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/** Approve or reject a change waiting for the office: shared by the approval card and the request page. */
+export function useApprovalActions(c: CaseDetail, onDone: (msg: string) => Promise<void> | void) {
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const confirmOnly = !c.proposal; // already fits: approving keeps the requirement in force, nothing moves
+  const approve = async () => {
+    setBusy("approve");
+    try {
+      const r = await api.approve(c.id);
+      await onDone(r.version === null
+        ? "Confirmed. The requirement is in force; nothing moved."
+        : `Published version ${r.version}. Notified ${Object.keys(r.notified).length} affected people.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const reject = async (reason: string) => {
+    setBusy("reject");
+    try {
+      await api.reject(c.id, reason);
+      await onDone(confirmOnly ? "Declined; the requirement is not in force." : "Sent back to negotiation.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return { busy, approve, reject, confirmOnly };
+}
+
 /** ``compact``: one column (the inbox's pane beside its list), the change first and the rest under it. */
 export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; onDone: (msg: string) => Promise<void>; compact?: boolean }) {
-  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const { busy, approve, reject, confirmOnly } = useApprovalActions(c, onDone);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const diff = c.proposal?.diff ?? [];
@@ -115,6 +142,8 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
     ? `${versionsLabel(weeks.map((w) => w.version))} for ${weeksLabel(weeks.map((w) => w.week))}`
     : `${versionsLabel(weeks.map((w) => w.version))} (semester timetable)`;
   const teachers = [...new Set(diff.map((d) => d.faculty_name ?? "").filter(Boolean))];
+  // classes the request did not ask to move, moved to free a time one of its classes needs
+  const displaced = diff.filter((d) => d.made_room_for);
   const sections = [...new Set(diff.flatMap((d) => d.groups.map((g) => g.replace("G-", "").replace(/^0/, ""))))].sort((a, b) => Number(a) - Number(b));
   // what the change does, in one line: how many classes are cancelled or moved, whose, on which days, in which weeks
   const cancelled = diff.filter((d) => d.before && !d.after);
@@ -136,19 +165,6 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
   const makeupWaived = c.makeup === false && !!c.policy?.obligations.includes("P-MAKEUP");
   const fairnessSame = (c.fairness.gini_before ?? 0).toFixed(3) === (c.fairness.gini_after ?? 0).toFixed(3);
   const o = c.outcome;
-  const confirmOnly = !c.proposal; // already fits: approving keeps the requirement in force, nothing moves
-
-  const approve = async () => {
-    setBusy("approve");
-    try {
-      const r = await api.approve(c.id);
-      await onDone(r.version === null
-        ? "Confirmed. The requirement is in force; nothing moved."
-        : `Published version ${r.version}. Notified ${Object.keys(r.notified).length} affected people.`);
-    } finally {
-      setBusy(null);
-    }
-  };
 
   return (
     <Card>
@@ -232,15 +248,7 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
               <Button
                 variant="danger"
                 loading={busy === "reject"}
-                onClick={async () => {
-                  setBusy("reject");
-                  try {
-                    await api.reject(c.id, reason);
-                    await onDone(confirmOnly ? "Declined; the requirement is not in force." : "Sent back to negotiation.");
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
+                onClick={() => reject(reason)}
               >
                 Confirm rejection
               </Button>
@@ -299,8 +307,17 @@ export function ApprovalCard({ c, onDone, compact = false }: { c: CaseDetail; on
                   ? "Fitted directly; some preferences could not be kept, and their owners are told."
                   : awayOnly
                     ? "The classes are simply not held; nothing else in the timetable moves."
-                    : "Fitted directly; nobody else had to give anything up."}
+                    : displaced.length
+                      ? "Fitted directly."
+                      : "Fitted directly; nobody else had to give anything up."}
             </p>
+            {displaced.length > 0 && (
+              <p className="mt-1.5 text-[13px] text-ink-2">
+                To make room, {displaced.length === 1 ? "one other class" : `${displaced.length} other classes`} also
+                moved ({listed([...new Set(displaced.map((d) => d.faculty_name ?? "").filter(Boolean))])}'s); the
+                reason is under each in the changes.
+              </p>
+            )}
             {c.policy && (
               <p className="mt-1.5 text-[13px] text-ink-3">
                 {c.policy.verdict === "allowed" ? "Within the rules." : `Rules: ${c.policy.verdict.replace("_", " ")}.`}

@@ -596,6 +596,18 @@ def _section_of(instance: Instance, course: str, text: str, sender: str, section
     return same[0] if len(same) == 1 else course
 
 
+def _group_named(instance: Instance, course: str | None, text: str, sections: dict[str, set[str]]) -> str | None:
+    """The one section the message names by its name ("... for B.Tech I year CSE+ECE - Section A", as an answer
+    to "which class do you mean" gives it) among those taking a course of ``course``'s title, else None. A name
+    inside another named one ("Section A" in "... - Section A") is not counted twice."""
+    title = instance.course_title(course) if course in sections else None
+    taking = {g for c, gs in sections.items() if title is None or instance.course_title(c) == title for g in gs}
+    named = [g for g in instance.groups if g.id in taking
+             and re.search(rf"(?<![a-z0-9]){re.escape(g.name.lower())}(?![a-z0-9])", text)]
+    named = [g for g in named if not any(g.name.lower() in h.name.lower() and g is not h for h in named)]
+    return named[0].id if len(named) == 1 else None
+
+
 def _named_titles(instance: Instance, text: str, sections: dict[str, set[str]]) -> list[str]:
     """The course titles ``text`` (lower case) names, longest first, so "Advanced Algorithms" is not also
     read as "Algorithms"."""
@@ -663,6 +675,8 @@ def ground_references(instance: Instance, request: Request, out: IntentOutput) -
                     fix["course"] = _course(instance, ref.course, text, sections, taken)
                 if ref.owner is not None:
                     fix["owner"] = _colleague(instance, ref.owner, text, sender)
+                if ref.group is None and ref.session is None:
+                    fix["group"] = _group_named(instance, fix.get("course", ref.course), text, sections)
                 if any(fix[k] != getattr(ref, k) for k in fix):
                     update[name] = ref.model_copy(update=fix)
         who = getattr(intent, "who", None)
@@ -739,6 +753,43 @@ def one_class(instance: Instance, ref: ClassRef, sender: str,
     if len(names) == 1:  # the weekly meetings of one class, and no timetable to tell them apart
         raise Unresolved(f"You have {len(found)} {names[0]} classes a week. Which day's class do you mean?", "session")
     raise Unresolved(f"Which class do you mean: {'; '.join(names[:4])}?", "session")
+
+
+_ORDINAL = {"first": 0, "1": 0, "1st": 0, "second": 1, "2": 1, "2nd": 1, "third": 2, "3": 2, "3rd": 2,
+            "fourth": 3, "4": 3, "4th": 3, "last": -1}
+_OPTIONS = re.compile(r"^Which class [^:]*:\s*(.+?)\??$")
+
+
+def picked_option(question: str | None, answer: str) -> str | None:
+    """The option an answer picks when the question listed classes to choose from ("Which class do you mean:
+    X - Section A; X - Section B?"): the one whose own words, those not in every option, the answer says alone
+    ("section a", "A", "the Monday one"), or the one it counts to ("the second"). The reader is given the
+    option in full, since a short answer ("section a") names no section by its name. None when the answer
+    picks none or several."""
+    m = _OPTIONS.match((question or "").strip())
+    if not m:
+        return None
+    options = [o.strip() for o in m[1].split(";") if o.strip()]
+    if len(options) < 2:
+        return None
+    said = re.findall(r"[a-z0-9]+", answer.lower())
+    # an option's own words: what is left once the words every option starts and ends with are taken off
+    # ("... - Section A" and "... - Section B": "a" and "b"; the "b" of "B.Tech" is in every option's start)
+    words = [re.findall(r"[a-z0-9]+", o.lower()) for o in options]
+    head = 0
+    while all(len(w) > head and w[head] == words[0][head] for w in words):
+        head += 1
+    tail = 0
+    while all(len(w) > head + tail and w[-1 - tail] == words[0][-1 - tail] for w in words):
+        tail += 1
+    own = [set(w[head:len(w) - tail]) for w in words]
+    hits = [o for o, w in zip(options, own, strict=True) if w & set(said)]
+    if hits:  # "section 2" is Section 2, not the second option
+        return hits[0] if len(hits) == 1 else None
+    ordinal = [_ORDINAL[w] for w in said if w in _ORDINAL]
+    if len(said) <= 3 and len(ordinal) == 1 and ordinal[0] < len(options):
+        return options[ordinal[0]]
+    return None
 
 
 _PLURAL = re.compile(r"\b(all|every|classes|lectures|labs|practicals|tutorials|sessions)\b", re.IGNORECASE)
@@ -915,28 +966,36 @@ def say(instance: Instance, intent, sender: str) -> str:
     return " ".join(x for x in (core, p) if x) + "."
 
 
-_SAID_DAY = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri)(?:day)?s?\b", re.IGNORECASE)
+# the whole name first: "wed(?:day)?" never matched "Wednesday", nor "tue(?:day)?" "Tuesdays"
+_SAID_DAY = re.compile(r"\b(monday|tuesday|wednesday|thursday|friday|mon|tues|tue|wed|thurs|thur|thu|fri)s?\b",
+                       re.IGNORECASE)
 _SAID_TIME = re.compile(r"\b(\d{1,2})(?::(\d\d))?\s*(am|pm)\b", re.IGNORECASE)
 _SAID_WEEKS = re.compile(r"\bweeks?\s+(\d{1,2})(?:\s*(?:-|–|to|through|until|and)\s*(?:weeks?\s+)?(\d{1,2}))?",
                          re.IGNORECASE)
 _SAID_FIRM = re.compile(r"\b(must|only|cannot|can't|can not|have to|has to|no way)\b", re.IGNORECASE)
 
 
-def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
-    """The days, clock hours and weeks the intents use."""
+def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int], set[str]]:
+    """The days, clock hours, weeks and parts of the day the intents use."""
     days: set[str] = set()
     hours: set[int] = set()
     weeks: set[int] = set()
+    parts: set[str] = set()
 
     def clocks(*cs):
         hours.update(minutes(c) // 60 for c in cs if c)
 
     for i in out.intents:
+        # "only on Tuesday and Thursday" settles every day: the days it leaves out ("I can't teach on Mondays,
+        # Wednesdays or Fridays") are used, as the days it rules out
+        if isinstance(i, Only) and i.time.days:
+            days.update(_SAID_DAY_FULL.values())
         for name in ("time", "to"):
             if (spec := getattr(i, name, None)) is not None:
                 days.update(spec.days or [])
                 clocks(spec.before, spec.after, *(spec.at or []))
                 if spec.part:
+                    parts.add(spec.part)
                     hours.update(range(9, 13) if spec.part == "morning" else range(13, 18))
         for name in ("which", "mine", "theirs", "other"):
             if (ref := getattr(i, name, None)) is not None:
@@ -950,7 +1009,20 @@ def _used(out: IntentOutput) -> tuple[set[str], set[int], set[int]]:
             weeks.update(p.except_weeks or [])  # a week said to be left out is used too
             if p.from_week is not None or p.to_week is not None:
                 weeks.update(range(p.from_week or 1, (p.to_week or 52) + 1))
-    return days, hours, weeks
+    return days, hours, weeks, parts
+
+
+# where a part of the day ends or starts: "before 1 pm" is the morning, "after 12 pm" the afternoon
+_PART_EDGE = {"morning": ("before", 13), "afternoon": ("after", 12)}
+_EDGE_WORD = {"before": re.compile(r"\b(before|until|till|til|by|no later than)\s*$", re.IGNORECASE),
+              "after": re.compile(r"\b(after|from|no earlier than)\s*$", re.IGNORECASE)}
+
+
+def _edge_of_part(text: str, m: re.Match, hour: int, parts: set[str]) -> bool:
+    """Whether a said time is the edge of a part of the day the reading uses: "only mornings, before 1 pm"
+    read as the morning uses the 1 pm, it is where the morning ends."""
+    return any(hour == edge and _EDGE_WORD[side].search(text[:m.start()])
+               for part, (side, edge) in _PART_EDGE.items() if part in parts)
 
 
 def unaccounted(text: str, out: IntentOutput, where: Iterable[tuple[str, int]] = ()) -> list[str]:
@@ -961,26 +1033,27 @@ def unaccounted(text: str, out: IntentOutput, where: Iterable[tuple[str, int]] =
     where it is, so that day and hour were used to find it, not dropped."""
     if out.action != "compile" or not out.intents:
         return []
-    days, hours, weeks = _used(out)
+    days, hours, weeks, parts = _used(out)
     for d, h in where:
         days.add(d)
         hours.add(h)
     notes = []
     said_days = list(dict.fromkeys(_SAID_DAY_FULL[m[1].lower()[:3]] for m in _SAID_DAY.finditer(text)))
     if missed := [d for d in said_days if d not in days]:
-        notes.append(f"You mentioned {_and([FULL_DAY[d] for d in missed])}, which nothing was read from.")
+        notes.append(f"You mentioned {_and([FULL_DAY[d] for d in missed])}, which the request as read does not use.")
     said_hours = []
     for m in _SAID_TIME.finditer(text):
         h = int(m[1]) % 12 + (12 if m[3].lower() == "pm" else 0)
-        said_hours.append((h, m[0]))
+        if not _edge_of_part(text, m, h, parts):
+            said_hours.append((h, m[0]))
     if missed := [s for h, s in said_hours if h not in hours]:
-        notes.append(f"You mentioned {_and(missed)}, which nothing was read from.")
+        notes.append(f"You mentioned {_and(missed)}, which the request as read does not use.")
     said_weeks = set()
     for m in _SAID_WEEKS.finditer(text):
         a, b = int(m[1]), int(m[2]) if m[2] else int(m[1])
         said_weeks.update({a, b})
     if missed := sorted(said_weeks - weeks):
-        notes.append(f"You mentioned week {_and([str(w) for w in missed])}, which nothing was read from.")
+        notes.append(f"You mentioned week {_and([str(w) for w in missed])}, which the request as read does not use.")
     soft = [i for i in out.intents if isinstance(i, (Avoid, Only, Move)) and not i.hard]
     if (m := _SAID_FIRM.search(text)) and soft:
         notes.append(f"You wrote \"{m[0]}\", but it was read as a wish the timetable may not meet, not a requirement.")
@@ -1255,13 +1328,41 @@ def clash_ref(intent: ClashReport, instance: Instance) -> ClashRef:
     return ClashRef(d, q, [c for c in intent.courses if c in known])
 
 
+def equipment_not_rooms(instance: Instance, out: IntentOutput) -> IntentOutput:
+    """"My practical needs the routers, and it has to be on Tuesday" read as "routers is closed on Tuesday" plus
+    a move: a closure of a room that does not exist, whose name is equipment some room has, is the equipment the
+    message's class needs (with no class named, it is left as read, to be asked about)."""
+    if out.action != "compile":
+        return out
+    rooms = set(instance.room_by_id) | {r.name.lower() for r in instance.rooms}
+    vocab = {e.lower(): e for r in instance.rooms for e in r.equipment}
+
+    def equipment(name: str) -> str | None:
+        n = name.lower().strip().removeprefix("the ")
+        return next((vocab[c] for c in (n, n.rstrip("s"), f"{n}s") if c in vocab), None)
+
+    which = next((w for i in out.intents if isinstance(w := getattr(i, "which", None), ClassRef)), None)
+    if which is None:
+        return out
+    kept: list = []
+    changed = False
+    for i in out.intents:
+        if isinstance(i, RoomClosed) and i.room not in rooms and i.room.lower() not in rooms and (e := equipment(i.room)):
+            changed = True
+            if not any(isinstance(x, NeedsRoom) and e in x.equipment for x in [*kept, *out.intents]):
+                kept.append(NeedsRoom(which=which, equipment=[e], justification=i.justification))
+            continue
+        kept.append(i)
+    return out.model_copy(update={"intents": kept}) if changed else out
+
+
 def compile_intents(instance: Instance, request: Request, out: IntentOutput, *,
                     timetable: Mapping[str, Placement] | None = None, current_week: int | None = None) -> Compiled:
     """Resolve every intent; the first reference that cannot be resolved turns the whole request into a question."""
     sender = request.sender_id
     from .names import to_ids
 
-    out = ground_references(instance, request, to_ids(instance, out))
+    out = ground_references(instance, request, equipment_not_rooms(instance, to_ids(instance, out)))
     drafts: list[DraftConstraint] = []
     compiled = Compiled(output=out, result=ParseResult(request=request, output=None))
     # constraints made after the drafts, once their index is known: hours in a row, limits, relations, choices

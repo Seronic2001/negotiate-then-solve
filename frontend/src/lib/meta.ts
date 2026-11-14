@@ -92,6 +92,62 @@ export const PLAIN_STATUS: Record<Status, { label: string; tone: Tone }> = {
   withdrawn: { label: "Withdrawn", tone: "muted" },
 };
 
+/** How a request ended up, for the colour of its reply, its steps and its line in the list: done (green),
+ * not done (red), waiting on someone (amber), still being worked on (blue) or withdrawn (grey). */
+export type Outcome = "ok" | "bad" | "pending" | "progress" | "muted";
+
+export function outcomeOf(status: Status | null | undefined): Outcome {
+  if (status === "published" || status === "answered") return "ok";
+  if (status === "denied" || status === "refused") return "bad";
+  if (status === "withdrawn") return "muted";
+  if (status && ["awaiting_approval", "escalated", "negotiating", "clarification_requested", "forwarded"].includes(status)) return "pending";
+  return "progress";
+}
+
+/** A message split into several requests stands where its parts stand: waiting while any part waits or is
+ * under way, done when every part is, not done when every part failed, else done (some parts failed). */
+export function splitOutcome(parts: Status[]): Outcome {
+  const o = parts.map(outcomeOf);
+  if (o.some((x) => x === "pending" || x === "progress")) return "pending";
+  if (o.every((x) => x === "bad")) return "bad";
+  return "ok";
+}
+
+/** "Split into 2 requests · 2 need your answer" */
+export function splitLabel(parts: Status[]): string {
+  const asking = parts.filter((s) => s === "clarification_requested").length;
+  const waiting = parts.filter((s) => outcomeOf(s) === "pending" || outcomeOf(s) === "progress").length - asking;
+  const done = parts.filter((s) => outcomeOf(s) === "ok").length;
+  const head = `Split into ${parts.length} requests`;
+  if (asking) return `${head} · ${asking} need${asking === 1 ? "s" : ""} your answer`;
+  if (waiting) return `${head} · ${waiting} in progress`;
+  return `${head} · ${done} of ${parts.length} done`;
+}
+
+/** The colour of a pipeline step in a thread: where it ended well, badly, or waits on someone. */
+export function stepOutcome(kind: string): Outcome | null {
+  if (["published", "answered", "handled", "choice_made"].includes(kind)) return "ok";
+  if (["denied", "refused", "approval_refused", "withdrawn"].includes(kind)) return kind === "withdrawn" ? "muted" : "bad";
+  if (["awaiting_approval", "escalated", "negotiating", "forwarded", "choice_offered", "held"].includes(kind)) return "pending";
+  return null;
+}
+
+export const OUTCOME_DOT: Record<Outcome, string> = {
+  ok: "bg-ok",
+  bad: "bg-bad",
+  pending: "bg-warn",
+  progress: "bg-info",
+  muted: "bg-ink-3/50",
+};
+
+export const OUTCOME_TEXT: Record<Outcome, string> = {
+  ok: "text-ok",
+  bad: "text-bad",
+  pending: "text-warn",
+  progress: "text-info",
+  muted: "text-ink-3",
+};
+
 /** Where a role's request workspace (the timetable and the chat) is: its home page, or New request for the
  * office and the Dean (whose home is the dashboard). */
 export const workspacePath = (role: Role) => (WORKSPACE_HOME.includes(role) ? "/" : "/new");

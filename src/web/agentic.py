@@ -484,9 +484,15 @@ class AgentDesk:
                 f"{p.text}\n\nYour rule: {p.rule_text}. Waive it {weeks}? Accept says yes, Decline says no, or suggest "
                 "another time for the class instead.")
         drop = [p.rule] if p.rule and not consent else []
-        offers = [Offer(key="A", drop=drop, placements={})] if p.kind == "offer" else []
+        swap = getattr(p, "swap", None) if consent else None
+        if swap:  # the swap card: who asks in one line, then the two classes before and after
+            me = self.w.name_of(case.request.sender_id)
+            text = (f"{me} would like to swap classes with you {weeks}.\n\n{p.text}\n\n"
+                    "Accept agrees to the swap, Decline keeps your class where it is.")
+        placements = {sid: Placement(**at) for sid, at in swap.items()} if swap else {}
+        offers = [Offer(key="A", drop=drop, placements=placements)] if p.kind == "offer" else []
         msg = Message(round=sum(1 for k in self.asked if k[0] == ep.id) + 1, to=p.to, mus=drop,
-                      offers=offers, text=text, explanation_mode="agent", faithfulness=1.0)
+                      offers=offers, text=text, explanation_mode="swap" if swap else "agent", faithfulness=1.0)
         item = self.w.inbox.add(case.id, p.to, msg)
         self.asked[key], self.offers[item.id] = item.id, ep.id
         self.w.store.log(case.id, "negotiation_message", to=p.to, round=msg.round, agent=True)

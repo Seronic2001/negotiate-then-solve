@@ -28,6 +28,7 @@ from core.instance import Instance, policy_constraints
 from core.schemas import Request, RequestStatus
 from evaluation.stats import mean
 from language.corpus import FULL_DAY, hour, load_jsonl
+from language.intents import picked_option
 from language.rule_parser import RuleParser
 from pipeline.ingest import Directory, Intake
 from pipeline.orchestrator import Orchestrator
@@ -266,7 +267,7 @@ class World:
         self._demo_clock = (instance is None or campus) and not self.test_data and os.environ.get("NTS_DEMO_WEEK") != "0"
         self.semester.clock = self.today  # club bookings are checked against the same day
         self.inbox = Inbox()
-        self.deadline = deadline if deadline is not None else float(os.environ.get("NTS_REPLY_DEADLINE", "900"))
+        self.deadline = deadline if deadline is not None else float(os.environ.get("NTS_REPLY_DEADLINE", "1800"))
         self.autopilot: dict[str, bool] = {}
         self.autopilot_delay = 1.2
         self.profiles = _profiles(self.instance, seed=7)
@@ -315,10 +316,30 @@ class World:
             self.semester.bootstrap_demo()  # the semester timetable the club desk and preferences read
             self.seeding = True
             seed = self._seed_test if self.test_data else self._seed if instance is None else self._seed_department
-            threading.Thread(target=seed, daemon=True).start()
+            threading.Thread(target=self._seed_with_model, args=(seed,), daemon=True).start()
         threading.Thread(target=self._snapshot_when_ready, daemon=True).start()
 
     # -- the demo state -------------------------------------------------------------------
+
+    SEED_MODEL_WAIT = float(os.environ.get("NTS_SEED_MODEL_WAIT", "180"))
+
+    def _seed_with_model(self, seed) -> None:
+        """Replay the start-up history once the model can read it. The replay is saved and reused on every later
+        start (``_resume``), so a history read by the rule-based stand-in because the model was down for a moment
+        stays read that way: the agentic demo once came up with every request of both departments read by the
+        stand-in. With a model configured, the replay waits for it (``NTS_SEED_MODEL_WAIT`` seconds); if it is
+        still down, the history is replayed with the stand-in for this run only and not saved, so the next start
+        replays it again."""
+        link = self.model_link
+        if link is not None:
+            deadline = time.time() + self.SEED_MODEL_WAIT
+            while not link.usable() and time.time() < deadline:
+                time.sleep(5)
+            if not link.usable():
+                print(f"[state] {self.world_id}: the model is down; replaying the history with the rule-based "
+                      "stand-in, not saved", flush=True)
+                self.state_dir = None
+        seed()
 
     def _snapshot_when_ready(self) -> None:
         while self.seeding or self.semester.job.get("running"):
@@ -1072,7 +1093,9 @@ class World:
         if not answer.strip():
             raise ValueError("write an answer first")
         r = case.request.model_copy(deep=True)
-        r.raw_text = joined(r.raw_text, answer)
+        # an answer that picks one of the classes the question listed is given to the reader as that class in
+        # full: "section a" names no section by its name, "... - Section A" does (ground_references)
+        r.raw_text = joined(r.raw_text, picked_option(case.reply, answer) or answer)
         r.advance(RequestStatus.RECEIVED)
         self.store.save_request(r)
         self.store.log(case_id, "clarified", answer=answer.strip(), question=case.reply)
@@ -1194,8 +1217,16 @@ class World:
     def _decide_seeded(self, case_id: str) -> None:
         """The office approves a start-up request as soon as it reaches approval, so the history ends with
         nothing waiting for it (a lab closure too: the lab is out either way). The requests a message was
-        split into (R-x-1, R-x-2, ...) and a fallback child (R-x-1) are approved with it."""
+        split into (R-x-1, R-x-2, ...) and a fallback child (R-x-1) are approved with it. One sent to the exam
+        cell (a change near the examinations) gets the cell's simulated reply first, as the cell's autopilot
+        gives it after start-up; other escalations stay open, decisions the history leaves for the office."""
+        cell = self.exam_cell()
         for cid in sorted(c for c in self.orch.cases if c == case_id or c.startswith(f"{case_id}-")):
+            if cell is not None and cid in self._waiting_on_exam_cell():
+                try:
+                    self.simulate_exam_cell(cid, wait=True)
+                except ValueError as e:
+                    self.store.log(cid, "error", error=f"seeded exam cell reply: {e}")
             if self.orch.cases[cid].status == RequestStatus.AWAITING_APPROVAL:
                 try:
                     self.orch.approve(cid, COORDINATOR)
@@ -1359,11 +1390,17 @@ class World:
         code = {self.instance.course_title(c): c for c in {s.course for s in self.instance.sessions}}
         people = {f.id for f in self.instance.faculty}
 
-        def at(title: str) -> str | None:
-            return self._when(code[title]) if title in code else None
+        def at(title: str, teacher: str | None = None) -> str | None:
+            """When a lecture of ``title`` is; ``teacher``: theirs, as each section has its own course of a title
+            (Data Structures is Dr. Iyer's in Section A and Dr. Sharma's in Section B)."""
+            if teacher is None:
+                return self._when(code[title]) if title in code else None
+            mine = next((s.course for s in self.instance.sessions if self.instance.course_title(s.course) == title
+                         and self.instance.faculty_by_id[s.faculty].name == teacher), None)
+            return self._when(mine) if mine else None
 
         def swap() -> str | None:  # Iyer and Kumar both teach II year CSE Section A
-            mine, theirs = at("Data Structures"), at("Discrete Mathematics")
+            mine, theirs = at("Data Structures", "Dr. Iyer"), at("Discrete Mathematics", "Dr. Kumar")
             return (f"Dr. Kumar and I have agreed to swap in week 10: my Data Structures lecture on {mine} for the "
                     f"Discrete Mathematics lecture on {theirs}.") if mine and theirs else None
 

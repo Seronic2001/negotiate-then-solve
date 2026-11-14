@@ -6,6 +6,7 @@ import { ConversationPane, useConversation } from "../components/ConversationPan
 import { ConversationList, useConversations, type Conversation } from "../components/Conversations";
 import { DetailsDrawer } from "../components/DetailsDrawer";
 import { Button, Card } from "../components/ui";
+import { OUTCOME_DOT, OUTCOME_TEXT } from "../lib/meta";
 
 /** Faculty and class representatives: their requests and what colleagues' requests asked of them, each
  * read as a chat; the list on the left, the open conversation on the right. /requests/R-00025 opens one.
@@ -27,7 +28,7 @@ export default function RequestChat() {
     if (selectedConv) setTab(isChange(selectedConv) ? "changes" : "requests"); // the list shows what is open
   }, [selectedConv?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = convs.filter((c) => (tab === "changes") === isChange(c));
-  const unread = (t: "requests" | "changes") => convs.filter((c) => c.unread && (t === "changes") === isChange(c)).length;
+  const unread = (t: "requests" | "changes") => convs.filter((c) => c.unread && !c.partOf && (t === "changes") === isChange(c)).length;
 
   // /requests/R-00025: open that request, or the colleague's request it is about
   useEffect(() => {
@@ -87,7 +88,15 @@ export default function RequestChat() {
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[14px] font-semibold">{s.conv ? s.conv.title : "New request"}</p>
-            {s.conv && <p className="truncate text-[12px] text-ink-3">{s.conv.own ? s.conv.latest : s.conv.changeOnly ? `Change to your timetable · ${s.conv.latest}` : `A colleague's request · ${s.conv.latest}`}</p>}
+            {s.conv &&
+              (s.conv.own && s.conv.status ? (
+                <p className={clsx("flex items-center gap-1.5 truncate text-[12px] font-medium", OUTCOME_TEXT[s.conv.outcome ?? "progress"])}>
+                  <span className={clsx("size-2 shrink-0 rounded-full", OUTCOME_DOT[s.conv.outcome ?? "progress"])} />
+                  {s.conv.latest}
+                </p>
+              ) : (
+                <p className="truncate text-[12px] text-ink-3">{s.conv.own ? s.conv.latest : s.conv.changeOnly ? `Change to your timetable · ${s.conv.latest}` : `A colleague's request · ${s.conv.latest}`}</p>
+              ))}
           </div>
           {s.caseId && (
             <Button size="sm" icon={Info} onClick={() => setDetails(s.caseId)} title="How the system handled this request">

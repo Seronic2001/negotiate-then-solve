@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { OUTCOME_DOT, OUTCOME_TEXT, type Outcome } from "../../lib/meta";
 
 /** The pieces every conversation is drawn with (the assistant chat, a request's thread, a colleague's request):
  * what the person wrote, what came back, the steps in between, and the frame of a card. */
@@ -19,7 +20,17 @@ const REPLY_TONE = {
   plain: "border-line bg-panel-2/60",
   warn: "border-warn/40 bg-warn/5",
   info: "border-info/30 bg-info/5",
+  ok: "border-ok/40 bg-ok/5",
+  bad: "border-bad/40 bg-bad/5",
 } as const;
+
+const LABEL_TONE: Record<keyof typeof REPLY_TONE, string> = {
+  plain: "text-ink-3",
+  warn: "text-warn",
+  info: "text-info",
+  ok: "text-ok",
+  bad: "text-bad",
+};
 
 /** What came back, on the left: an answer, a question back, a notice. */
 export function ReplyBubble({ tone = "plain", label, icon: Icon, children, footer }: {
@@ -32,7 +43,7 @@ export function ReplyBubble({ tone = "plain", label, icon: Icon, children, foote
   return (
     <div className={clsx("max-w-[92%] rounded-lg rounded-bl-sm border px-3 py-2", REPLY_TONE[tone])}>
       {label && (
-        <p className={clsx("mb-1 flex items-center gap-1.5 text-[11.5px] font-medium", tone === "warn" ? "text-warn" : tone === "info" ? "text-info" : "text-ink-3")}>
+        <p className={clsx("mb-1 flex items-center gap-1.5 text-[11.5px] font-medium", LABEL_TONE[tone])}>
           {Icon && <Icon size={13} />} {label}
         </p>
       )}
@@ -43,13 +54,13 @@ export function ReplyBubble({ tone = "plain", label, icon: Icon, children, foote
 }
 
 /** The steps a request went through, one short line each. */
-export function StepList({ steps }: { steps: { key: string | number; text: string }[] }) {
+export function StepList({ steps }: { steps: { key: string | number; text: string; outcome?: Outcome | null }[] }) {
   if (!steps.length) return null;
   return (
     <ul className="space-y-1 pl-1">
       {steps.map((s) => (
-        <li key={s.key} className="flex items-center gap-2 text-[12px] text-ink-3">
-          <span className="size-1.5 shrink-0 rounded-full bg-ink-3/50" />
+        <li key={s.key} className={clsx("flex items-center gap-2 text-[12px]", s.outcome ? clsx("font-medium", OUTCOME_TEXT[s.outcome]) : "text-ink-3")}>
+          <span className={clsx("size-1.5 shrink-0 rounded-full", s.outcome ? OUTCOME_DOT[s.outcome] : "bg-ink-3/50")} />
           {s.text}
         </li>
       ))}

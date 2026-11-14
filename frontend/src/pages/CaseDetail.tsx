@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { changedWeeks, groupWeeks, versionsLabel, weeksLabel } from "../lib/weeks";
-import { AlertTriangle, ArrowLeft, Cpu, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Cpu, Undo2, XCircle } from "lucide-react";
+import { useApprovalActions } from "./Approvals";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { EventTimeline, Lifecycle } from "../components/Lifecycle";
@@ -15,6 +16,7 @@ import { useApi } from "../lib/hooks";
 import { ago, num, pct, ROLE_LABEL, secs } from "../lib/meta";
 import { study } from "../lib/study";
 import type { CaseDetail as Detail } from "../lib/types";
+import { ReplyText } from "../components/thread/ReplyText";
 import { useStudySession } from "../components/StudyBanner";
 import { Thinking } from "../components/thread/AgentCard";
 
@@ -85,6 +87,18 @@ export default function CaseDetail({ id: given, embedded = false }: { id?: strin
         <Lifecycle events={c.events} status={c.status} live={c.running} />
       </Card>
 
+      {c.status === "awaiting_approval" && (
+        <div className="mb-6">
+          <ApprovalPanel
+            c={c}
+            onDone={(msg) => {
+              setToast(msg);
+              void refresh();
+            }}
+          />
+        </div>
+      )}
+
       {c.outcome?.escalation && (
         <div className="mb-6">
           <EscalationPanel
@@ -143,6 +157,69 @@ const AGENT_OUTCOME: Record<string, string> = {
   replaced: "A later message in the conversation replaced it.",
   stopped: "The sender stopped the assistant.",
 };
+
+/** A change waiting for the office: approve or reject it here, with the change itself shown in the summary
+ * below. Everyone else sees who it waits on. */
+function ApprovalPanel({ c, onDone }: { c: Detail; onDone: (msg: string) => void }) {
+  const { can } = useAuth();
+  const { busy, approve, reject, confirmOnly } = useApprovalActions(c, onDone);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const office = can("approve");
+  const blockedBy = c.proposal?.builds_on;
+  const weeks = changedWeeks(c.proposal);
+  const what = confirmOnly
+    ? "It already fits the timetable: confirming keeps the requirement it adds in force."
+    : `Approving publishes ${versionsLabel(weeks.map((w) => w.version))}${weeks.some((w) => w.week != null) ? ` for ${weeksLabel(weeks.map((w) => w.week))}` : ""} and tells everyone affected.`;
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-start gap-4 bg-brand/[0.05] px-5 py-4">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand/12 text-brand">
+          <BadgeCheck size={19} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[15px] font-semibold">{office ? "Waiting for your approval" : "Waiting for the timetable office to approve"}</h3>
+          <p className="mt-1 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">{what}</p>
+          {office && blockedBy && (
+            <p className="mt-1 text-[12.5px] text-ink-2">
+              Builds on{" "}
+              <Link to={`/requests/${blockedBy}`} className="font-mono text-brand hover:underline">{blockedBy}</Link>
+              , which is still waiting: approve or reject that first.
+            </p>
+          )}
+          {office && c.stand_in && (
+            <p className="mt-1 text-[12.5px] text-warn">Read by the rule-based stand-in, not the model: check what it understood (Details) before approving.</p>
+          )}
+          {office && !!c.unused?.length && (
+            <p className="mt-1 text-[12.5px] text-warn">Part of the message was not used: check Details before approving.</p>
+          )}
+        </div>
+        {office && (
+          <div className="flex gap-2">
+            <Button icon={XCircle} onClick={() => setRejecting(!rejecting)} disabled={!!busy}>Reject</Button>
+            <Button variant="primary" icon={BadgeCheck} loading={busy === "approve"} onClick={approve} disabled={!!blockedBy || !!busy}>
+              {confirmOnly ? "Confirm" : "Approve and publish"}
+            </Button>
+          </div>
+        )}
+      </div>
+      {office && rejecting && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-line bg-panel-2 p-4">
+          <input
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !busy && void reject(reason)}
+            placeholder={confirmOnly ? "Why? The sender sees your note; the requirement is dropped." : "Why? The case goes back to negotiation with your note."}
+            className="h-10 flex-1 rounded-md border border-line bg-panel px-3 text-sm outline-none focus:border-bad/50"
+          />
+          <Button variant="danger" loading={busy === "reject"} onClick={() => reject(reason)}>Confirm rejection</Button>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /** The sender takes the request back while nothing it asked for is in the published timetable. */
 function Withdraw({ c, onDone }: { c: Detail; onDone: (msg: string) => void }) {
@@ -255,7 +332,7 @@ function Summary({ c }: { c: Detail }) {
             <ClarifyForm caseId={c.id} sender={c.sender} question={c.reply || "Could you give more detail?"} />
           ) : null}
           {answering ? null : c.reply ? (
-            <p className="text-[14.5px] leading-relaxed">{c.reply}</p>
+            <ReplyText text={c.reply} className="text-[14.5px] leading-relaxed" />
           ) : (
             <p className="text-[13.5px] text-ink-3">Still working on it…</p>
           )}

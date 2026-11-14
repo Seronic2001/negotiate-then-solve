@@ -470,8 +470,10 @@ def _ask_colleague(ctx: Context, a: Session, b: Session, pa, pb, valid: Validity
             f"{b.kind.value} ({theirs['day']} {theirs['from']}) would be held at the time of their "
             f"{inst.course_title(a.course)} {a.kind.value} ({mine['day']} {mine['from']}), and theirs at yours. "
             "Do you agree?")
+    # each class at the other's time, in the other's room (the solver may still change the room)
+    swap = {b.id: {"day": pa.day, "slot": pa.slot, "room": pa.room}, a.id: {"day": pb.day, "slot": pb.slot, "room": pb.room}}
     return Ask(kind="offer", to=who.id, to_name=who.name, rule=theirs_id, consent=True, weeks=weeks, text=text,
-               rule_text=words.constraint(inst, ctx.draft.world.constraints[theirs_id]))
+               rule_text=words.constraint(inst, ctx.draft.world.constraints[theirs_id]), swap=swap)
 
 
 DRAFT_TOOLS = [constrain, move_class, retract, list_draft, swap_classes]

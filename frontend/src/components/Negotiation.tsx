@@ -1,8 +1,50 @@
 import clsx from "clsx";
+import { Fragment } from "react";
 import { ArrowRight, BadgeCheck, Check, CircleSlash, Clock, MapPin, ShieldCheck } from "lucide-react";
 import { pct } from "../lib/meta";
 import type { ConstraintView, DiffRow, MessageView, OfferView } from "../lib/types";
 import { Avatar, Badge, Mark, TierBadge } from "./ui";
+
+/** A colleague's swap request, read from the side of the person asked: their own class and the colleague's,
+ * each from its time now to its time after the swap (a swap trades times, so each class's time now is
+ * the other's time after). */
+export function SwapDetails({ offer, me }: { offer: OfferView; me?: string }) {
+  const mine = offer.placements.find((p) => p.faculty === me) ?? offer.placements[0];
+  const theirs = offer.placements.find((p) => p !== mine);
+  if (!theirs) return null;
+  const name = (s: string) => s.replace(/^(the|my) /, "").replace(/\s*\([A-Z]-[\w-]+\)$/, "");
+  const when = (p: typeof mine) =>
+    `${p.day}${p.date ? ` ${new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}, ${p.time}`;
+  const rows = [
+    { label: "Your class", p: mine, from: theirs, who: null },
+    { label: "Their class", p: theirs, from: mine, who: theirs.faculty_name },
+  ];
+  return (
+    <div className="divide-y divide-line/70 rounded-md border border-line bg-panel">
+      {rows.map(({ label, p, from, who }) => (
+        <div key={p.session} className="px-3.5 py-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">{label}</p>
+          <p className="mt-0.5 text-[13.5px] font-medium">
+            {name(p.session_name)}
+            {who && <span className="font-normal text-ink-3"> · {who}</span>}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px]">
+            <span className="text-ink-3 line-through decoration-ink-3/50">{when(from)}</span>
+            <ArrowRight size={13} className="shrink-0 text-ink-3" />
+            <span className="font-medium text-ok">{when(p)}</span>
+            <span className="flex items-center gap-1 text-ink-2">
+              <MapPin size={12} className="text-ink-3" /> {p.room_name ?? p.room}
+            </span>
+          </p>
+        </div>
+      ))}
+      <p className="px-3.5 py-2 text-[11.5px] text-ink-3">
+        {offer.moved === 0 ? "No other class moves." : `${offer.moved} other class${offer.moved === 1 ? " moves" : "es move"}.`} The timetable
+        coordinator approves the swap before it is published.
+      </p>
+    </div>
+  );
+}
 
 export function ConstraintCard({ c, highlight, index = 0 }: { c: ConstraintView; highlight?: boolean; index?: number }) {
   return (
@@ -229,7 +271,8 @@ export function DiffTable({ rows, weeks }: { rows: DiffRow[]; weeks?: string }) 
         </thead>
         <tbody>
           {[...rows].sort(byTime).map((r, i) => (
-            <tr key={r.session} data-index={i} className="border-b border-line/60">
+            <Fragment key={r.session}>
+            <tr data-index={i} className={clsx("border-b border-line/60", r.made_room_for && "border-b-0")}>
               <td className="py-2.5 pr-3">
                 <p className="font-medium">
                   {className(r.session_name)}
@@ -248,6 +291,12 @@ export function DiffTable({ rows, weeks }: { rows: DiffRow[]; weeks?: string }) 
                 {r.extra && !r.before && <span className="ml-2 text-[12px] font-normal text-ink-3">extra class, this week only</span>}
               </td>
             </tr>
+            {r.made_room_for && (
+              <tr className="border-b border-line/60">
+                <td colSpan={5} className="pb-2.5 pr-3 text-[12.5px] text-ink-3">{r.made_room_for.text}</td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
