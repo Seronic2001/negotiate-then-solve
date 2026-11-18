@@ -1,0 +1,708 @@
+{"at": "2026-11-15T06:47:08+00:00", "code": "T-1", "task": "claims", "item": "CL-026", "value": {"supported": false}}
+{"at": "2026-11-15T06:47:23+00:00", "code": "T-1", "task": "claims", "item": "CL-013", "value": {"supported": false}}
+{"at": "2026-11-15T06:47:44+00:00", "code": "T-1", "task": "claims", "item": "CL-007", "value": {"supported": false}}
+{"at": "2026-11-15T06:47:54+00:00", "code": "T-1", "task": "claims", "item": "CL-046", "value": {"supported": true}}
+{"at": "2026-11-15T06:48:01+00:00", "code": "T-1", "task": "claims", "item": "CL-062", "value": {"supported": true}}
+{"at": "2026-11-15T06:48:09+00:00", "code": "T-1", "task": "claims", "item": "CL-061", "value": {"supported": false}}
+{"at": "2026-11-15T06:48:19+00:00", "code": "T-1", "task": "claims", "item": "CL-100", "value": {"supported": true}}
+{"at": "2026-11-15T06:48:27+00:00", "code": "T-1", "task": "claims", "item": "CL-094", "value": {"supported": true}}
+{"at": "2026-11-15T06:48:35+00:00", "code": "T-1", "task": "claims", "item": "CL-022", "value": {"supported": false}}
+{"at": "2026-11-15T06:48:44+00:00", "code": "T-1", "task": "claims", "item": "CL-071", "value": {"supported": true}}
+{"at": "2026-11-15T06:51:41+00:00", "code": "T-3", "task": "claims", "item": "CL-062", "value": {"supported": true}}
+{"at": "2026-11-15T06:53:36+00:00", "code": "T-3", "task": "claims", "item": "CL-008", "value": {"supported": true}}
+{"at": "2026-11-15T06:54:06+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-022-deadlock/4", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T06:54:22+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-005-contention/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T06:54:27+00:00", "code": "T-3", "task": "claims", "item": "CL-057", "value": {"supported": true}}
+{"at": "2026-11-15T06:55:42+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-020-contention/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T06:56:54+00:00", "code": "T-3", "task": "claims", "item": "CL-095", "value": {"supported": false}}
+{"at": "2026-11-15T06:57:37+00:00", "code": "T-3", "task": "claims", "item": "CL-098", "value": {"supported": true}}
+{"at": "2026-11-15T06:57:41+00:00", "code": "T-1", "task": "claims", "item": "CL-079", "value": {"supported": false}}
+{"at": "2026-11-15T06:57:48+00:00", "code": "T-1", "task": "claims", "item": "CL-089", "value": {"supported": true}}
+{"at": "2026-11-15T06:57:55+00:00", "code": "T-1", "task": "claims", "item": "CL-040", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:02+00:00", "code": "T-1", "task": "claims", "item": "CL-091", "value": {"supported": true}}
+{"at": "2026-11-15T06:58:07+00:00", "code": "T-3", "task": "claims", "item": "CL-092", "value": {"supported": true}}
+{"at": "2026-11-15T06:58:08+00:00", "code": "T-1", "task": "claims", "item": "CL-020", "value": {"supported": true}}
+{"at": "2026-11-15T06:58:15+00:00", "code": "T-1", "task": "claims", "item": "CL-056", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:21+00:00", "code": "T-1", "task": "claims", "item": "CL-016", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:22+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-023-deadlock/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T06:58:28+00:00", "code": "T-1", "task": "claims", "item": "CL-035", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:34+00:00", "code": "T-1", "task": "claims", "item": "CL-023", "value": {"supported": true}}
+{"at": "2026-11-15T06:58:41+00:00", "code": "T-1", "task": "claims", "item": "CL-074", "value": {"supported": true}}
+{"at": "2026-11-15T06:58:41+00:00", "code": "T-3", "task": "claims", "item": "CL-015", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:48+00:00", "code": "T-1", "task": "claims", "item": "CL-065", "value": {"supported": false}}
+{"at": "2026-11-15T06:58:55+00:00", "code": "T-1", "task": "claims", "item": "CL-095", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:02+00:00", "code": "T-1", "task": "claims", "item": "CL-014", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:16+00:00", "code": "T-1", "task": "claims", "item": "CL-028", "value": {"supported": true}}
+{"at": "2026-11-15T06:59:25+00:00", "code": "T-1", "task": "claims", "item": "CL-031", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:31+00:00", "code": "T-1", "task": "claims", "item": "CL-002", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:31+00:00", "code": "T-3", "task": "claims", "item": "CL-026", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:37+00:00", "code": "T-1", "task": "claims", "item": "CL-001", "value": {"supported": false}}
+{"at": "2026-11-15T06:59:43+00:00", "code": "T-1", "task": "claims", "item": "CL-068", "value": {"supported": true}}
+{"at": "2026-11-15T06:59:49+00:00", "code": "T-1", "task": "claims", "item": "CL-010", "value": {"supported": true}}
+{"at": "2026-11-15T06:59:55+00:00", "code": "T-1", "task": "claims", "item": "CL-008", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:03+00:00", "code": "T-1", "task": "claims", "item": "CL-011", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:04+00:00", "code": "T-3", "task": "claims", "item": "CL-003", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:09+00:00", "code": "T-1", "task": "claims", "item": "CL-004", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:16+00:00", "code": "T-1", "task": "claims", "item": "CL-047", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:27+00:00", "code": "T-1", "task": "claims", "item": "CL-043", "value": {"supported": false}}
+{"at": "2026-11-15T07:00:49+00:00", "code": "T-1", "task": "claims", "item": "CL-088", "value": {"supported": false}}
+{"at": "2026-11-15T07:00:56+00:00", "code": "T-1", "task": "claims", "item": "CL-082", "value": {"supported": true}}
+{"at": "2026-11-15T07:00:57+00:00", "code": "T-3", "task": "claims", "item": "CL-071", "value": {"supported": false}}
+{"at": "2026-11-15T07:01:02+00:00", "code": "T-1", "task": "claims", "item": "CL-041", "value": {"supported": true}}
+{"at": "2026-11-15T07:01:22+00:00", "code": "T-1", "task": "claims", "item": "CL-098", "value": {"supported": true}}
+{"at": "2026-11-15T07:01:30+00:00", "code": "T-1", "task": "claims", "item": "CL-064", "value": {"supported": true}}
+{"at": "2026-11-15T07:01:38+00:00", "code": "T-1", "task": "claims", "item": "CL-092", "value": {"supported": false}}
+{"at": "2026-11-15T07:03:18+00:00", "code": "T-3", "task": "claims", "item": "CL-051", "value": {"supported": false}}
+{"at": "2026-11-15T07:03:56+00:00", "code": "T-3", "task": "claims", "item": "CL-045", "value": {"supported": true}}
+{"at": "2026-11-15T07:05:10+00:00", "code": "T-3", "task": "claims", "item": "CL-087", "value": {"supported": true}}
+{"at": "2026-11-15T07:05:31+00:00", "code": "T-3", "task": "claims", "item": "CL-072", "value": {"supported": true}}
+{"at": "2026-11-15T07:06:00+00:00", "code": "T-3", "task": "claims", "item": "CL-027", "value": {"supported": true}}
+{"at": "2026-11-15T07:06:24+00:00", "code": "T-3", "task": "claims", "item": "CL-059", "value": {"supported": false}}
+{"at": "2026-11-15T07:06:50+00:00", "code": "T-3", "task": "claims", "item": "CL-077", "value": {"supported": true}}
+{"at": "2026-11-15T07:07:09+00:00", "code": "T-3", "task": "claims", "item": "CL-075", "value": {"supported": true}}
+{"at": "2026-11-15T07:07:30+00:00", "code": "T-3", "task": "claims", "item": "CL-018", "value": {"supported": true}}
+{"at": "2026-11-15T07:07:49+00:00", "code": "T-3", "task": "claims", "item": "CL-080", "value": {"supported": true}}
+{"at": "2026-11-15T07:11:17+00:00", "code": "T-3", "task": "claims", "item": "CL-044", "value": {"supported": true}}
+{"at": "2026-11-15T07:11:40+00:00", "code": "T-3", "task": "claims", "item": "CL-065", "value": {"supported": false}}
+{"at": "2026-11-15T07:12:01+00:00", "code": "T-3", "task": "claims", "item": "CL-006", "value": {"supported": true}}
+{"at": "2026-11-15T07:13:33+00:00", "code": "T-3", "task": "claims", "item": "CL-066", "value": {"supported": true}}
+{"at": "2026-11-15T07:13:57+00:00", "code": "T-3", "task": "claims", "item": "CL-017", "value": {"supported": true}}
+{"at": "2026-11-15T07:14:28+00:00", "code": "T-3", "task": "claims", "item": "CL-011", "value": {"supported": true}}
+{"at": "2026-11-15T07:14:37+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-034-squeeze/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:14:39+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-024-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:14:41+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-001-contention/3", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T07:14:42+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-027-squeeze/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:14:47+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-020-contention/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T07:14:48+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-023-deadlock/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:14:49+00:00", "code": "T-3", "task": "claims", "item": "CL-063", "value": {"supported": true}}
+{"at": "2026-11-15T07:14:51+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-022-deadlock/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:15:01+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-003-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:08+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-005-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:17+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-001-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:22+00:00", "code": "T-3", "task": "claims", "item": "CL-090", "value": {"supported": true}}
+{"at": "2026-11-15T07:15:25+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-012-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:40+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-001-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:42+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-029-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:15:47+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-010-contention/3", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:15:54+00:00", "code": "T-3", "task": "claims", "item": "CL-005", "value": {"supported": true}}
+{"at": "2026-11-15T07:15:54+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-001-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:16:11+00:00", "code": "T-3", "task": "claims", "item": "CL-068", "value": {"supported": true}}
+{"at": "2026-11-15T07:16:12+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-003-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:16:23+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-025-deadlock/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:16:27+00:00", "code": "T-3", "task": "claims", "item": "CL-050", "value": {"supported": true}}
+{"at": "2026-11-15T07:16:34+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-021-deadlock/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:16:39+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-011-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:16:45+00:00", "code": "T-3", "task": "claims", "item": "CL-023", "value": {"supported": true}}
+{"at": "2026-11-15T07:16:54+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-028-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:17:02+00:00", "code": "T-3", "task": "claims", "item": "CL-014", "value": {"supported": true}}
+{"at": "2026-11-15T07:17:25+00:00", "code": "T-3", "task": "claims", "item": "CL-009", "value": {"supported": false}}
+{"at": "2026-11-15T07:17:44+00:00", "code": "T-3", "task": "claims", "item": "CL-021", "value": {"supported": true}}
+{"at": "2026-11-15T07:18:04+00:00", "code": "T-3", "task": "claims", "item": "CL-033", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:10+00:00", "code": "T-1", "task": "claims", "item": "CL-077", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:17+00:00", "code": "T-1", "task": "claims", "item": "CL-067", "value": {"supported": false}}
+{"at": "2026-11-15T07:22:23+00:00", "code": "T-1", "task": "claims", "item": "CL-085", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:30+00:00", "code": "T-1", "task": "claims", "item": "CL-080", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:36+00:00", "code": "T-1", "task": "claims", "item": "CL-038", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:43+00:00", "code": "T-1", "task": "claims", "item": "CL-083", "value": {"supported": true}}
+{"at": "2026-11-15T07:22:51+00:00", "code": "T-1", "task": "claims", "item": "CL-059", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:00+00:00", "code": "T-1", "task": "claims", "item": "CL-053", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:06+00:00", "code": "T-1", "task": "claims", "item": "CL-029", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:12+00:00", "code": "T-1", "task": "claims", "item": "CL-005", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:20+00:00", "code": "T-1", "task": "claims", "item": "CL-037", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:26+00:00", "code": "T-1", "task": "claims", "item": "CL-070", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:32+00:00", "code": "T-1", "task": "claims", "item": "CL-086", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:38+00:00", "code": "T-1", "task": "claims", "item": "CL-044", "value": {"supported": false}}
+{"at": "2026-11-15T07:23:44+00:00", "code": "T-1", "task": "claims", "item": "CL-073", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:51+00:00", "code": "T-1", "task": "claims", "item": "CL-032", "value": {"supported": true}}
+{"at": "2026-11-15T07:23:54+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-015-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:24:02+00:00", "code": "T-1", "task": "claims", "item": "CL-097", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:05+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-009-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:24:10+00:00", "code": "T-1", "task": "claims", "item": "CL-049", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:16+00:00", "code": "T-1", "task": "claims", "item": "CL-052", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:22+00:00", "code": "T-1", "task": "claims", "item": "CL-076", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:29+00:00", "code": "T-1", "task": "claims", "item": "CL-019", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:35+00:00", "code": "T-1", "task": "claims", "item": "CL-034", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:47+00:00", "code": "T-1", "task": "claims", "item": "CL-017", "value": {"supported": true}}
+{"at": "2026-11-15T07:24:54+00:00", "code": "T-1", "task": "claims", "item": "CL-025", "value": {"supported": true}}
+{"at": "2026-11-15T07:25:00+00:00", "code": "T-1", "task": "claims", "item": "CL-050", "value": {"supported": true}}
+{"at": "2026-11-15T07:25:09+00:00", "code": "T-1", "task": "claims", "item": "CL-058", "value": {"supported": true}}
+{"at": "2026-11-15T07:25:15+00:00", "code": "T-1", "task": "claims", "item": "CL-055", "value": {"supported": true}}
+{"at": "2026-11-15T07:25:25+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-005-contention/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:25:39+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-053-policy/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:25:50+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-023-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:26:03+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-025-deadlock/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T07:26:14+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-059-policy/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:26:32+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-002-contention/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T07:26:39+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-004-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:26:53+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-023-deadlock/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:27:19+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-027-squeeze/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T07:27:38+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-004-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:27:44+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-006-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:27:53+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-004-contention/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:28:02+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-035-squeeze/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T07:30:01+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-016-contention/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:30:06+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-009-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:30:43+00:00", "code": "T-3", "task": "claims", "item": "CL-074", "value": {"supported": false}}
+{"at": "2026-11-15T07:31:42+00:00", "code": "T-3", "task": "claims", "item": "CL-042", "value": {"supported": true}}
+{"at": "2026-11-15T07:31:56+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-021-deadlock/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:32:02+00:00", "code": "T-3", "task": "claims", "item": "CL-096", "value": {"supported": true}}
+{"at": "2026-11-15T07:32:08+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-056-policy/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:32:16+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-004-contention/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:32:18+00:00", "code": "T-3", "task": "claims", "item": "CL-012", "value": {"supported": true}}
+{"at": "2026-11-15T07:32:21+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-055-policy/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:32:40+00:00", "code": "T-3", "task": "claims", "item": "CL-081", "value": {"supported": false}}
+{"at": "2026-11-15T07:33:07+00:00", "code": "T-3", "task": "claims", "item": "CL-048", "value": {"supported": true}}
+{"at": "2026-11-15T07:33:11+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-021-deadlock/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:33:26+00:00", "code": "T-3", "task": "claims", "item": "CL-039", "value": {"supported": true}}
+{"at": "2026-11-15T07:33:58+00:00", "code": "T-3", "task": "claims", "item": "CL-054", "value": {"supported": true}}
+{"at": "2026-11-15T07:34:31+00:00", "code": "T-3", "task": "claims", "item": "CL-002", "value": {"supported": true}}
+{"at": "2026-11-15T07:34:36+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-024-deadlock/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:34:44+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-053-policy/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:34:48+00:00", "code": "T-3", "task": "claims", "item": "CL-030", "value": {"supported": true}}
+{"at": "2026-11-15T07:34:51+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-053-policy/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T07:35:12+00:00", "code": "T-3", "task": "claims", "item": "CL-020", "value": {"supported": true}}
+{"at": "2026-11-15T07:35:27+00:00", "code": "T-3", "task": "claims", "item": "CL-078", "value": {"supported": false}}
+{"at": "2026-11-15T07:35:44+00:00", "code": "T-3", "task": "claims", "item": "CL-053", "value": {"supported": true}}
+{"at": "2026-11-15T07:36:00+00:00", "code": "T-3", "task": "claims", "item": "CL-047", "value": {"supported": true}}
+{"at": "2026-11-15T07:36:03+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-004-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T07:36:17+00:00", "code": "T-3", "task": "claims", "item": "CL-099", "value": {"supported": true}}
+{"at": "2026-11-15T07:36:36+00:00", "code": "T-3", "task": "claims", "item": "CL-032", "value": {"supported": true}}
+{"at": "2026-11-15T07:37:12+00:00", "code": "T-3", "task": "claims", "item": "CL-038", "value": {"supported": true}}
+{"at": "2026-11-15T07:38:46+00:00", "code": "T-3", "task": "claims", "item": "CL-086", "value": {"supported": true}}
+{"at": "2026-11-15T07:39:06+00:00", "code": "T-3", "task": "claims", "item": "CL-035", "value": {"supported": false}}
+{"at": "2026-11-15T07:39:23+00:00", "code": "T-3", "task": "claims", "item": "CL-029", "value": {"supported": true}}
+{"at": "2026-11-15T07:39:41+00:00", "code": "T-3", "task": "claims", "item": "CL-083", "value": {"supported": true}}
+{"at": "2026-11-15T07:40:00+00:00", "code": "T-3", "task": "claims", "item": "CL-093", "value": {"supported": true}}
+{"at": "2026-11-15T07:40:18+00:00", "code": "T-3", "task": "claims", "item": "CL-060", "value": {"supported": true}}
+{"at": "2026-11-15T07:40:35+00:00", "code": "T-3", "task": "claims", "item": "CL-041", "value": {"supported": true}}
+{"at": "2026-11-15T07:41:02+00:00", "code": "T-3", "task": "claims", "item": "CL-084", "value": {"supported": false}}
+{"at": "2026-11-15T07:41:23+00:00", "code": "T-3", "task": "claims", "item": "CL-069", "value": {"supported": true}}
+{"at": "2026-11-15T07:41:38+00:00", "code": "T-3", "task": "claims", "item": "CL-089", "value": {"supported": false}}
+{"at": "2026-11-15T07:41:57+00:00", "code": "T-3", "task": "claims", "item": "CL-036", "value": {"supported": true}}
+{"at": "2026-11-15T07:42:16+00:00", "code": "T-3", "task": "claims", "item": "CL-056", "value": {"supported": false}}
+{"at": "2026-11-15T07:42:32+00:00", "code": "T-3", "task": "claims", "item": "CL-024", "value": {"supported": true}}
+{"at": "2026-11-15T07:47:03+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-004-contention/2", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear and polite, but it doesn’t explain why my practical is the one being moved, or confirm that students are free at the new times. It should also say which practical is mine, give a reply deadline, and stop cutting off the option text. A one-line reason (e.g. “Dr. Kumar’s booking was made first”) would make this much easier to accept."}}
+{"at": "2026-11-15T07:48:02+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-024-deadlock/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendlier and clearer than a generic notice: naming Dr. Shah’s class and offering to sort it out quickly helps. But “Tuesday at 9 am and 10 am” reads like one two-hour slot, while the options list them separately. Please refer to the options by letter, say why my session is the one being moved, confirm students are free at these times, and give a reply deadline."}}
+{"at": "2026-11-15T07:48:47+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-015-contention/1", "value": {"clarity": 4, "acceptability": 3, "comment": "“Option A keeps your practical on Monday” is wrong: my practical was on Thursday, so it’s being moved, not kept. That made me second-guess the rest of the message. It also never asks me to reply or says why my session is the one moving. A greeting, a one-line reason, a clear ask with a deadline, and a check that students are free would make it much easier to accept."}}
+{"at": "2026-11-15T07:49:31+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-004-contention/3", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear about the clash and the choices, and it’s good that the option names are no longer cut off. But it doesn’t say outright that Algorithms is my practical, why mine is the one moving rather than Dr. Menon’s, or whether students are free at these times. Adding a greeting, a short reason, a reply deadline and less repetitive wording (“As an alternative… Alternatively… Or…”) would make it easier to agree to."}}
+{"at": "2026-11-15T07:50:12+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-007-contention/1", "value": {"clarity": 3, "acceptability": 3, "comment": "Good that it explains the GPU constraint, but “Option A keeps your practical on Monday” is wrong, since my practical was on Thursday. The routers line also raises a question: if Dr. Naidu only needs routers, can’t he use another room? Either say Lab 1 is the only option for both of us, or explain why I’m the one moving. A greeting, a reply deadline and full option names would help too."}}
+{"at": "2026-11-15T07:50:53+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-028-squeeze/1", "value": {"clarity": 2, "acceptability": 2, "comment": "I can’t tell what the actual clash is. The constraints listed (Dr. Mehta busy 9–1, lunch at 1) don’t rule out Friday afternoon, which is what I asked for. Who is Dr. Mehta, and why does their schedule affect mine? Option A also offers Lab 2 right after saying Lab 1 is the only room with GPUs, so either the message is wrong or Option A won’t work. Please drop internal codes like [P-LUNCH], state the conflict plainly, and only offer rooms that meet the requirement."}}
+{"at": "2026-11-15T07:51:28+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-016-contention/3", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear about the clash and the options. But only Dr. Chatterjee’s practical is described as needing a GPU. If my Machine Learning practical doesn’t need Lab 1, why not offer another room on Friday instead of a different day? If it does, say both need GPUs and explain why mine is the one moving. A greeting, a reply deadline, full option names and less repetitive wording would help."}}
+{"at": "2026-11-15T07:51:58+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-025-deadlock/1", "value": {"clarity": 4, "acceptability": 3, "comment": "“Option A keeps your practical on Monday” is wrong, since my practical was on Friday. It should say “moves”. The message doesn’t explain why my session is the one moving rather than Dr. Hegde’s, or why it has to be Lab 1. A greeting, a short reason, a reply deadline and full option names would make it easier to accept."}}
+{"at": "2026-11-15T07:52:32+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-010-contention/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Explaining why my session is the one moving (Dr. Pillai has given way more often) makes this feel fair. Every message should do this. But it never says what we’re clashing over (presumably Lab 1), and “Option A keeps your practical on Friday” is wrong, since my practical was on Wednesday. “Conceded” also sounds a bit like keeping score. “Has moved their session” would be gentler."}}
+{"at": "2026-11-15T07:53:07+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-005-contention/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Asking rather than telling, and giving a fairness reason, makes this much easier to accept. But it only says Dr. Singh has given way once, not how many times I have, so I can’t tell whether it’s really my turn. “Option A keeps your practical on Tuesday” is also wrong, since it was on Monday. “Has moved their session” would sound gentler than “conceded”."}}
+{"at": "2026-11-15T07:53:41+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-001-contention/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Polite, and the fairness reason helps. But it says “your practical” without naming it, and the option cards cut the name off, so I had to work out that it’s Computer Networks. It also gives Dr. Patel’s count but not mine, and “Option A keeps your practical on Tuesday” is wrong, since it was on Monday."}}
+{"at": "2026-11-15T07:54:27+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-055-policy/1", "value": {"clarity": 1, "acceptability": 2, "comment": "I couldn’t tell what the problem was or what my “Tuesday 9 am–1 pm” request meant: did I want classes then, or to be free then? Option A puts a lecture outside that window and B/C put one inside it. B and C use the same four slots, just with lecture numbers shuffled, so there are really only two choices. Please explain the clash, drop the L1–L4 shuffling unless the order matters, and show each option as a short list (e.g. “Mon 9, 10, 12 + Tue 9”) instead of a long paragraph."}}
+{"at": "2026-11-15T07:55:01+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-003-contention/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and easy to read, and listing the options by letter in the text helps. But “Option A keeps it on Thursday” is wrong, since it was on Tuesday, and “clashes with Dr. Verma’s Operating Systems lab needs” is garbled. Two of the three options are on Thursday an hour apart, so it doesn’t feel like much choice. It still doesn’t say why my session is the one moving."}}
+{"at": "2026-11-15T07:55:41+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-002-contention/1", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly, but too vague. “Shared lab resources” doesn’t say who I’m clashing with, what’s being shared, or why my session is the one moving. It also doesn’t name my practical (I had to guess Database Systems from the cut-off option cards), and “Option A keeps it on Monday” is wrong, since it was on Thursday. The other versions that named the other person and gave a reason were much easier to accept."}}
+{"at": "2026-11-15T07:56:20+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-022-deadlock/4", "value": {"clarity": 4, "acceptability": 3, "comment": "Offering Tuesday morning slots is helpful, because staying on the same day is much easier for me and my students. But B and C are only an hour apart, so it’s really two choices. It doesn’t say outright that Compiler Design is mine, or why mine is the one moving rather than Dr. Kapoor’s. Adding a greeting, a short reason, a reply deadline and less repetitive wording would help."}}
+{"at": "2026-11-15T07:57:30+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-011-contention/4", "value": {"clarity": 4, "acceptability": 3, "comment": "Cleaner without the course codes, but “Option A keeps your practical on Thursday” is wrong, since it was on Friday. It doesn’t say which of the two practicals is mine, and two of the three options are on Thursday an hour apart. It also gives no reason why my session is the one moving rather than Dr. Pillai’s. A short fairness reason and a reply deadline would make it easier to accept."}}
+{"at": "2026-11-15T07:58:03+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-023-deadlock/3", "value": {"clarity": 5, "acceptability": 4, "comment": "The clearest version so far: it names my practical, the other person, what we’re clashing over, and why both can’t happen. The three options are on genuinely different days. The only things missing are a short reason why my session is the one moving rather than Dr. Hegde’s, and a reply deadline."}}
+{"at": "2026-11-15T07:58:36+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-027-squeeze/2", "value": {"clarity": 2, "acceptability": 3, "comment": "Good that all options are in Lab 1 this time. But the message still doesn’t explain the clash: Dr. Shah being busy 9–1 and lunch at 1 pm don’t rule out Tuesday afternoon, which is what I asked for. Who is Dr. Shah, and why does it matter? Please drop internal codes like [P-LUNCH] and say plainly what’s blocking my requested slot."}}
+{"at": "2026-11-15T07:59:09+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-001-contention/3", "value": {"clarity": 4, "acceptability": 4, "comment": "Good spread of options: one keeps me on Monday, and two others are on different days. “Keeps it on Monday” makes sense here, though “moves it to 11 am the same day” would be clearer. It still doesn’t say why my session is the one moving rather than Dr. Bose’s, or whether students are free at 11 am. A greeting and a reply deadline would help."}}
+{"at": "2026-11-15T07:59:57+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-022-deadlock/1", "value": {"clarity": 4, "acceptability": 3, "comment": "“Option A keeps your practical on Monday” is wrong, since my practical was on Tuesday. It should say “moves”. The message also doesn’t explain why my session is the one moving rather than Dr. Das’s. A greeting, a short reason, a reply deadline and full option names would make it easier to accept."}}
+{"at": "2026-11-15T08:00:30+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-005-contention/3", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly, and the options are good, especially keeping a Monday slot. But “other lab needs” doesn’t say who I’m clashing with or why my session is the one moving, and it doesn’t name my practical (I had to guess Operating Systems from the cut-off cards). Referring to the options by letter in the text would make replying easier."}}
+{"at": "2026-11-15T08:01:02+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-024-deadlock/1", "value": {"clarity": 4, "acceptability": 3, "comment": "“The gpu and routers you need for the Compiler Design practical and the Digital Logic practical” makes it sound like both are mine. Please say which one is. “Option A keeps your practical on Monday” is also wrong, since it was on Friday. It doesn’t explain why my session is the one moving rather than Dr. Mishra’s. A greeting, a short reason and a reply deadline would help."}}
+{"at": "2026-11-15T08:01:31+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-030-squeeze/1", "value": {"clarity": 2, "acceptability": 3, "comment": "I can’t tell what the clash is. Dr. Agarwal being busy 9–1 and lunch at 1 pm don’t rule out Tuesday afternoon, which is what I asked for. Who is Dr. Agarwal, and why does it matter? “Option A keeps your practical on Monday” is also wrong, since it was on Tuesday. Please drop internal codes like [P-LUNCH] and say plainly what’s blocking my requested slot."}}
+{"at": "2026-11-15T08:02:18+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-055-policy/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Much clearer than a list of lecture codes: the reason and the plain-language summaries really help. But the summaries don’t match the cards. Option C’s “half-day gap” is one hour, and it switches to Room 102 without saying so. Also, Room 101 seems to be free on Tuesday at 9, 10 and 11 across the options, so why not keep three lectures together on Tuesday? A reply deadline would help too."}}
+{"at": "2026-11-15T08:02:45+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-004-contention/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and clear about who I’m clashing with and why. But “Option A keeps your practical on Monday” is wrong, since it was on Friday, and it doesn’t name my practical (I had to read Database Systems off the cut-off cards). Adding a short reason why my session is the one moving rather than Dr. Kumar’s, and a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:03:19+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-004-contention/4", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and clear about who I’m clashing with and why. But “Option A keeps your practical on Monday” is wrong, since it was on Friday, and it doesn’t name my practical (I had to read Database Systems off the cut-off cards). Adding a short reason why my session is the one moving rather than Dr. Kumar’s, and a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:03:49+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-021-deadlock/2", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly, and keeping the same 3 pm time across three days is helpful. But “shared lab resources” doesn’t say who I’m clashing with or why my session is the one moving, and it doesn’t name my practical. “Option A keeps it on Monday” is also wrong, since it was on Tuesday."}}
+{"at": "2026-11-15T08:04:17+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-023-deadlock/2", "value": {"clarity": 3, "acceptability": 2, "comment": "The fairness reason backfires. If Dr. Hegde and I have both given way 3 times, it’s a tie, so why am I the one being asked to move? Either give a real tie-breaker or don’t claim it’s about fairness. “Dr. Hegde and I” also reads as if the office has been giving way. Presumably it means “you”. “Option A keeps your practical on Friday” is wrong too, since it was on Wednesday."}}
+{"at": "2026-11-15T08:04:53+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-055-policy/1", "value": {"clarity": 3, "acceptability": 3, "comment": "The friendly intro and the offer to discuss help. But B and C use exactly the same slots and only differ in which lecture code goes on Tuesday. Those codes mean nothing to me, so it’s really two choices. “Keeps C2-L1 on Tuesday at 3 pm” is wrong, since I asked for the morning. Every option moves three of my four lectures to Monday, so a bit more explanation of why Tuesday morning is so limited would help."}}
+{"at": "2026-11-15T08:06:29+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-023-deadlock/1", "value": {"clarity": 4, "acceptability": 3, "comment": "Friendly and clear about whose class I’m clashing with. But “Option A keeps it on Monday” is wrong, since it was on Wednesday, and “those resources” doesn’t say what we’re clashing over. Two of the three options are on Monday an hour apart, so there isn’t much choice. It also doesn’t say why my session is the one moving rather than Dr. Singh’s."}}
+{"at": "2026-11-15T08:07:00+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-009-contention/1", "value": {"clarity": 4, "acceptability": 3, "comment": "Keeping the same 3 pm time across three days is helpful. But it doesn’t say outright that Compiler Design is mine, or why mine is the one moving rather than Dr. Nair’s. Adding a greeting, a short reason, a reply deadline and less repetitive wording would help."}}
+{"at": "2026-11-15T08:08:08+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-022-deadlock/3", "value": {"clarity": 4, "acceptability": 3, "comment": "Keeping the same 3 pm time across three days is helpful. But it doesn’t say outright that Compiler Design is mine, or why mine is the one moving rather than Dr. Kapoor’s. A greeting, a short reason, a reply deadline and less repetitive wording would make it easier to accept."}}
+{"at": "2026-11-15T08:08:46+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-016-contention/4", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear about the clash, but only Dr. Chatterjee’s practical is described as needing a GPU. If mine doesn’t need Lab 1, why not offer another room on Friday? Two of the three options are on Thursday an hour apart, so there isn’t much choice. It also doesn’t say why my session is the one moving. A greeting and a reply deadline would help."}}
+{"at": "2026-11-15T08:09:17+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-035-squeeze/2", "value": {"clarity": 1, "acceptability": 1, "comment": "The message contradicts itself. It says Dr. Mishra is unavailable 9 am–1 pm every weekday, then offers Tuesday 9 am and 11 am, both in that window. It also never explains what’s wrong with Friday afternoon, which isn’t affected by a morning unavailability or the lunch break. “Option A keeps your practical on Thursday” is wrong, since it was on Friday. Please check options against the stated constraints, say plainly what the clash is, and drop internal codes like [P-LUNCH]."}}
+{"at": "2026-11-15T08:09:47+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-035-squeeze/1", "value": {"clarity": 2, "acceptability": 3, "comment": "The options look sensible this time, but the message still doesn’t explain the clash. A Friday-morning unavailability and a 1 pm lunch break don’t rule out Friday afternoon, which is what I asked for. Who is Dr. Mishra, and why does it matter? “Option A keeps your practical on Monday” is also wrong, since it was on Friday. Please say plainly what’s blocking my requested slot and drop internal codes like [P-LUNCH]."}}
+{"at": "2026-11-15T08:10:21+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-003-contention/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Asking politely and giving a fairness reason helps. But it gives Dr. Verma’s count without mine, so I can’t tell if it’s really my turn. It also doesn’t say what we’re clashing over. “Option A keeps your practical on Monday” is wrong, since it was on Tuesday, and two of the three options are on Monday an hour apart. “Has moved their session” would sound gentler than “conceded”."}}
+{"at": "2026-11-15T08:10:52+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-021-deadlock/3", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly, with a good spread of options across three days. But the sentence explaining the clash is tangled. Just say both practicals need the GPU machines on Tuesday afternoon. “Option A keeps it on Monday” is also wrong, since it was on Tuesday. A short reason why my session is the one moving rather than Dr. Kapoor’s, plus a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:12:53+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-059-policy/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Clear and fair: my request fell in the lunch break, and two of the options keep me on Tuesday. Just drop the “[P-LUNCH]” code and the repeated “(institute rule)”. “Option A keeps your lecture on Monday” is wrong, since it was on Tuesday. A greeting and a reply deadline would round it off."}}
+{"at": "2026-11-15T08:13:23+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-022-deadlock/2", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly with a good spread of days, but the clash doesn’t make sense as written. I need GPUs and Dr. Das needs routers, so why can’t we both have them? If it’s because both are only in Lab 1, please say so. A Computer Networks practical needing GPUs and not routers also seems mixed up. Please refer to the options by letter and say why my session is the one moving."}}
+{"at": "2026-11-15T08:14:11+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-014-contention/1", "value": {"clarity": 2, "acceptability": 2, "comment": "It says Lab 1 is the only room with routers, then offers me Lab 3, so either the message is wrong or Option A won’t work for my practical. It also says Dr. Nair needs a GPU room, not routers, so why does he need Lab 1? If Lab 1 is the only room for both of us, say so and explain why I’m the one moving. Otherwise it feels like I’m giving up the one room I need for no good reason"}}
+{"at": "2026-11-15T08:14:42+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-006-contention/1", "value": {"clarity": 4, "acceptability": 3, "comment": "“The gpu and routers you need for the Digital Logic practical and the Computer Networks practical” makes it sound like both are mine. Please say which one is. “Option A keeps your practical on Monday” is also wrong, since it was on Tuesday. It doesn’t explain why my session is the one moving rather than Dr. Kumar’s. A greeting, a short reason and a reply deadline would help."}}
+{"at": "2026-11-15T08:15:10+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-021-deadlock/2", "value": {"clarity": 4, "acceptability": 3, "comment": "Cleaner wording, and the same 3 pm time across three days is helpful. But it doesn’t say outright that Database Systems is mine, or why mine is the one moving rather than Dr. Kulkarni’s. A greeting, a short reason and a reply deadline would make it easier to accept."}}
+{"at": "2026-11-15T08:15:35+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-021-deadlock/1", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear about which practical is mine and who I’m clashing with. But “Option A keeps your practical on Monday” is wrong, since it was on Tuesday. It should say “moves”. It doesn’t explain why my session is the one moving rather than Dr. Kulkarni’s. A greeting, a short reason and a reply deadline would make it easier to accept."}}
+{"at": "2026-11-15T08:16:15+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-003-contention/2", "value": {"clarity": 4, "acceptability": 4, "comment": "Asking politely and giving a fairness reason helps. But it gives Dr. Verma’s count without mine, and it doesn’t say what we’re clashing over. “Option A keeps your practical on Thursday” is wrong, since it was on Tuesday, and two of the three options are on Thursday an hour apart. “Has moved their session” would sound gentler than “conceded”."}}
+{"at": "2026-11-15T08:16:52+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-024-deadlock/2", "value": {"clarity": 4, "acceptability": 3, "comment": "The same 3 pm time across three days is helpful. But “the gpu and routers you need for the Compiler Design practical and the Digital Logic practical” makes it sound like both are mine, and “Option A keeps your practical on Monday” is wrong, since it was on Friday. It doesn’t explain why my session is the one moving rather than Dr. Mishra’s. A greeting, a short reason and a reply deadline would help."}}
+{"at": "2026-11-15T08:17:21+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-005-contention/2", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly, and the same 3 pm time across three days is helpful. But “other scheduled practicals” doesn’t say who I’m clashing with, what over, or why my session is the one moving. “Option A keeps your practical on Tuesday” is also wrong, since it was on Monday."}}
+{"at": "2026-11-15T08:17:52+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-054-policy/1", "value": {"clarity": 1, "acceptability": 2, "comment": "I couldn’t tell what the clash was, or whether my “Thursday 9 am–1 pm” request meant I wanted classes then or wanted to be free. Option A puts nothing on Thursday, and B and C put just one lecture there. Lecture C3-L3 is missing entirely: what happened to it? B and C are nearly identical apart from shuffled lecture numbers. Please explain the problem and show each option as a short list (e.g. “Thu 9, Wed 12, Mon 11”)."}}
+{"at": "2026-11-15T08:18:35+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-004-contention/3", "value": {"clarity": 4, "acceptability": 4, "comment": "Clear and friendly: it names the other person, what we’re clashing over, and why both can’t happen, and the options are on three different days at the same time. Just fix “Option A keeps it on Monday”, since it was on Friday. Adding a short reason why my session is the one moving rather than Dr. Menon’s, and a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:19:18+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-057-policy/1", "value": {"clarity": 5, "acceptability": 4, "comment": "Clear and fair: my slot fell in the lunch break, and Option A just moves it an hour later in the same room. Easy to agree to. I’d only drop the “[P-LUNCH]” code and add a greeting and a reply deadline."}}
+{"at": "2026-11-15T08:19:54+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-029-squeeze/1", "value": {"clarity": 2, "acceptability": 2, "comment": "“Dr. Nair’s clinical duties” makes no sense as a reason for moving my lab. Why would someone else’s duties affect my session? And “clinical” seems out of place in this department. It also calls it a “GPU lab” when the cards say Computer Networks. “Option A keeps it on Monday” is wrong, since it was on Wednesday. Please give the real conflict, such as who needs the room or equipment, and leave out colleagues’ personal details."}}
+{"at": "2026-11-15T08:20:21+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-005-contention/4", "value": {"clarity": 2, "acceptability": 2, "comment": "The message never says what the clash is. It just restates my request and lists other times. Why can’t I have Monday afternoon? “Option A keeps your practical on Tuesday” is also wrong, since it was on Monday. The options themselves (same time, three days) are fine, but without a reason I’m not comfortable agreeing."}}
+{"at": "2026-11-15T08:20:58+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-001-contention/3", "value": {"clarity": 3, "acceptability": 4, "comment": "Friendly, with good options, including keeping it on Monday. But “your requests for the Algorithms practical and the Computer Networks lab” makes it sound like both are mine. If so, let me choose which one moves; if not, say whose the other one is. “Specific equipment” is vague, and “the solver confirms” is jargon. Just say “all of these slots are free” instead."}}
+{"at": "2026-11-15T08:21:32+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-006-contention/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and clear, and “you can choose Option A on Monday” is much better than saying the practical is being “kept” somewhere new. But it doesn’t name my practical (I had to read Digital Logic off the cut-off cards) or Dr. Kumar’s class. A short reason why my session is the one moving, and a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:21:59+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-021-deadlock/4", "value": {"clarity": 4, "acceptability": 3, "comment": "Clean wording, and offering a Tuesday-morning slot alongside two other days is helpful. But it doesn’t say outright that Machine Learning is mine, or why mine is the one moving rather than Dr. Kapoor’s. A greeting, a short reason and a reply deadline would make it easier to accept."}}
+{"at": "2026-11-15T08:22:34+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-023-deadlock/3", "value": {"clarity": 4, "acceptability": 3, "comment": "Polite, but “to ensure fairness” isn’t followed by any actual reason. Why is my session the one moving rather than Dr. Singh’s? It also doesn’t say what we’re clashing over, and two of the three options are on Monday an hour apart. Either give the fairness reason or drop the phrase."}}
+{"at": "2026-11-15T08:23:04+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-059-policy/1", "value": {"clarity": 4, "acceptability": 3, "comment": "The reason is clear and fair (1 pm is lunch), but every option moves my lecture to Monday. Why not a slot just before or after lunch on Tuesday? “Option A keeps your lecture on Monday” is wrong, since it was on Tuesday. Please drop the “[P-LUNCH]” code and the repeated “(institute rule)”."}}
+{"at": "2026-11-15T08:23:43+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-027-squeeze/1", "value": {"clarity": 2, "acceptability": 3, "comment": "“Due to family care commitments”: whose? If mine, say so directly (“you’ve told us you’re unavailable Tuesday afternoons”). If someone else’s, it isn’t my business, and it doesn’t explain why my lab is moving. It also calls it a “GPU lab” when the cards say Computer Networks. “Option A keeps it on Monday” is wrong, since it was on Tuesday."}}
+{"at": "2026-11-15T08:24:17+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-035-squeeze/4", "value": {"clarity": 1, "acceptability": 1, "comment": "The message is about my Computer Graphics practical, but all the options move Digital Logic. Which class is actually moving, and what happens to the other? It also says my Friday-morning unavailability conflicts with a Friday-afternoon request, which it doesn’t. All three options are on Tuesday morning an hour apart. Please check that the options match the class in question, and say plainly what the problem is."}}
+{"at": "2026-11-15T08:24:47+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-053-policy/1", "value": {"clarity": 2, "acceptability": 2, "comment": "Option C’s “keeps part of your Wednesday slot” helps me understand what I asked for, but the message never says why Wednesday morning isn’t possible. Only one option keeps any lecture on Wednesday. Several options have back-to-back lectures in different rooms. Please explain the clash, show each option as a short list (e.g. “Wed 10, Thu 9, Mon 10 & 11”), and point out room changes."}}
+{"at": "2026-11-15T08:25:16+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-028-squeeze/1", "value": {"clarity": 2, "acceptability": 2, "comment": "Please don’t share colleagues’ medical appointments. It’s private and not something I need to know. It also doesn’t explain why their appointment affects my lab. And if it’s the reason, offering the same time in Lab 2 suggests the real issue is the room. Does Lab 2 have the GPUs I need? Just say plainly what’s clashing (room, equipment or time), and refer to the options by letter."}}
+{"at": "2026-11-15T08:26:13+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-023-deadlock/4", "value": {"clarity": 5, "acceptability": 4, "comment": "Clear and friendly: it names my practical, the other person, what we’re clashing over, and why both can’t happen, with three options on different days. The only things missing are a short reason why my session is the one moving rather than Dr. Hegde’s, and a reply deadline."}}
+{"at": "2026-11-15T08:26:53+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-001-contention/1", "value": {"clarity": 3, "acceptability": 4, "comment": "Friendly, and keeping a Monday option is helpful. But “Wednesday at 2 pm and Tuesday at 2 pm” sounds like two sessions. It should say “or”. It doesn’t say whose Algorithms practical I’m clashing with, or why mine is the one moving, and it’s odd that a Computer Networks lab needs GPUs. Referring to the options by letter would make replying easier."}}
+{"at": "2026-11-15T08:27:21+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-013-contention/1", "value": {"clarity": 4, "acceptability": 3, "comment": "Clear about the clash, with a good spread of days. But “Option A keeps your practical on Monday” is wrong, since my practical was on Thursday. It should say “moves”. The message doesn’t explain why my session is the one moving rather than Dr. Saxena’s. A greeting, a short reason and a reply deadline would make it easier to accept."}}
+{"at": "2026-11-15T08:27:47+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-020-contention/1", "value": {"clarity": 5, "acceptability": 4, "comment": "Clear and friendly: it names my practical, the other person, what we’re clashing over, and why both can’t happen, with three options on different days. The only things missing are a short reason why my session is the one moving rather than Dr. Agarwal’s, and a reply deadline."}}
+{"at": "2026-11-15T08:28:23+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-053-policy/2", "value": {"clarity": 3, "acceptability": 3, "comment": "Friendly, and the plain summaries are a good idea, but they don’t match the cards. Option B says “Wed/Tue” but actually spreads across four days. “Option A keeps your sessions on Thu/Mon” is wrong, since I asked for Wednesday. Several options switch rooms between back-to-back lectures without saying so. Please make the summaries match exactly and write the days out in full."}}
+{"at": "2026-11-15T08:28:55+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-010-contention/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Giving both counts (Dr. Pillai twice, me once) makes this feel fair, and the options cover three different days. But it never says what we’re clashing over, and “Option A keeps your practical on Monday” is wrong, since it was on Wednesday. “Has moved their session” would sound gentler than “conceded”. A greeting and a reply deadline would round it off."}}
+{"at": "2026-11-15T08:29:22+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-022-deadlock/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and clear about who I’m clashing with. But “on the same day” doesn’t mean we overlap. Please say it’s the same time. It also doesn’t use the option letters, so I had to match times to A/B/C myself. A short reason why my session is the one moving rather than Dr. Das’s, and a reply deadline, would make it a 5."}}
+{"at": "2026-11-15T08:29:55+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-024-deadlock/3", "value": {"clarity": 3, "acceptability": 3, "comment": "It starts with “you and Dr. Shah”, then refers to “the routers Dr. Mishra needs”. If that’s me, please say “you”. If it’s someone else, explain how they’re involved. It doesn’t name my practical, and “Option A keeps your practical on Monday” is wrong, since it was on Friday. The same 3 pm time across three days is helpful, but I’d still like to know why my session is the one moving."}}
+{"at": "2026-11-15T08:30:26+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-056-policy/1", "value": {"clarity": 2, "acceptability": 1, "comment": "I asked for my lectures on Tuesday morning, but none of the options use Tuesday at all, and every one spreads them across four days. Why? The message doesn’t say what the problem is. B and C’s shorter format (just day, time and room) is easier to read than A’s. “Option B moves parts” is misleading, since all four lectures move."}}
+{"at": "2026-11-15T08:30:57+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-053-policy/1", "value": {"clarity": 2, "acceptability": 3, "comment": "Friendly, and the offer to explore other options is welcome, but the summaries don’t match the cards. A and B seem swapped, and Option C’s “Wednesday and Thursday” leaves out two Monday lectures. “Option A keeps your sessions…” is wrong, since I asked for Wednesday. Please make each summary list the exact days, label every option clearly, and point out room changes between back-to-back lectures."}}
+{"at": "2026-11-15T08:31:29+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-011-contention/1", "value": {"clarity": 2, "acceptability": 2, "comment": "It says Lab 1 is the only room with routers, then offers me Lab 3 for my Computer Networks practical. Either the message is wrong or Option A won’t work. It also says Dr. Nair needs a GPU room, not routers, so why does he need Lab 1? If Lab 1 is the only option for both of us, say so and explain why I’m the one moving."}}
+{"at": "2026-11-15T08:32:10+00:00", "code": "T-3", "task": "ratings", "item": "A2/S-022-deadlock/4", "value": {"clarity": 4, "acceptability": 4, "comment": "Friendly and clear, and keeping two Tuesday-morning options is helpful. But “the same resources” doesn’t say what we’re clashing over, and there’s no reason why my session is the one moving rather than Dr. Kapoor’s. B and C are only an hour apart, so it’s really two choices. A reply deadline would help."}}
+{"at": "2026-11-15T08:32:37+00:00", "code": "T-3", "task": "ratings", "item": "ours-llm/S-005-contention/1", "value": {"clarity": 4, "acceptability": 4, "comment": "Polite, with a fairness reason and a good mix of options, including keeping it on Monday. But it gives Dr. Singh’s count without mine, so I can’t tell if it’s really my turn, and it doesn’t say outright that Algorithms is mine. “Has moved their session” would sound gentler than “conceded”."}}
+{"at": "2026-11-15T08:59:55+00:00", "code": "T-1", "task": "replies", "item": "RE-092", "value": {"label": "reject"}}
+{"at": "2026-11-15T09:00:29+00:00", "code": "T-1", "task": "rules", "item": "RU-034", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:00:47+00:00", "code": "T-1", "task": "replies", "item": "RE-058", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T09:00:48+00:00", "code": "T-1", "task": "rules", "item": "RU-028", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:01:08+00:00", "code": "T-1", "task": "rules", "item": "RU-053", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:01:22+00:00", "code": "T-1", "task": "rules", "item": "RU-013", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:01:39+00:00", "code": "T-1", "task": "rules", "item": "RU-004", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:02:25+00:00", "code": "T-1", "task": "replies", "item": "RE-067", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T09:02:45+00:00", "code": "T-1", "task": "rules", "item": "RU-025", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:03:01+00:00", "code": "T-1", "task": "rules", "item": "RU-047", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:03:14+00:00", "code": "T-1", "task": "rules", "item": "RU-050", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:03:25+00:00", "code": "T-1", "task": "rules", "item": "RU-010", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:03:35+00:00", "code": "T-1", "task": "rules", "item": "RU-029", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:04:43+00:00", "code": "T-1", "task": "rules", "item": "RU-032", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:04:52+00:00", "code": "T-1", "task": "rules", "item": "RU-008", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:05:01+00:00", "code": "T-1", "task": "rules", "item": "RU-002", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:05:10+00:00", "code": "T-1", "task": "rules", "item": "RU-011", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:05:19+00:00", "code": "T-1", "task": "rules", "item": "RU-001", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:05:53+00:00", "code": "T-1", "task": "rules", "item": "RU-026", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:06:19+00:00", "code": "T-1", "task": "rules", "item": "RU-020", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:07:55+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-011-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T09:31:32+00:00", "code": "T-1", "task": "rules", "item": "RU-041", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:31:40+00:00", "code": "T-1", "task": "rules", "item": "RU-023", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:31:49+00:00", "code": "T-1", "task": "rules", "item": "RU-043", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:31:58+00:00", "code": "T-1", "task": "rules", "item": "RU-019", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:32:09+00:00", "code": "T-1", "task": "rules", "item": "RU-052", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:32:17+00:00", "code": "T-1", "task": "rules", "item": "RU-038", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:32:53+00:00", "code": "T-1", "task": "rules", "item": "RU-058", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:33:08+00:00", "code": "T-1", "task": "rules", "item": "RU-017", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:33:21+00:00", "code": "T-1", "task": "rules", "item": "RU-035", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:33:28+00:00", "code": "T-1", "task": "rules", "item": "RU-040", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:33:43+00:00", "code": "T-1", "task": "rules", "item": "RU-007", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:33:52+00:00", "code": "T-1", "task": "rules", "item": "RU-044", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:33:59+00:00", "code": "T-1", "task": "rules", "item": "RU-049", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:34:07+00:00", "code": "T-1", "task": "rules", "item": "RU-059", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:34:49+00:00", "code": "T-1", "task": "rules", "item": "RU-005", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:34:56+00:00", "code": "T-1", "task": "rules", "item": "RU-014", "value": {"label": "consistent"}}
+{"at": "2026-11-15T09:35:02+00:00", "code": "T-1", "task": "rules", "item": "RU-031", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:35:14+00:00", "code": "T-1", "task": "rules", "item": "RU-046", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:35:21+00:00", "code": "T-1", "task": "rules", "item": "RU-022", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:35:28+00:00", "code": "T-1", "task": "rules", "item": "RU-037", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:35:53+00:00", "code": "T-1", "task": "rules", "item": "RU-055", "value": {"label": "declines"}}
+{"at": "2026-11-15T09:36:01+00:00", "code": "T-1", "task": "rules", "item": "RU-016", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:36:08+00:00", "code": "T-1", "task": "rules", "item": "RU-056", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T09:59:51+00:00", "code": "T-3", "task": "rules", "item": "RU-042", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:00:35+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-016-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:00:41+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-029-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:01:05+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-002-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:01:16+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-004-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:01:48+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-016-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:01:50+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-027-squeeze/2", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T10:01:59+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-054-policy/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:10+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-022-deadlock/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:23+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-035-squeeze/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:28+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-010-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:43+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-030-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:45+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-021-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:02:54+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-055-policy/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T10:03:33+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-021-deadlock/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:03:41+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-022-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:03:49+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-007-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:03:58+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-005-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:04:13+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-036-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:04:22+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-022-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:05:27+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-055-policy/2", "value": {"clarity": 3, "acceptability": 4, "comment": "Multiple movements makes the text a bit unreadable."}}
+{"at": "2026-11-15T10:05:37+00:00", "code": "T-2", "task": "ratings", "item": "ours-llm/S-023-deadlock/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:05:42+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-023-deadlock/4", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:05:47+00:00", "code": "T-2", "task": "ratings", "item": "A2/S-005-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T10:06:27+00:00", "code": "T-3", "task": "rules", "item": "RU-041", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:06:39+00:00", "code": "T-3", "task": "rules", "item": "RU-008", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:07:01+00:00", "code": "T-3", "task": "rules", "item": "RU-011", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:07:06+00:00", "code": "T-3", "task": "rules", "item": "RU-054", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:07:15+00:00", "code": "T-3", "task": "rules", "item": "RU-017", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:07:18+00:00", "code": "T-2", "task": "replies", "item": "RE-043", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:07:26+00:00", "code": "T-3", "task": "rules", "item": "RU-012", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:07:31+00:00", "code": "T-3", "task": "rules", "item": "RU-056", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:07:32+00:00", "code": "T-2", "task": "replies", "item": "RE-064", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:07:37+00:00", "code": "T-3", "task": "rules", "item": "RU-009", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:07:50+00:00", "code": "T-2", "task": "replies", "item": "RE-063", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:07:54+00:00", "code": "T-2", "task": "replies", "item": "RE-075", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:07:58+00:00", "code": "T-3", "task": "rules", "item": "RU-032", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:07:58+00:00", "code": "T-2", "task": "replies", "item": "RE-100", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:08:00+00:00", "code": "T-3", "task": "rules", "item": "RU-027", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:08:04+00:00", "code": "T-2", "task": "replies", "item": "RE-049", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:08:05+00:00", "code": "T-3", "task": "rules", "item": "RU-002", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:08:08+00:00", "code": "T-2", "task": "replies", "item": "RE-030", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T10:08:10+00:00", "code": "T-2", "task": "replies", "item": "RE-060", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:08:12+00:00", "code": "T-2", "task": "replies", "item": "RE-073", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:08:13+00:00", "code": "T-3", "task": "rules", "item": "RU-038", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:08:21+00:00", "code": "T-3", "task": "rules", "item": "RU-060", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:08:35+00:00", "code": "T-3", "task": "rules", "item": "RU-057", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:09:42+00:00", "code": "T-2", "task": "replies", "item": "RE-090", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:09:45+00:00", "code": "T-2", "task": "replies", "item": "RE-007", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:04+00:00", "code": "T-2", "task": "replies", "item": "RE-015", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:13:08+00:00", "code": "T-2", "task": "replies", "item": "RE-025", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:13:15+00:00", "code": "T-2", "task": "replies", "item": "RE-052", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:17+00:00", "code": "T-2", "task": "replies", "item": "RE-024", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:13:20+00:00", "code": "T-2", "task": "replies", "item": "RE-079", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:23+00:00", "code": "T-2", "task": "replies", "item": "RE-093", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:13:28+00:00", "code": "T-2", "task": "replies", "item": "RE-046", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:32+00:00", "code": "T-2", "task": "replies", "item": "RE-081", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:33+00:00", "code": "T-2", "task": "replies", "item": "RE-088", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:35+00:00", "code": "T-2", "task": "replies", "item": "RE-061", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:37+00:00", "code": "T-2", "task": "replies", "item": "RE-072", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:39+00:00", "code": "T-2", "task": "replies", "item": "RE-009", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:41+00:00", "code": "T-2", "task": "replies", "item": "RE-066", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:43+00:00", "code": "T-2", "task": "replies", "item": "RE-055", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:13:48+00:00", "code": "T-2", "task": "replies", "item": "RE-067", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:13:51+00:00", "code": "T-2", "task": "replies", "item": "RE-028", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:13:56+00:00", "code": "T-2", "task": "replies", "item": "RE-087", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:13:58+00:00", "code": "T-2", "task": "replies", "item": "RE-001", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:00+00:00", "code": "T-2", "task": "replies", "item": "RE-096", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:03+00:00", "code": "T-2", "task": "replies", "item": "RE-045", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:14:05+00:00", "code": "T-2", "task": "replies", "item": "RE-031", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:14:07+00:00", "code": "T-2", "task": "replies", "item": "RE-004", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:09+00:00", "code": "T-2", "task": "replies", "item": "RE-099", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:10+00:00", "code": "T-2", "task": "replies", "item": "RE-012", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:13+00:00", "code": "T-2", "task": "replies", "item": "RE-006", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:15+00:00", "code": "T-2", "task": "replies", "item": "RE-084", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:28+00:00", "code": "T-2", "task": "replies", "item": "RE-013", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:30+00:00", "code": "T-2", "task": "replies", "item": "RE-033", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:14:36+00:00", "code": "T-2", "task": "replies", "item": "RE-091", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:39+00:00", "code": "T-2", "task": "replies", "item": "RE-058", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:14:48+00:00", "code": "T-2", "task": "replies", "item": "RE-097", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:14:50+00:00", "code": "T-2", "task": "replies", "item": "RE-021", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:15:00+00:00", "code": "T-2", "task": "replies", "item": "RE-042", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:06+00:00", "code": "T-2", "task": "replies", "item": "RE-070", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:10+00:00", "code": "T-2", "task": "replies", "item": "RE-069", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:15:12+00:00", "code": "T-2", "task": "replies", "item": "RE-016", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:15+00:00", "code": "T-2", "task": "replies", "item": "RE-040", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:15:18+00:00", "code": "T-2", "task": "replies", "item": "RE-034", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:40+00:00", "code": "T-2", "task": "replies", "item": "RE-022", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:42+00:00", "code": "T-2", "task": "replies", "item": "RE-078", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:15:45+00:00", "code": "T-2", "task": "replies", "item": "RE-010", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:47+00:00", "code": "T-2", "task": "replies", "item": "RE-057", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:51+00:00", "code": "T-2", "task": "replies", "item": "RE-027", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:54+00:00", "code": "T-2", "task": "replies", "item": "RE-082", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:56+00:00", "code": "T-2", "task": "replies", "item": "RE-076", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:57+00:00", "code": "T-2", "task": "replies", "item": "RE-085", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:15:59+00:00", "code": "T-2", "task": "replies", "item": "RE-094", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:16:07+00:00", "code": "T-2", "task": "replies", "item": "RE-054", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:16:09+00:00", "code": "T-2", "task": "replies", "item": "RE-019", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:16:11+00:00", "code": "T-2", "task": "replies", "item": "RE-036", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:16:16+00:00", "code": "T-2", "task": "replies", "item": "RE-003", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:16:30+00:00", "code": "T-3", "task": "rules", "item": "RU-033", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:16:35+00:00", "code": "T-2", "task": "replies", "item": "RE-018", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:16:36+00:00", "code": "T-2", "task": "replies", "item": "RE-039", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:16:38+00:00", "code": "T-2", "task": "replies", "item": "RE-051", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:16:41+00:00", "code": "T-3", "task": "rules", "item": "RU-023", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:16:42+00:00", "code": "T-2", "task": "replies", "item": "RE-037", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:16:46+00:00", "code": "T-2", "task": "replies", "item": "RE-048", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:16:50+00:00", "code": "T-3", "task": "rules", "item": "RU-036", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:17:01+00:00", "code": "T-3", "task": "rules", "item": "RU-024", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:17:08+00:00", "code": "T-3", "task": "rules", "item": "RU-018", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:17:12+00:00", "code": "T-3", "task": "rules", "item": "RU-047", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:17:31+00:00", "code": "T-3", "task": "rules", "item": "RU-048", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:18:11+00:00", "code": "T-3", "task": "rules", "item": "RU-026", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:18:21+00:00", "code": "T-2", "task": "claims", "item": "CL-022", "value": {"supported": true}}
+{"at": "2026-11-15T10:18:23+00:00", "code": "T-3", "task": "rules", "item": "RU-005", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:18:34+00:00", "code": "T-3", "task": "rules", "item": "RU-006", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:18:43+00:00", "code": "T-3", "task": "rules", "item": "RU-015", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:18:50+00:00", "code": "T-2", "task": "claims", "item": "CL-019", "value": {"supported": true}}
+{"at": "2026-11-15T10:18:56+00:00", "code": "T-3", "task": "rules", "item": "RU-035", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:19:00+00:00", "code": "T-3", "task": "rules", "item": "RU-044", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:19:04+00:00", "code": "T-3", "task": "rules", "item": "RU-030", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:19:54+00:00", "code": "T-3", "task": "rules", "item": "RU-059", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:20:03+00:00", "code": "T-3", "task": "rules", "item": "RU-029", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:20:35+00:00", "code": "T-2", "task": "claims", "item": "CL-066", "value": {"supported": true}}
+{"at": "2026-11-15T10:20:38+00:00", "code": "T-3", "task": "rules", "item": "RU-020", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:20:49+00:00", "code": "T-3", "task": "rules", "item": "RU-014", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:21:02+00:00", "code": "T-3", "task": "rules", "item": "RU-021", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:21:27+00:00", "code": "T-3", "task": "rules", "item": "RU-039", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:21:33+00:00", "code": "T-3", "task": "rules", "item": "RU-003", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:21:40+00:00", "code": "T-3", "task": "rules", "item": "RU-045", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:21:44+00:00", "code": "T-3", "task": "rules", "item": "RU-051", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:21:47+00:00", "code": "T-3", "task": "rules", "item": "RU-050", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:21:52+00:00", "code": "T-3", "task": "rules", "item": "RU-053", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:22:02+00:00", "code": "T-3", "task": "replies", "item": "RE-050", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:22:05+00:00", "code": "T-2", "task": "claims", "item": "CL-033", "value": {"supported": true}}
+{"at": "2026-11-15T10:22:14+00:00", "code": "T-3", "task": "replies", "item": "RE-032", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:20+00:00", "code": "T-3", "task": "replies", "item": "RE-068", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:22:26+00:00", "code": "T-3", "task": "replies", "item": "RE-029", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:28+00:00", "code": "T-3", "task": "replies", "item": "RE-039", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:37+00:00", "code": "T-3", "task": "replies", "item": "RE-017", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:41+00:00", "code": "T-3", "task": "replies", "item": "RE-066", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:44+00:00", "code": "T-3", "task": "replies", "item": "RE-063", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:46+00:00", "code": "T-3", "task": "replies", "item": "RE-095", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:48+00:00", "code": "T-3", "task": "replies", "item": "RE-047", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T10:22:50+00:00", "code": "T-3", "task": "replies", "item": "RE-009", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:56+00:00", "code": "T-3", "task": "replies", "item": "RE-008", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:22:59+00:00", "code": "T-3", "task": "replies", "item": "RE-026", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:00+00:00", "code": "T-3", "task": "replies", "item": "RE-048", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:23:03+00:00", "code": "T-3", "task": "replies", "item": "RE-041", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:23:05+00:00", "code": "T-3", "task": "replies", "item": "RE-060", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:23:07+00:00", "code": "T-3", "task": "replies", "item": "RE-075", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:10+00:00", "code": "T-3", "task": "replies", "item": "RE-042", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:11+00:00", "code": "T-3", "task": "replies", "item": "RE-065", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:14+00:00", "code": "T-3", "task": "replies", "item": "RE-062", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:18+00:00", "code": "T-3", "task": "replies", "item": "RE-098", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:23:20+00:00", "code": "T-3", "task": "replies", "item": "RE-030", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T10:23:22+00:00", "code": "T-3", "task": "replies", "item": "RE-081", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:27+00:00", "code": "T-3", "task": "replies", "item": "RE-093", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:23:29+00:00", "code": "T-3", "task": "replies", "item": "RE-069", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:23:32+00:00", "code": "T-3", "task": "replies", "item": "RE-099", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:34+00:00", "code": "T-3", "task": "replies", "item": "RE-012", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:37+00:00", "code": "T-3", "task": "replies", "item": "RE-089", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:23:40+00:00", "code": "T-3", "task": "replies", "item": "RE-005", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:42+00:00", "code": "T-3", "task": "replies", "item": "RE-074", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T10:23:45+00:00", "code": "T-3", "task": "replies", "item": "RE-003", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:23:51+00:00", "code": "T-3", "task": "replies", "item": "RE-006", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:53+00:00", "code": "T-3", "task": "replies", "item": "RE-057", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:55+00:00", "code": "T-3", "task": "replies", "item": "RE-072", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:57+00:00", "code": "T-3", "task": "replies", "item": "RE-027", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:23:58+00:00", "code": "T-3", "task": "replies", "item": "RE-059", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:00+00:00", "code": "T-3", "task": "replies", "item": "RE-021", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:24:02+00:00", "code": "T-3", "task": "replies", "item": "RE-018", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:05+00:00", "code": "T-3", "task": "replies", "item": "RE-056", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:07+00:00", "code": "T-3", "task": "replies", "item": "RE-035", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:10+00:00", "code": "T-3", "task": "replies", "item": "RE-045", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:24:16+00:00", "code": "T-3", "task": "replies", "item": "RE-087", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:19+00:00", "code": "T-3", "task": "replies", "item": "RE-033", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:24:21+00:00", "code": "T-2", "task": "claims", "item": "CL-084", "value": {"supported": true}}
+{"at": "2026-11-15T10:24:21+00:00", "code": "T-3", "task": "replies", "item": "RE-023", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:24+00:00", "code": "T-3", "task": "replies", "item": "RE-071", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:25+00:00", "code": "T-3", "task": "replies", "item": "RE-086", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:27+00:00", "code": "T-3", "task": "replies", "item": "RE-011", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:29+00:00", "code": "T-3", "task": "replies", "item": "RE-083", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:24:31+00:00", "code": "T-3", "task": "replies", "item": "RE-053", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:24:34+00:00", "code": "T-3", "task": "replies", "item": "RE-084", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:36+00:00", "code": "T-2", "task": "claims", "item": "CL-093", "value": {"supported": true}}
+{"at": "2026-11-15T10:24:36+00:00", "code": "T-3", "task": "replies", "item": "RE-036", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:39+00:00", "code": "T-3", "task": "replies", "item": "RE-038", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:40+00:00", "code": "T-3", "task": "replies", "item": "RE-002", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:42+00:00", "code": "T-3", "task": "replies", "item": "RE-014", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:24:44+00:00", "code": "T-3", "task": "replies", "item": "RE-024", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:24:45+00:00", "code": "T-3", "task": "replies", "item": "RE-090", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:47+00:00", "code": "T-3", "task": "replies", "item": "RE-080", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T10:24:50+00:00", "code": "T-3", "task": "replies", "item": "RE-092", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:24:52+00:00", "code": "T-3", "task": "replies", "item": "RE-054", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:24:58+00:00", "code": "T-3", "task": "replies", "item": "RE-078", "value": {"label": "counter"}}
+{"at": "2026-11-15T10:25:01+00:00", "code": "T-3", "task": "replies", "item": "RE-051", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T10:25:03+00:00", "code": "T-3", "task": "replies", "item": "RE-096", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:25:03+00:00", "code": "T-2", "task": "claims", "item": "CL-016", "value": {"supported": true}}
+{"at": "2026-11-15T10:25:05+00:00", "code": "T-3", "task": "replies", "item": "RE-020", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:25:06+00:00", "code": "T-3", "task": "replies", "item": "RE-044", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:25:07+00:00", "code": "T-3", "task": "replies", "item": "RE-015", "value": {"label": "accept:B"}}
+{"at": "2026-11-15T10:25:09+00:00", "code": "T-3", "task": "replies", "item": "RE-077", "value": {"label": "reject"}}
+{"at": "2026-11-15T10:25:17+00:00", "code": "T-2", "task": "claims", "item": "CL-096", "value": {"supported": true}}
+{"at": "2026-11-15T10:26:03+00:00", "code": "T-2", "task": "claims", "item": "CL-003", "value": {"supported": true}}
+{"at": "2026-11-15T10:28:42+00:00", "code": "T-2", "task": "rules", "item": "RU-018", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:29:26+00:00", "code": "T-2", "task": "rules", "item": "RU-052", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:29:49+00:00", "code": "T-2", "task": "rules", "item": "RU-004", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:30:08+00:00", "code": "T-2", "task": "rules", "item": "RU-027", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:30:28+00:00", "code": "T-2", "task": "rules", "item": "RU-007", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:30:59+00:00", "code": "T-2", "task": "rules", "item": "RU-034", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:31:30+00:00", "code": "T-2", "task": "rules", "item": "RU-039", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:33:08+00:00", "code": "T-2", "task": "rules", "item": "RU-001", "value": {"label": "declines"}}
+{"at": "2026-11-15T10:33:18+00:00", "code": "T-2", "task": "rules", "item": "RU-042", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:33:23+00:00", "code": "T-2", "task": "rules", "item": "RU-060", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:34:10+00:00", "code": "T-2", "task": "rules", "item": "RU-010", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:34:19+00:00", "code": "T-2", "task": "rules", "item": "RU-022", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:34:22+00:00", "code": "T-2", "task": "rules", "item": "RU-058", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:34:24+00:00", "code": "T-2", "task": "rules", "item": "RU-019", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:34:27+00:00", "code": "T-2", "task": "rules", "item": "RU-009", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:35:43+00:00", "code": "T-2", "task": "rules", "item": "RU-028", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:35:54+00:00", "code": "T-2", "task": "rules", "item": "RU-049", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:36:08+00:00", "code": "T-2", "task": "rules", "item": "RU-043", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:36:11+00:00", "code": "T-2", "task": "rules", "item": "RU-048", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:36:32+00:00", "code": "T-2", "task": "rules", "item": "RU-037", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T10:37:20+00:00", "code": "T-2", "task": "rules", "item": "RU-013", "value": {"label": "consistent"}}
+{"at": "2026-11-15T10:37:53+00:00", "code": "T-2", "task": "rules", "item": "RU-055", "value": {"label": "declines"}}
+{"at": "2026-11-15T11:25:17+00:00", "code": "T-2", "task": "rules", "item": "RU-025", "value": {"label": "declines"}}
+{"at": "2026-11-15T11:25:33+00:00", "code": "T-2", "task": "rules", "item": "RU-033", "value": {"label": "consistent"}}
+{"at": "2026-11-15T11:25:39+00:00", "code": "T-2", "task": "rules", "item": "RU-045", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:25:45+00:00", "code": "T-2", "task": "rules", "item": "RU-054", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:26:07+00:00", "code": "T-2", "task": "rules", "item": "RU-030", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:26:24+00:00", "code": "T-2", "task": "rules", "item": "RU-057", "value": {"label": "consistent"}}
+{"at": "2026-11-15T11:26:55+00:00", "code": "T-2", "task": "rules", "item": "RU-003", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:27:00+00:00", "code": "T-2", "task": "rules", "item": "RU-015", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:27:04+00:00", "code": "T-2", "task": "rules", "item": "RU-046", "value": {"label": "consistent"}}
+{"at": "2026-11-15T11:27:12+00:00", "code": "T-2", "task": "rules", "item": "RU-006", "value": {"label": "consistent"}}
+{"at": "2026-11-15T11:27:23+00:00", "code": "T-2", "task": "rules", "item": "RU-012", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:27:48+00:00", "code": "T-2", "task": "rules", "item": "RU-016", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:27:57+00:00", "code": "T-2", "task": "rules", "item": "RU-051", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:28:18+00:00", "code": "T-2", "task": "rules", "item": "RU-024", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:28:34+00:00", "code": "T-2", "task": "rules", "item": "RU-040", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:28:41+00:00", "code": "T-2", "task": "rules", "item": "RU-021", "value": {"label": "consistent"}}
+{"at": "2026-11-15T11:28:49+00:00", "code": "T-2", "task": "rules", "item": "RU-036", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:29:04+00:00", "code": "T-2", "task": "rules", "item": "RU-031", "value": {"label": "not_consistent"}}
+{"at": "2026-11-15T11:30:17+00:00", "code": "T-2", "task": "claims", "item": "CL-060", "value": {"supported": true}}
+{"at": "2026-11-15T11:31:42+00:00", "code": "T-2", "task": "claims", "item": "CL-099", "value": {"supported": true}}
+{"at": "2026-11-15T11:36:40+00:00", "code": "T-2", "task": "claims", "item": "CL-064", "value": {"supported": true}}
+{"at": "2026-11-15T11:36:49+00:00", "code": "T-2", "task": "claims", "item": "CL-037", "value": {"supported": true}}
+{"at": "2026-11-15T11:37:56+00:00", "code": "T-2", "task": "claims", "item": "CL-036", "value": {"supported": true}}
+{"at": "2026-11-15T11:38:25+00:00", "code": "T-2", "task": "claims", "item": "CL-052", "value": {"supported": true}}
+{"at": "2026-11-15T11:38:45+00:00", "code": "T-2", "task": "claims", "item": "CL-012", "value": {"supported": true}}
+{"at": "2026-11-15T11:39:01+00:00", "code": "T-2", "task": "claims", "item": "CL-051", "value": {"supported": true}}
+{"at": "2026-11-15T11:39:49+00:00", "code": "T-2", "task": "claims", "item": "CL-088", "value": {"supported": false}}
+{"at": "2026-11-15T11:40:08+00:00", "code": "T-2", "task": "claims", "item": "CL-067", "value": {"supported": true}}
+{"at": "2026-11-15T11:40:33+00:00", "code": "T-2", "task": "claims", "item": "CL-100", "value": {"supported": true}}
+{"at": "2026-11-15T11:40:37+00:00", "code": "T-2", "task": "claims", "item": "CL-082", "value": {"supported": true}}
+{"at": "2026-11-15T11:40:39+00:00", "code": "T-2", "task": "claims", "item": "CL-027", "value": {"supported": true}}
+{"at": "2026-11-15T11:40:45+00:00", "code": "T-2", "task": "claims", "item": "CL-081", "value": {"supported": false}}
+{"at": "2026-11-15T11:40:53+00:00", "code": "T-2", "task": "claims", "item": "CL-045", "value": {"supported": true}}
+{"at": "2026-11-15T11:40:59+00:00", "code": "T-2", "task": "claims", "item": "CL-055", "value": {"supported": true}}
+{"at": "2026-11-15T11:41:04+00:00", "code": "T-2", "task": "claims", "item": "CL-078", "value": {"supported": true}}
+{"at": "2026-11-15T11:41:09+00:00", "code": "T-2", "task": "claims", "item": "CL-073", "value": {"supported": true}}
+{"at": "2026-11-15T11:41:14+00:00", "code": "T-2", "task": "claims", "item": "CL-009", "value": {"supported": true}}
+{"at": "2026-11-15T13:58:06+00:00", "code": "T-1", "task": "replies", "item": "RE-085", "value": {"label": "reject"}}
+{"at": "2026-11-15T13:59:13+00:00", "code": "T-1", "task": "replies", "item": "RE-050", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T13:59:22+00:00", "code": "T-1", "task": "replies", "item": "RE-094", "value": {"label": "reject"}}
+{"at": "2026-11-15T13:59:30+00:00", "code": "T-1", "task": "replies", "item": "RE-068", "value": {"label": "counter"}}
+{"at": "2026-11-15T13:59:38+00:00", "code": "T-1", "task": "replies", "item": "RE-100", "value": {"label": "reject"}}
+{"at": "2026-11-15T13:59:44+00:00", "code": "T-1", "task": "replies", "item": "RE-077", "value": {"label": "reject"}}
+{"at": "2026-11-15T13:59:51+00:00", "code": "T-1", "task": "replies", "item": "RE-028", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:16:23+00:00", "code": "T-1", "task": "replies", "item": "RE-062", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:16:30+00:00", "code": "T-1", "task": "replies", "item": "RE-002", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:16:39+00:00", "code": "T-1", "task": "replies", "item": "RE-013", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:16:48+00:00", "code": "T-1", "task": "replies", "item": "RE-032", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:16:55+00:00", "code": "T-1", "task": "replies", "item": "RE-031", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:17:03+00:00", "code": "T-1", "task": "replies", "item": "RE-026", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:17:14+00:00", "code": "T-1", "task": "replies", "item": "RE-016", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:17:24+00:00", "code": "T-1", "task": "replies", "item": "RE-038", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:17:31+00:00", "code": "T-1", "task": "replies", "item": "RE-007", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:17:39+00:00", "code": "T-1", "task": "replies", "item": "RE-040", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:17:52+00:00", "code": "T-1", "task": "replies", "item": "RE-065", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:17:58+00:00", "code": "T-1", "task": "replies", "item": "RE-029", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:18:05+00:00", "code": "T-1", "task": "replies", "item": "RE-070", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:18:13+00:00", "code": "T-1", "task": "replies", "item": "RE-083", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:18:21+00:00", "code": "T-1", "task": "replies", "item": "RE-019", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:18:27+00:00", "code": "T-1", "task": "replies", "item": "RE-047", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T14:18:33+00:00", "code": "T-1", "task": "replies", "item": "RE-034", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:18:43+00:00", "code": "T-1", "task": "replies", "item": "RE-023", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:18:51+00:00", "code": "T-1", "task": "replies", "item": "RE-005", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:18:58+00:00", "code": "T-1", "task": "replies", "item": "RE-053", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:19:06+00:00", "code": "T-1", "task": "replies", "item": "RE-074", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T14:19:14+00:00", "code": "T-1", "task": "replies", "item": "RE-017", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:19:26+00:00", "code": "T-1", "task": "replies", "item": "RE-004", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:19:32+00:00", "code": "T-1", "task": "replies", "item": "RE-043", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:19:38+00:00", "code": "T-1", "task": "replies", "item": "RE-025", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:19:44+00:00", "code": "T-1", "task": "replies", "item": "RE-080", "value": {"label": "accept:C"}}
+{"at": "2026-11-15T14:19:51+00:00", "code": "T-1", "task": "replies", "item": "RE-044", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:19:58+00:00", "code": "T-1", "task": "replies", "item": "RE-091", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:20:11+00:00", "code": "T-1", "task": "replies", "item": "RE-010", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:20:19+00:00", "code": "T-1", "task": "replies", "item": "RE-035", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:20:27+00:00", "code": "T-1", "task": "replies", "item": "RE-049", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:20:34+00:00", "code": "T-1", "task": "replies", "item": "RE-089", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:20:40+00:00", "code": "T-1", "task": "replies", "item": "RE-098", "value": {"label": "counter"}}
+{"at": "2026-11-15T14:20:47+00:00", "code": "T-1", "task": "replies", "item": "RE-076", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:20:54+00:00", "code": "T-1", "task": "replies", "item": "RE-011", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:00+00:00", "code": "T-1", "task": "replies", "item": "RE-055", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:21:06+00:00", "code": "T-1", "task": "replies", "item": "RE-020", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:11+00:00", "code": "T-1", "task": "replies", "item": "RE-071", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:18+00:00", "code": "T-1", "task": "replies", "item": "RE-052", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:24+00:00", "code": "T-1", "task": "replies", "item": "RE-046", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:30+00:00", "code": "T-1", "task": "replies", "item": "RE-079", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:36+00:00", "code": "T-1", "task": "replies", "item": "RE-064", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:43+00:00", "code": "T-1", "task": "replies", "item": "RE-088", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:21:50+00:00", "code": "T-1", "task": "replies", "item": "RE-041", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:21:56+00:00", "code": "T-1", "task": "replies", "item": "RE-014", "value": {"label": "accept:A"}}
+{"at": "2026-11-15T14:22:03+00:00", "code": "T-1", "task": "replies", "item": "RE-008", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:08+00:00", "code": "T-1", "task": "replies", "item": "RE-059", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:14+00:00", "code": "T-1", "task": "replies", "item": "RE-001", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:19+00:00", "code": "T-1", "task": "replies", "item": "RE-037", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:25+00:00", "code": "T-1", "task": "replies", "item": "RE-022", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:32+00:00", "code": "T-1", "task": "replies", "item": "RE-073", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:41+00:00", "code": "T-1", "task": "replies", "item": "RE-086", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:47+00:00", "code": "T-1", "task": "replies", "item": "RE-061", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:53+00:00", "code": "T-1", "task": "replies", "item": "RE-095", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:22:59+00:00", "code": "T-1", "task": "replies", "item": "RE-082", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:23:07+00:00", "code": "T-1", "task": "replies", "item": "RE-056", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:23:12+00:00", "code": "T-1", "task": "replies", "item": "RE-097", "value": {"label": "reject"}}
+{"at": "2026-11-15T14:25:52+00:00", "code": "T-2", "task": "claims", "item": "CL-013", "value": {"supported": true}}
+{"at": "2026-11-15T14:27:05+00:00", "code": "T-2", "task": "claims", "item": "CL-046", "value": {"supported": true}}
+{"at": "2026-11-15T14:27:26+00:00", "code": "T-2", "task": "claims", "item": "CL-069", "value": {"supported": true}}
+{"at": "2026-11-15T14:27:38+00:00", "code": "T-2", "task": "claims", "item": "CL-018", "value": {"supported": true}}
+{"at": "2026-11-15T14:34:26+00:00", "code": "T-2", "task": "claims", "item": "CL-076", "value": {"supported": true}}
+{"at": "2026-11-15T14:34:52+00:00", "code": "T-2", "task": "claims", "item": "CL-070", "value": {"supported": true}}
+{"at": "2026-11-15T14:39:45+00:00", "code": "T-2", "task": "claims", "item": "CL-085", "value": {"supported": true}}
+{"at": "2026-11-15T15:59:38+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-056-policy/1", "value": {"clarity": 3, "acceptability": 2}}
+{"at": "2026-11-15T16:00:50+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-023-deadlock/4", "value": {"clarity": 5, "acceptability": 4, "comment": "The options are clearly presented with specific days, times, and locations. However, mentioning that both faculty members have conceded three times before feels unnecessary and could create pressure."}}
+{"at": "2026-11-15T16:01:03+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-003-contention/1", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:01:11+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-053-policy/2", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:01:20+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-005-contention/1", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:01:30+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-023-deadlock/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:01:42+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-030-squeeze/1", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:01:51+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-035-squeeze/2", "value": {"clarity": 2, "acceptability": 2}}
+{"at": "2026-11-15T16:02:02+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-001-contention/3", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:02:10+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-022-deadlock/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:02:18+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-029-squeeze/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:02:29+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-055-policy/2", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:02:37+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-009-contention/2", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:02:46+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-001-contention/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:02:55+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-016-contention/4", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:03:02+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-011-contention/4", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:03:10+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-001-contention/2", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:03:21+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-027-squeeze/2", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:03:31+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-030-squeeze/1", "value": {"clarity": 2, "acceptability": 1}}
+{"at": "2026-11-15T16:03:39+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-003-contention/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:03:48+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-004-contention/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:03:55+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-022-deadlock/3", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:04:02+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-024-deadlock/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:04:11+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-028-squeeze/1", "value": {"clarity": 4, "acceptability": 3}}
+{"at": "2026-11-15T16:04:19+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-023-deadlock/1", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:04:26+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-021-deadlock/4", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:04:37+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-001-contention/1", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:04:45+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-027-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:04:55+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-054-policy/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:05:03+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-005-contention/4", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:05:15+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-055-policy/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T16:05:22+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-004-contention/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:05:30+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-010-contention/2", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:05:38+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-005-contention/4", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:05:48+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-059-policy/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:05:57+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-021-deadlock/2", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:06:04+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-003-contention/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:06:12+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-034-squeeze/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:06:19+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-056-policy/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:06:28+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-021-deadlock/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:06:36+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-004-contention/4", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:07:13+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-027-squeeze/2", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:07:21+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-004-contention/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:07:28+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-024-deadlock/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:07:36+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-016-contention/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:07:45+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-005-contention/2", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:07:53+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-057-policy/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:08:03+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-016-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:08:05+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-023-deadlock/3", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:08:09+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-053-policy/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:08:12+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-022-deadlock/3", "value": {"clarity": 3, "acceptability": 5}}
+{"at": "2026-11-15T16:08:14+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-036-squeeze/1", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:08:17+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-021-deadlock/3", "value": {"clarity": 3, "acceptability": 5}}
+{"at": "2026-11-15T16:08:20+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-021-deadlock/1", "value": {"clarity": 4, "acceptability": 3}}
+{"at": "2026-11-15T16:08:22+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-013-contention/1", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:08:25+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-054-policy/1", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:08:28+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-022-deadlock/2", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:08:31+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-005-contention/3", "value": {"clarity": 2, "acceptability": 5}}
+{"at": "2026-11-15T16:08:34+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-022-deadlock/4", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:08:36+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-006-contention/1", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:08:38+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-002-contention/1", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T16:08:42+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-025-deadlock/4", "value": {"clarity": 4, "acceptability": 3}}
+{"at": "2026-11-15T16:08:53+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-023-deadlock/2", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:08:56+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-005-contention/1", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:08:59+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-024-deadlock/1", "value": {"clarity": 5, "acceptability": 5}}
+{"at": "2026-11-15T16:09:00+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-021-deadlock/4", "value": {"clarity": 5, "acceptability": 4}}
+{"at": "2026-11-15T16:09:03+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-011-contention/3", "value": {"clarity": 5, "acceptability": 3}}
+{"at": "2026-11-15T16:09:06+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-012-contention/1", "value": {"clarity": 3, "acceptability": 3}}
+{"at": "2026-11-15T16:09:08+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-010-contention/3", "value": {"clarity": 3, "acceptability": 4}}
+{"at": "2026-11-15T16:09:10+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-014-contention/1", "value": {"clarity": 3, "acceptability": 5}}
+{"at": "2026-11-15T16:09:12+00:00", "code": "T-1", "task": "ratings", "item": "A2/S-004-contention/3", "value": {"clarity": 4, "acceptability": 4}}
+{"at": "2026-11-15T16:09:15+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-024-deadlock/3", "value": {"clarity": 4, "acceptability": 5}}
+{"at": "2026-11-15T16:09:18+00:00", "code": "T-1", "task": "ratings", "item": "ours-llm/S-020-contention/1", "value": {"clarity": 5, "acceptability": 5}}

@@ -1,0 +1,2490 @@
+{
+ "model": "local:Qwen3.5-4B-Finetune-NTS-Q8_0.gguf",
+ "retriever": "bm25",
+ "split": "test",
+ "n": 109,
+ "reviewed": 109,
+ "skipped_by_parser": [],
+ "errors": 0,
+ "stopped": null,
+ "allow_deny_accuracy": 0.9901960784313726,
+ "deny_recall": 0.9,
+ "deny_citation_correct": 0.9,
+ "false_deny_rate": 0.0,
+ "needs_approval_rate": 0.0,
+ "answer_citation_recall": 1.0,
+ "makeup_obligation_recall": 1.0,
+ "makeup_false_positive_rate": 0.0,
+ "retrieval_recall": 1.0,
+ "hallucinated_citations": 0,
+ "uncited_escalations": 0,
+ "confusion": {
+  "compile->allowed": 92,
+  "deny->forbidden": 9,
+  "answer->allowed": 7,
+  "deny->allowed": 1
+ },
+ "usage": {
+  "calls": 109,
+  "cache_hits": 109,
+  "retries": 0,
+  "prompt_tokens": 85718,
+  "output_tokens": 5737,
+  "last_retry_reason": "",
+  "key_distribution": {}
+ },
+ "rows": [
+  {
+   "id": "R-0002",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-CLASH",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0003",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-PRIVACY",
+    "P-SCOPE",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0013",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-LABS",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0016",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-PRIVACY",
+    "P-BOOKING",
+    "P-LABS",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break for all students and staff, and no classes may be scheduled during this hour.",
+   "alternative": "You can schedule the class in an available slot outside the 13:00 to 14:00 lunch hour, such as at 14:00 or in the morning.",
+   "answer": null
+  },
+  {
+   "id": "R-0021",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-PRIVACY",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0025",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0038",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break for all students and staff, and no classes may be scheduled during this hour.",
+   "alternative": "You can schedule the class in an available slot outside the 13:00 to 14:00 lunch hour, such as at 14:00 or in the morning.",
+   "answer": null
+  },
+  {
+   "id": "R-0043",
+   "expected": "answer",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-MAKEUP"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-BOOKING",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-CLASH",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a73.2 Make-up classes, a class missed because of absence must be rescheduled as a make-up class within two weeks of the missed class."
+  },
+  {
+   "id": "R-0050",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0069",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0071",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-CAPACITY",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0081",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0084",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-LUNCH",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0087",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-SWAP",
+    "P-HOURS",
+    "P-PREFS",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0090",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0094",
+   "expected": "answer",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-BOOKING",
+    "P-LOAD",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour."
+  },
+  {
+   "id": "R-0098",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0099",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0100",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0103",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0121",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-ONLINE",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0126",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-CAPACITY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0128",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-CREDITS",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0130",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-HOURS",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0131",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0156",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour.",
+   "alternative": "You can schedule these hours with an intervening one-hour break, or place part of the session on another day.",
+   "answer": null
+  },
+  {
+   "id": "R-0160",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0161",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SCOPE",
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0173",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0174",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-CREDITS",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0175",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0177",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0179",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0182",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-MAKEUP",
+    "P-PRIVACY",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0189",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAXCONSEC",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0194",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-PRIVACY",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0196",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-HOURS",
+    "P-LABS",
+    "P-ONLINE",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0199",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-PREFS",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0223",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0228",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LUNCH",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0231",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break for all students and staff, and no classes may be scheduled during this hour.",
+   "alternative": "You can schedule the class in an available slot outside the 13:00 to 14:00 lunch hour, such as at 14:00 or in the morning.",
+   "answer": null
+  },
+  {
+   "id": "R-0235",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0239",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0247",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0248",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-BOOKING",
+    "P-SWAP",
+    "P-PREFS",
+    "P-MAXCONSEC",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0253",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0255",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-SCOPE",
+    "P-CAPACITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0270",
+   "expected": "answer",
+   "gold_rules": [
+    "P-CREDITS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-CREDITS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-LOAD",
+    "P-CAPACITY",
+    "P-PRIVACY",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.4 Contact hours and credits, a 4-credit theory course has four contact hours per week (three lectures and one tutorial), and a 4-credit course with a laboratory has three lectures and one two-hour practical."
+  },
+  {
+   "id": "R-0275",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour.",
+   "alternative": "You can schedule these hours with an intervening one-hour break, or place part of the session on another day.",
+   "answer": null
+  },
+  {
+   "id": "R-0277",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-AUTHORITY",
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0281",
+   "expected": "answer",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-PRIVACY",
+    "P-MAXCONSEC",
+    "P-BOOKING",
+    "P-SWAP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is a common lunch break with no scheduled classes, and only the Dean may grant an exception."
+  },
+  {
+   "id": "R-0288",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-AUTHORITY",
+    "P-CAPACITY",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0293",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-PREFS",
+    "P-SCOPE",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0295",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0302",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-SWAP",
+    "P-BOOKING",
+    "P-ONLINE",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0303",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0309",
+   "expected": "answer",
+   "gold_rules": [
+    "P-HOURS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-HOURS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-CLASH",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.1 Working hours, teaching takes place Monday to Friday between 9:00 and 17:00; weekend classes or slots outside these hours require written approval from the Head of Department."
+  },
+  {
+   "id": "R-0312",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-LUNCH",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour.",
+   "alternative": "You can schedule these hours with an intervening one-hour break, or place part of the session on another day.",
+   "answer": null
+  },
+  {
+   "id": "R-0319",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0320",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-AUTHORITY",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0324",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-LABS",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0327",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0328",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0329",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0334",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0339",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0357",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0359",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0364",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0371",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-BOOKING",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour.",
+   "alternative": "You can schedule these hours with an intervening one-hour break, or place part of the session on another day.",
+   "answer": null
+  },
+  {
+   "id": "R-0373",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-CAPACITY",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0374",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0385",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0388",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-BOOKING",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0390",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0391",
+   "expected": "answer",
+   "gold_rules": [
+    "P-CREDITS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-CREDITS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-LOAD",
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.4 Contact hours and credits, a 4-credit theory course has four contact hours per week, and a 4-credit course with a laboratory has three lectures and one two-hour practical."
+  },
+  {
+   "id": "R-0392",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0397",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0398",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0412",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-SWAP",
+    "P-MAXCONSEC",
+    "P-ONLINE",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break for all students and staff, and no classes may be scheduled during this hour.",
+   "alternative": "You can schedule the class in an available slot outside the 13:00 to 14:00 lunch hour, such as at 14:00 or in the morning.",
+   "answer": null
+  },
+  {
+   "id": "R-0420",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-CREDITS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0428",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-LOAD",
+    "P-CLASH",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0433",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-SWAP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0449",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-AUTHORITY",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0459",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0464",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-ONLINE",
+    "P-LOAD",
+    "P-PREFS",
+    "P-CLASH",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0473",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-PRIVACY",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0475",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-PRIVACY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0480",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0483",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0494",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0496",
+   "expected": "answer",
+   "gold_rules": [
+    "P-HOURS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-HOURS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-CLASH",
+    "P-HOURS",
+    "P-PRIVACY",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under the relevant institute regulations, the policy specifies the following guidelines.",
+   "alternative": null,
+   "answer": "Under \u00a72.1 Working hours, teaching takes place Monday to Friday between 9:00 and 17:00; weekend classes or slots outside these hours require written approval from the Head of Department."
+  },
+  {
+   "id": "R-0497",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-BOOKING",
+    "P-CREDITS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0505",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0528",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0534",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-HOURS",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0535",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0537",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0544",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0549",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0558",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-PREFS",
+    "P-PRIVACY",
+    "P-HOURS",
+    "P-LABS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0560",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-AUTHORITY",
+    "P-SWAP",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break for all students and staff, and no classes may be scheduled during this hour.",
+   "alternative": "You can schedule the class in an available slot outside the 13:00 to 14:00 lunch hour, such as at 14:00 or in the morning.",
+   "answer": null
+  },
+  {
+   "id": "R-0561",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-LOAD",
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0563",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0571",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0581",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0589",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0592",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAKEUP",
+    "P-CLASH",
+    "P-BOOKING",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0599",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your requested absence is noted; as specified in \u00a73.2 Make-up classes, you must reschedule any missed class as a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  }
+ ]
+}

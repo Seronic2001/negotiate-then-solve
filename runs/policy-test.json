@@ -1,0 +1,2457 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "split": "test",
+ "n": 109,
+ "reviewed": 109,
+ "skipped_by_parser": [],
+ "errors": 0,
+ "stopped": null,
+ "allow_deny_accuracy": 0.9803921568627451,
+ "deny_recall": 0.8,
+ "deny_citation_correct": 0.8,
+ "false_deny_rate": 0.0,
+ "needs_approval_rate": 0.009174311926605505,
+ "answer_citation_recall": 0.8571428571428571,
+ "makeup_obligation_recall": 0.20689655172413793,
+ "makeup_false_positive_rate": 0.0,
+ "retrieval_recall": 0.9782608695652174,
+ "hallucinated_citations": 0,
+ "uncited_escalations": 0,
+ "confusion": {
+  "compile->allowed": 92,
+  "deny->needs_approval": 1,
+  "deny->forbidden": 8,
+  "answer->allowed": 7,
+  "deny->allowed": 1
+ },
+ "usage": {
+  "calls": 63,
+  "cache_hits": 46,
+  "retries": 0,
+  "prompt_tokens": 49499,
+  "output_tokens": 4415,
+  "last_retry_reason": "",
+  "key_distribution": {
+   "key-3 (...8ZtApA)": 31,
+   "key-2 (...CS488g)": 32
+  }
+ },
+ "rows": [
+  {
+   "id": "R-0002",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-CLASH",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your unavailability for week 6 on Tuesday and Wednesday has been noted.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0003",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-PRIVACY",
+    "P-SCOPE",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences for specific teaching days are permitted under the timetable regulations.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0013",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-LABS",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching days are allowed under the scheduling guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0016",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "needs_approval",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-PRIVACY",
+    "P-BOOKING",
+    "P-LABS",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "The hour from 13:00 to 14:00 is a common lunch break under rule P-LUNCH and cannot be waived by the department; only the Dean may grant an exception.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0021",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-PRIVACY",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Unavailability is allowed, and reasons are kept confidential under \u00a76.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0025",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching times are allowed under the timetabling rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0038",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.2 Common lunch break, no lecture may be scheduled between 13:00 and 14:00.",
+   "alternative": "Please schedule the lecture in another available slot, such as Tuesday at 14:00.",
+   "answer": null
+  },
+  {
+   "id": "R-0043",
+   "expected": "answer",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-MAKEUP"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-BOOKING",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-CLASH",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Missed classes due to absence must be rescheduled within two weeks.",
+   "alternative": null,
+   "answer": "According to \u00a73.2, a class missed because of the faculty member's absence must be rescheduled as a make-up class within two weeks of the missed class."
+  },
+  {
+   "id": "R-0050",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions must be held in laboratories with the equipment the course requires as per \u00a74.1 Laboratories and equipment.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0069",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are allowed, but per \u00a73.2, any classes missed due to your absence must be rescheduled as make-up classes within two weeks.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0071",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-CAPACITY",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0081",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences to avoid certain slots are allowed under the rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0084",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-LUNCH",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding specific days and times are allowed under the scheduling guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0087",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-SWAP",
+    "P-HOURS",
+    "P-PREFS",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences regarding days and times are accommodated where the timetable allows, according to \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0090",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific absences for conferences are permitted, but according to \u00a73.2, classes missed due to your absence must be rescheduled as make-up classes within two weeks.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0094",
+   "expected": "answer",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-BOOKING",
+    "P-LOAD",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "No teaching session may exceed three consecutive hours.",
+   "alternative": null,
+   "answer": "No faculty member and no section may be scheduled for more than three consecutive teaching hours, as stated in rule P-MAXCONSEC."
+  },
+  {
+   "id": "R-0098",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions requiring specific equipment are handled according to \u00a74.1 Laboratories and equipment.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0099",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding faculty availability are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0100",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability declared for the whole semester is accommodated as it creates no make-up obligation.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0103",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific period unavailability declared in advance is built into the timetable and creates no make-up obligation.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0121",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-ONLINE",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences for specific days are fully allowed under the timetabling regulations.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0126",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [
+    "P-LABS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-CAPACITY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a74.1, laboratory closures for maintenance are reported by the lab in-charge, and the affected sessions will be moved to another suitable laboratory or slot.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0128",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-CREDITS",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions must be held in laboratories with the equipment the course requires according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0130",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-HOURS",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Declared recurring or single unavailability is allowed and does not break any rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0131",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability declared for the whole semester is allowed and creates no make-up obligation according to \u00a73.2.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0156",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.3 Consecutive teaching hours, no faculty member may be scheduled for more than three consecutive teaching hours.",
+   "alternative": "You can schedule three consecutive lectures on Thursday from 9:00 to 12:00, take a one-hour break, and place the fourth lecture later in the week.",
+   "answer": null
+  },
+  {
+   "id": "R-0160",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the required equipment as per section 4.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0161",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SCOPE",
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences for specific days are accommodated where possible under \u00a73.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0173",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [
+    "P-LABS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Laboratory closures for maintenance are reported by the lab in-charge, and affected sessions are moved to another suitable laboratory or slot according to \u00a74.1 Laboratories and equipment.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0174",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-CREDITS",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or single-instance unavailability is normally allowed as preferences are built into the timetable.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0175",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific unavailabilities like conference absences are processed as standard scheduling constraints and require no make-up obligations unless a class is actually missed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0177",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or single-week unavailability for conferences is permitted and creates no make-up obligation if declared in advance.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0179",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0182",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-MAKEUP",
+    "P-PRIVACY",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding avoiding specific days or slots are normally allowed and respected where possible.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0189",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAXCONSEC",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your preference regarding Tuesday mornings has been noted under \u00a73.1 Teaching preferences and will be accommodated where the timetable allows.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0194",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-PRIVACY",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are allowed; however, per P-MAKEUP, the missed class must be rescheduled within two weeks.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0196",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-HOURS",
+    "P-LABS",
+    "P-ONLINE",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability of faculty members are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0199",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-PREFS",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding days and times are accommodated where the timetable allows, according to \u00a73.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0223",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions must be held in laboratories with the equipment the course requires according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0228",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LUNCH",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding avoiding specific days or slots are allowed under the timetabling rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0231",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "clarify",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-LUNCH",
+    "P-SWAP",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved and no classes may be scheduled during this time.",
+   "alternative": "You can move your class to any other available slot between 9:00 and 17:00, excluding the 13:00 to 14:00 lunch break.",
+   "answer": null
+  },
+  {
+   "id": "R-0235",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions requiring specific equipment are scheduled in suitable laboratories per \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0239",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0247",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding class timings are allowed under the scheduling guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0248",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-BOOKING",
+    "P-SWAP",
+    "P-PREFS",
+    "P-MAXCONSEC",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching days and times are accommodated where possible under \u00a73.1 Teaching preferences, though they are not guaranteed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0253",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching days are accommodated where the timetable allows according to rule \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0255",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-SCOPE",
+    "P-CAPACITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires as per \u00a74.1 Laboratories and equipment.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0270",
+   "expected": "answer",
+   "gold_rules": [
+    "P-CREDITS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-CREDITS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-LOAD",
+    "P-CAPACITY",
+    "P-PRIVACY",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.4, contact hours follow the L-T-P structure: a 4-credit theory course has four contact hours per week (three lectures and one tutorial), and a 4-credit course with a laboratory has three lectures and one two-hour practical.",
+   "alternative": null,
+   "answer": "A 4-credit theory course requires four contact hours per week (three lectures and one tutorial), while a 4-credit course with a laboratory requires three lectures and one two-hour practical session."
+  },
+  {
+   "id": "R-0275",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.3, no faculty member may be scheduled for more than three consecutive teaching hours without a break.",
+   "alternative": "Please schedule three lectures back-to-back on Friday starting at 9:00, followed by a one-hour break, and place the fourth lecture after the break.",
+   "answer": null
+  },
+  {
+   "id": "R-0277",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-AUTHORITY",
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences regarding days and times are accommodated where the timetable allows, as stated in \u00a73.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0281",
+   "expected": "answer",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-PRIVACY",
+    "P-MAXCONSEC",
+    "P-BOOKING",
+    "P-SWAP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "The lunch break from 13:00 to 14:00 is reserved for all students and staff, and no classes may be scheduled during this time unless an exception is granted by the Dean.",
+   "alternative": null,
+   "answer": "No lecture, tutorial or practical may be scheduled between 13:00 and 14:00 as it is a common lunch break. This break cannot be waived by the department; only the Dean may grant an exception."
+  },
+  {
+   "id": "R-0288",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-AUTHORITY",
+    "P-CAPACITY",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires as per \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0293",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-PREFS",
+    "P-SCOPE",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences such as keeping a particular day free are accommodated where the timetable allows under \u00a73.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0295",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding days and times are accommodated where the timetable allows, in accordance with \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0302",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-SWAP",
+    "P-BOOKING",
+    "P-ONLINE",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding days and times are accommodated where the timetable allows according to \u00a73.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0303",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability declared for the whole semester is allowed and creates no make-up obligation.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0309",
+   "expected": "answer",
+   "gold_rules": [
+    "P-HOURS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-HOURS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-CLASH",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.1 Working hours, a class outside regular hours requires the prior written approval of the Head of Department.",
+   "alternative": null,
+   "answer": "A class outside regular hours requires the prior written approval of the Head of Department."
+  },
+  {
+   "id": "R-0312",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "clarify",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-SCOPE",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to rule P-MAXCONSEC, no faculty member may be scheduled for more than three consecutive teaching hours.",
+   "alternative": "Please schedule at most three lectures back-to-back, followed by a break of at least one hour before any further teaching.",
+   "answer": null
+  },
+  {
+   "id": "R-0319",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions requiring specific equipment are held in suitable laboratories according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0320",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-AUTHORITY",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding days and times are accommodated where the timetable allows under rule P-PREFS, though they are not guaranteed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0324",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS",
+    "P-LABS",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Faculty preferences and recurring unavailability for the whole semester are accommodated when possible and do not create make-up obligations under \u00a73.1 and \u00a73.2.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0327",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires as per \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0328",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific unavailability notices are logged for the timetable without creating make-up obligations if declared in advance.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0329",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-PREFS",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences regarding days and times are accommodated where the timetable allows, as per \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0334",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching days are allowed under the rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0339",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-MAXCONSEC",
+    "P-SCOPE",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding teaching days are accommodated where the timetable allows under rule P-PREFS.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0357",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Laboratory closures for maintenance are reported by the lab in-charge, and affected sessions are moved to another suitable laboratory or slot under \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0359",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are scheduled in laboratories with the equipment the course requires as per rule P-LABS.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0364",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0371",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-MAXCONSEC"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-MAXCONSEC",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-BOOKING",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to rule P-MAXCONSEC, no faculty member may be scheduled for more than three consecutive teaching hours without a break.",
+   "alternative": "Schedule three lectures consecutively from 9:00 to 12:00, take a one-hour break, and place the fourth lecture after the break.",
+   "answer": null
+  },
+  {
+   "id": "R-0373",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-CAPACITY",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or single-instance unavailability such as a hospital visit is permitted and does not violate any timetabling rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0374",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding faculty availability are allowed under standard scheduling guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0385",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences such as keeping Thursday afternoons free are accommodated where the timetable allows, as stated in rule P-PREFS.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0388",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-BOOKING",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding scheduling, such as avoiding specific days or slots, are allowed under the institute guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0390",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding faculty schedules, such as avoiding certain days or slots, are allowed under the standard scheduling process.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0391",
+   "expected": "answer",
+   "gold_rules": [
+    "P-CREDITS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-CREDITS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-LOAD",
+    "P-MAXCONSEC",
+    "P-HOURS",
+    "P-LUNCH"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "A 4-credit course requires four contact hours per week under \u00a72.4.",
+   "alternative": null,
+   "answer": "A 4-credit course has four contact hours per week (three lectures and one tutorial for theory courses, or three lectures and one two-hour practical for courses with a laboratory)."
+  },
+  {
+   "id": "R-0392",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific unavailability is permitted under institutional guidelines and does not violate any scheduling rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0397",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-HOURS",
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding class timings are normally allowed and do not break any regulations.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0398",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0412",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-SWAP",
+    "P-MAXCONSEC",
+    "P-ONLINE",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is reserved as a common lunch break and no lectures may be scheduled during this time.",
+   "alternative": "Please choose a different time slot outside of the 13:00 to 14:00 lunch hour, such as slot 3 (12:00) or slot 5 (14:00) on Tuesday.",
+   "answer": null
+  },
+  {
+   "id": "R-0420",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-CREDITS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0428",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-LOAD",
+    "P-CLASH",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability declared for the whole semester is allowed as the timetable is built around it.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0433",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-AUTHORITY",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-SWAP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0449",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-AUTHORITY",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Faculty preferences and unavailability are normally accommodated where the timetable allows under \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0459",
+   "expected": "deny",
+   "gold_rules": [
+    "P-MAXCONSEC"
+   ],
+   "parse_action": "clarify",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CREDITS",
+    "P-AUTHORITY",
+    "P-MAKEUP",
+    "P-PRIVACY",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding the scheduling of lectures are normally allowed under the timetable guidelines.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0464",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-CLASH",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability declared for the whole semester is allowed and accommodated where the timetable permits.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0473",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-PRIVACY",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0475",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-AUTHORITY",
+    "P-PRIVACY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring unavailability or single-slot unavailability for personal reasons is permitted.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0480",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [
+    "P-LABS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-BOOKING",
+    "P-CAPACITY",
+    "P-MAXCONSEC",
+    "P-SCOPE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires according to $4.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0483",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING",
+    "P-PREFS",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Teaching preferences and unavailability are accommodated where the timetable allows under $3.1 Teaching preferences.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0494",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-ONLINE"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are held in laboratories with the equipment the course requires according to \u00a74.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0496",
+   "expected": "answer",
+   "gold_rules": [
+    "P-HOURS"
+   ],
+   "parse_action": "answer",
+   "verdict": "allowed",
+   "cited": [
+    "P-HOURS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-AUTHORITY",
+    "P-CLASH",
+    "P-HOURS",
+    "P-PRIVACY",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Classes outside regular working hours require the prior written approval of the Head of Department according to rule P-HOURS.",
+   "alternative": null,
+   "answer": "A class outside regular working hours requires the prior written approval of the Head of Department, as stated in rule P-HOURS."
+  },
+  {
+   "id": "R-0497",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [
+    "P-LABS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-BOOKING",
+    "P-CREDITS",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "In accordance with \u00a74.1 Laboratories and equipment, the affected practical sessions will be moved to another suitable laboratory or slot during the maintenance period.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0505",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-PREFS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability declarations like the one for faculty F-108 are permitted.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0528",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CAPACITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your unavailability is recorded, but under \u00a73.2 Make-up classes, you are obliged to reschedule the missed class within two weeks.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0534",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-PRIVACY",
+    "P-HOURS",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability declarations are allowed.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0535",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-AUTHORITY",
+    "P-LOAD"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or specific period unavailability is allowed and does not break any rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0537",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAXCONSEC",
+    "P-LUNCH",
+    "P-SCOPE",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Practical sessions are required to be held in laboratories with the equipment the course requires according to \u00a74.1 Laboratories and equipment.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0544",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-CAPACITY",
+    "P-SCOPE",
+    "P-MAXCONSEC",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding specific equipment such as routers are accommodated under \u00a74.1 as long as a suitable laboratory is available.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0549",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-AUTHORITY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or single-instance unavailability declarations are allowed and do not create a make-up obligation.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0558",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-CLASH",
+    "P-PREFS",
+    "P-PRIVACY",
+    "P-HOURS",
+    "P-LABS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Faculty preferences and unavailability are accommodated where the timetable allows under \u00a73.1.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0560",
+   "expected": "deny",
+   "gold_rules": [
+    "P-LUNCH"
+   ],
+   "parse_action": "compile",
+   "verdict": "forbidden",
+   "cited": [
+    "P-LUNCH"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LUNCH",
+    "P-MAXCONSEC",
+    "P-AUTHORITY",
+    "P-SWAP",
+    "P-HOURS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to rule \u00a72.2 Common lunch break, no lectures or tutorials may be scheduled during the 13:00 to 14:00 lunch hour without an exception granted by the Dean.",
+   "alternative": "You can schedule your class in another available time slot on Tuesday, such as the morning slots or slots after 14:00.",
+   "answer": null
+  },
+  {
+   "id": "R-0561",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-LOAD",
+    "P-CLASH",
+    "P-ONLINE",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Recurring or temporary unavailability is permitted and the timetable is built around it.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0563",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-HOURS",
+    "P-LOAD",
+    "P-PRIVACY"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences and unavailability are normally allowed under the rules.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0571",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [],
+   "retrieved": [
+    "P-SWAP",
+    "P-ONLINE",
+    "P-MAKEUP",
+    "P-HOURS",
+    "P-MAXCONSEC"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Preferences regarding scheduling times are normally allowed and do not violate any regulations.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0581",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-LABS"
+   ],
+   "retrieved": [
+    "P-LABS",
+    "P-CREDITS",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-MAKEUP"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "According to \u00a74.1 Laboratories and equipment, the lab in-charge reports laboratory closures for maintenance, and the affected sessions will be moved to another suitable laboratory or slot.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0589",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-LOAD",
+    "P-AUTHORITY",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Your unavailability on Tuesday and Wednesday of week 11 is recorded. According to \u00a73.2, classes missed due to your absence must be rescheduled as make-up classes within two weeks.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0592",
+   "expected": "compile",
+   "gold_rules": [],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [
+    "P-LABS"
+   ],
+   "obligations": [],
+   "retrieved": [
+    "P-LABS",
+    "P-MAKEUP",
+    "P-CLASH",
+    "P-BOOKING",
+    "P-CREDITS"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Under \u00a74.1, the laboratory in-charge reports closures for maintenance, and affected sessions are moved to another suitable laboratory or slot.",
+   "alternative": null,
+   "answer": null
+  },
+  {
+   "id": "R-0599",
+   "expected": "compile",
+   "gold_rules": [
+    "P-MAKEUP"
+   ],
+   "parse_action": "compile",
+   "verdict": "allowed",
+   "cited": [],
+   "obligations": [
+    "P-MAKEUP"
+   ],
+   "retrieved": [
+    "P-MAKEUP",
+    "P-ONLINE",
+    "P-CLASH",
+    "P-HOURS",
+    "P-BOOKING"
+   ],
+   "hallucinated": [],
+   "uncited": false,
+   "explanation": "Declaring unavailability for specific missed classes is allowed, but under \u00a73.2 you must schedule a make-up class within two weeks of the missed class.",
+   "alternative": null,
+   "answer": null
+  }
+ ]
+}
