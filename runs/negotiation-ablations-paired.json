@@ -1,0 +1,704 @@
+{
+ "ours-llm vs A1": {
+  "isolates": "flat weights, no tiers or ledger (H4)",
+  "pairs": 30,
+  "correct_outcome_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "resolved_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "rounds_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0.0
+  },
+  "resolution_rate": {
+   "ours-llm": 0.7692307692307693,
+   "A1": 0.7692307692307693
+  },
+  "correct_outcome": {
+   "ours-llm": 0.9,
+   "A1": 0.9
+  },
+  "identical_status": 30,
+  "identical_replies": 15,
+  "faithfulness": {
+   "ours-llm": 0.9605263157894737,
+   "A1": 0.9447368421052631,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.4291004677450634,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.015789473684210523,
+    "ci": [
+     -0.0026315789473684292,
+     0.042105263157894736
+    ]
+   }
+  },
+  "leaks": {
+   "ours-llm": 0.0,
+   "A1": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "invented_times": {
+   "ours-llm": 0.0,
+   "A1": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "omitted_options": {
+   "ours-llm": 0.0,
+   "A1": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "moved": {
+   "ours-llm": 2.0,
+   "A1": 2.0,
+   "wilcoxon": {
+    "n": 17,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 17,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "first_proposal_acceptance": {
+   "ours-llm": 0.21052631578947367,
+   "A1": 0.21052631578947367,
+   "mcnemar": {
+    "only_first": 1,
+    "only_second": 1,
+    "p": 1.0
+   }
+  },
+  "burden": {
+   "ours-llm": {
+    "gini": 0.25,
+    "max": 2.625,
+    "cv": 0.4472135954999579,
+    "total": 6.5625
+   },
+   "A1": {
+    "gini": 0.25,
+    "max": 2.625,
+    "cv": 0.4472135954999579,
+    "total": 6.5625
+   }
+  },
+  "different_conceders": "0/10",
+  "judge_clarity": {
+   "ours-llm": 4.473684210526316,
+   "A1": 4.368421052631579,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.9658953114150263,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.10526315789473684,
+    "ci": [
+     -0.21052631578947367,
+     0.5263157894736842
+    ]
+   }
+  },
+  "judge_acceptability": {
+   "ours-llm": 4.2631578947368425,
+   "A1": 4.315789473684211,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.2461947917673014,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": -0.05263157894736842,
+    "ci": [
+     -0.47368421052631576,
+     0.5263157894736842
+    ]
+   }
+  }
+ },
+ "ours-llm vs A2": {
+  "isolates": "free-form explanations (H3)",
+  "pairs": 30,
+  "correct_outcome_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "resolved_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "rounds_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0.0
+  },
+  "resolution_rate": {
+   "ours-llm": 0.7692307692307693,
+   "A2": 0.7692307692307693
+  },
+  "correct_outcome": {
+   "ours-llm": 0.9,
+   "A2": 0.9
+  },
+  "identical_status": 30,
+  "identical_replies": 13,
+  "faithfulness": {
+   "ours-llm": 0.9605263157894737,
+   "A2": 1.0,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.07253390669338067,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": -0.03947368421052631,
+    "ci": [
+     -0.07368421052631578,
+     -0.010526315789473682
+    ]
+   }
+  },
+  "leaks": {
+   "ours-llm": 0.0,
+   "A2": 0.4,
+   "wilcoxon": {
+    "n": 30,
+    "p": 0.20223969808664954,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": -0.4,
+    "ci": [
+     -0.9,
+     -0.03333333333333333
+    ]
+   }
+  },
+  "invented_times": {
+   "ours-llm": 0.0,
+   "A2": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "omitted_options": {
+   "ours-llm": 0.0,
+   "A2": 0.3333333333333333,
+   "wilcoxon": {
+    "n": 30,
+    "p": 0.20223969808664954,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": -0.3333333333333333,
+    "ci": [
+     -0.8,
+     -0.03333333333333333
+    ]
+   }
+  },
+  "moved": {
+   "ours-llm": 2.0,
+   "A2": 2.0588235294117645,
+   "wilcoxon": {
+    "n": 17,
+    "p": 0.6547208460185769,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 17,
+    "mean_diff": -0.058823529411764705,
+    "ci": [
+     -0.17647058823529413,
+     0.0
+    ]
+   }
+  },
+  "first_proposal_acceptance": {
+   "ours-llm": 0.21052631578947367,
+   "A2": 0.10526315789473684,
+   "mcnemar": {
+    "only_first": 2,
+    "only_second": 0,
+    "p": 0.5
+   }
+  },
+  "burden": {
+   "ours-llm": {
+    "gini": 0.25,
+    "max": 2.625,
+    "cv": 0.4472135954999579,
+    "total": 6.5625
+   },
+   "A2": {
+    "gini": 0.30000000000000004,
+    "max": 2.625,
+    "cv": 0.6,
+    "total": 6.5625
+   }
+  },
+  "different_conceders": "1/10",
+  "judge_clarity": {
+   "ours-llm": 4.473684210526316,
+   "A2": 4.473684210526316,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.8364143928245752,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.0,
+    "ci": [
+     -0.3157894736842105,
+     0.3684210526315789
+    ]
+   }
+  },
+  "judge_acceptability": {
+   "ours-llm": 4.2631578947368425,
+   "A2": 4.2631578947368425,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.6346353777164763,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.0,
+    "ci": [
+     -0.47368421052631576,
+     0.5263157894736842
+    ]
+   }
+  }
+ },
+ "ours-llm vs A3": {
+  "isolates": "keyword/regex reply handler (tool calling)",
+  "pairs": 30,
+  "correct_outcome_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "resolved_mcnemar": {
+   "only_first": 0,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "rounds_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 10,
+   "p": 1.0,
+   "median_diff": 0.0
+  },
+  "resolution_rate": {
+   "ours-llm": 0.7692307692307693,
+   "A3": 0.7692307692307693
+  },
+  "correct_outcome": {
+   "ours-llm": 0.9,
+   "A3": 0.9
+  },
+  "identical_status": 30,
+  "identical_replies": 21,
+  "faithfulness": {
+   "ours-llm": 0.9605263157894737,
+   "A3": 0.9526315789473685,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.41517995543164454,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.007894736842105265,
+    "ci": [
+     0.0,
+     0.021052631578947368
+    ]
+   }
+  },
+  "leaks": {
+   "ours-llm": 0.0,
+   "A3": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "invented_times": {
+   "ours-llm": 0.0,
+   "A3": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "omitted_options": {
+   "ours-llm": 0.0,
+   "A3": 0.0,
+   "wilcoxon": {
+    "n": 30,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 30,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "moved": {
+   "ours-llm": 2.0,
+   "A3": 2.0588235294117645,
+   "wilcoxon": {
+    "n": 17,
+    "p": 0.6547208460185769,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 17,
+    "mean_diff": -0.058823529411764705,
+    "ci": [
+     -0.17647058823529413,
+     0.0
+    ]
+   }
+  },
+  "first_proposal_acceptance": {
+   "ours-llm": 0.21052631578947367,
+   "A3": 0.10526315789473684,
+   "mcnemar": {
+    "only_first": 2,
+    "only_second": 0,
+    "p": 0.5
+   }
+  },
+  "burden": {
+   "ours-llm": {
+    "gini": 0.25,
+    "max": 2.625,
+    "cv": 0.4472135954999579,
+    "total": 6.5625
+   },
+   "A3": {
+    "gini": 0.30000000000000004,
+    "max": 2.625,
+    "cv": 0.6,
+    "total": 6.5625
+   }
+  },
+  "different_conceders": "1/10",
+  "judge_clarity": {
+   "ours-llm": 4.473684210526316,
+   "A3": 4.421052631578948,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.7672536055754013,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.05263157894736842,
+    "ci": [
+     -0.2631578947368421,
+     0.47368421052631576
+    ]
+   }
+  },
+  "judge_acceptability": {
+   "ours-llm": 4.2631578947368425,
+   "A3": 4.0,
+   "wilcoxon": {
+    "n": 19,
+    "p": 0.524226199030706,
+    "median_diff": 0
+   },
+   "diff": {
+    "n": 19,
+    "mean_diff": 0.2631578947368421,
+    "ci": [
+     -0.2631578947368421,
+     0.8421052631578947
+    ]
+   }
+  }
+ },
+ "ours vs A1-offline": {
+  "isolates": "flat weights, scripted replies, all 60",
+  "pairs": 60,
+  "correct_outcome_mcnemar": {
+   "only_first": 1,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "resolved_mcnemar": {
+   "only_first": 1,
+   "only_second": 0,
+   "p": 1.0
+  },
+  "rounds_wilcoxon": {
+   "n": 22,
+   "p": 0.730723535410913,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 22,
+   "p": 0.6891565167793516,
+   "median_diff": 0.0
+  },
+  "resolution_rate": {
+   "ours": 0.7666666666666667,
+   "A1-offline": 0.7333333333333333
+  },
+  "correct_outcome": {
+   "ours": 0.8833333333333333,
+   "A1-offline": 0.8666666666666667
+  },
+  "identical_status": 59,
+  "identical_replies": 53,
+  "faithfulness": {
+   "ours": 1.0,
+   "A1-offline": 1.0,
+   "wilcoxon": {
+    "n": 41,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 41,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "leaks": {
+   "ours": 0.0,
+   "A1-offline": 0.0,
+   "wilcoxon": {
+    "n": 60,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 60,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "invented_times": {
+   "ours": 0.0,
+   "A1-offline": 0.0,
+   "wilcoxon": {
+    "n": 60,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 60,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "omitted_options": {
+   "ours": 0.0,
+   "A1-offline": 0.0,
+   "wilcoxon": {
+    "n": 60,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 60,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "moved": {
+   "ours": 1.7647058823529411,
+   "A1-offline": 1.7575757575757576,
+   "wilcoxon": {
+    "n": 33,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 33,
+    "mean_diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "first_proposal_acceptance": {
+   "ours": 0.3170731707317073,
+   "A1-offline": 0.2926829268292683,
+   "mcnemar": {
+    "only_first": 3,
+    "only_second": 2,
+    "p": 1.0
+   }
+  },
+  "burden": {
+   "ours": {
+    "gini": 0.1847826086956521,
+    "max": 5.90625,
+    "cv": 0.35588490312488913,
+    "total": 15.09375
+   },
+   "A1-offline": {
+    "gini": 0.2272727272727273,
+    "max": 5.90625,
+    "cv": 0.4165977904505309,
+    "total": 14.4375
+   }
+  },
+  "different_conceders": "1/22",
+  "judge_clarity": {
+   "ours": null,
+   "A1-offline": null,
+   "wilcoxon": {
+    "n": 0,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 0,
+    "mean_diff": null,
+    "ci": null
+   }
+  },
+  "judge_acceptability": {
+   "ours": null,
+   "A1-offline": null,
+   "wilcoxon": {
+    "n": 0,
+    "p": 1.0,
+    "median_diff": 0.0
+   },
+   "diff": {
+    "n": 0,
+    "mean_diff": null,
+    "ci": null
+   }
+  }
+ }
+}
