@@ -1,0 +1,2210 @@
+{
+ "model": "local:Qwen3.5-4B-Base-Q8_0+nts-read100.gguf",
+ "retriever": "hybrid",
+ "k": 5,
+ "conditions": {
+  "rag": {
+   "summary": {
+    "answerable": 40,
+    "unanswerable": 20,
+    "answer_accuracy": 0.775,
+    "answer_accuracy_ci": [
+     0.625,
+     0.9
+    ],
+    "false_abstention": 0.05,
+    "citation_recall": 0.8,
+    "citation_precision": 0.8205128205128205,
+    "retrieval_recall": 0.85,
+    "abstention_on_unanswerable": 1.0,
+    "hallucination_on_unanswerable": 0.0,
+    "hallucinated_citations": 0
+   },
+   "rows": [
+    {
+     "key": "rag/Q-01",
+     "id": "Q-01",
+     "query": "Can I shift my practical to another lab next week?",
+     "gold": [
+      "LAB-1"
+     ],
+     "answer": "Under \u00a71.2 Who may request changes, students may report clashes through their class representative but may not request that a class be moved or cancelled.",
+     "cited": [
+      "P-AUTHORITY"
+     ],
+     "retrieved": [
+      "P-LABS",
+      "LAB-3",
+      "LAB-1",
+      "P-AUTHORITY",
+      "P-CREDITS"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-02",
+     "id": "Q-02",
+     "query": "Is there a limit on how many students can sit in the lab at once?",
+     "gold": [
+      "LAB-2"
+     ],
+     "answer": "Under \u00a72 Capacity, no more than 30 students may be present in a laboratory during a practical.",
+     "cited": [
+      "LAB-2"
+     ],
+     "retrieved": [
+      "LAB-2",
+      "P-CAPACITY",
+      "LAB-3",
+      "P-AUTHORITY",
+      "P-LABS"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-03",
+     "id": "Q-03",
+     "query": "Can the practical go ahead if nobody from staff is around to supervise?",
+     "gold": [
+      "LAB-3"
+     ],
+     "answer": "Under \u00a73 Supervision, a practical may run only when a faculty member or the lab in-charge is present.",
+     "cited": [
+      "LAB-3"
+     ],
+     "retrieved": [
+      "LAB-3",
+      "LAB-1",
+      "LAB-2",
+      "P-LABS",
+      "P-MAKEUP"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-04",
+     "id": "Q-04",
+     "query": "Are the labs shut on some weekends for servicing?",
+     "gold": [
+      "LAB-4"
+     ],
+     "answer": "Yes, under \u00a74 Maintenance, laboratories are closed for maintenance on the first Saturday of every month.",
+     "cited": [
+      "LAB-4"
+     ],
+     "retrieved": [
+      "P-HOURS",
+      "LAB-4",
+      "P-LABS",
+      "LAB-1",
+      "P-AUTHORITY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-05",
+     "id": "Q-05",
+     "query": "Can I put my class in the midday break?",
+     "gold": [
+      "P-LUNCH"
+     ],
+     "answer": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is a common lunch break with no scheduled classes, and only the Dean may grant an exception.",
+     "cited": [
+      "P-LUNCH"
+     ],
+     "retrieved": [
+      "P-LUNCH",
+      "P-MAXCONSEC",
+      "P-HOURS",
+      "ROOM-4.2",
+      "P-AUTHORITY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-06",
+     "id": "Q-06",
+     "query": "Is it okay to teach four periods without stopping?",
+     "gold": [
+      "P-MAXCONSEC"
+     ],
+     "answer": "Under \u00a72.4 Contact hours and credits, a 4-credit theory course has four contact hours per week, which can be scheduled consecutively without stopping.",
+     "cited": [
+      "P-CREDITS"
+     ],
+     "retrieved": [
+      "EXAM-3.2",
+      "P-CREDITS",
+      "P-LOAD",
+      "GUEST-2",
+      "GUEST-1"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-07",
+     "id": "Q-07",
+     "query": "Could I hold a session on Saturday morning?",
+     "gold": [
+      "P-HOURS"
+     ],
+     "answer": "Under \u00a72.1 Working hours, teaching takes place Monday to Friday between 9:00 and 17:00; weekend classes require written approval from the Head of Department.",
+     "cited": [
+      "P-HOURS"
+     ],
+     "retrieved": [
+      "P-HOURS",
+      "P-PREFS",
+      "LAB-4",
+      "EXAM-3.3",
+      "P-MAXCONSEC"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-08",
+     "id": "Q-08",
+     "query": "What happens to the lecture I lose while I'm at a workshop abroad?",
+     "gold": [
+      "P-MAKEUP"
+     ],
+     "answer": "Under \u00a72.4 Contact hours and credits, all contact hours must appear in the weekly timetable, which implies that missed hours due to absence require a make-up class to maintain the required contact hours.",
+     "cited": [
+      "P-CREDITS"
+     ],
+     "retrieved": [
+      "GUEST-2",
+      "GUEST-4",
+      "P-SCOPE",
+      "P-CREDITS",
+      "P-LUNCH"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-09",
+     "id": "Q-09",
+     "query": "Dr. Iyer and I want to trade our Tuesday and Thursday lectures.",
+     "gold": [
+      "P-SWAP"
+     ],
+     "answer": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+     "cited": [],
+     "retrieved": [
+      "P-CREDITS",
+      "GUEST-2",
+      "GUEST-4",
+      "P-SCOPE",
+      "P-LUNCH"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-10",
+     "id": "Q-10",
+     "query": "Can a colleague take my class for me, or can I teach it over Zoom?",
+     "gold": [
+      "P-ONLINE"
+     ],
+     "answer": "Under \u00a73.4 Online and covered classes, a class may be held online, or taken by a colleague, only as a make-up arrangement and only with the approval of the Head of Department.",
+     "cited": [
+      "P-ONLINE"
+     ],
+     "retrieved": [
+      "P-ONLINE",
+      "P-AUTHORITY",
+      "P-LOAD",
+      "GUEST-1",
+      "P-SWAP"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-11",
+     "id": "Q-11",
+     "query": "The room is too small for my section, what does the rule say?",
+     "gold": [
+      "P-CAPACITY"
+     ],
+     "answer": "Under \u00a74.2 Room capacity, a class must be held in a room whose capacity is at least the number of students registered in the section.",
+     "cited": [
+      "P-CAPACITY"
+     ],
+     "retrieved": [
+      "P-CAPACITY",
+      "ROOM-4.2",
+      "ROOM-4.3",
+      "GUEST-4",
+      "P-SCOPE"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-12",
+     "id": "Q-12",
+     "query": "I want to reserve the big hall for the coding club meetup.",
+     "gold": [
+      "P-BOOKING",
+      "ROOM-4.1"
+     ],
+     "answer": "Under \u00a74.3 Event and room bookings, bookings of the auditorium, seminar halls or rooms for events, fests and meetings are handled by the Estate Office, not by the timetable office.",
+     "cited": [
+      "P-BOOKING"
+     ],
+     "retrieved": [
+      "P-BOOKING",
+      "P-CAPACITY",
+      "ROOM-4.2",
+      "LAB-2",
+      "GUEST-4"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-13",
+     "id": "Q-13",
+     "query": "Two of our courses are at the same time, who do we tell?",
+     "gold": [
+      "P-CLASH"
+     ],
+     "answer": "Under \u00a75.1 Clash reports, students who find that two of their registered courses clash report it through their class representative.",
+     "cited": [
+      "P-CLASH"
+     ],
+     "retrieved": [
+      "P-CLASH",
+      "P-AUTHORITY",
+      "P-CREDITS",
+      "P-ONLINE",
+      "P-SWAP"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-14",
+     "id": "Q-14",
+     "query": "Will my medical reason be shown to the other faculty?",
+     "gold": [
+      "P-PRIVACY"
+     ],
+     "answer": "Under \u00a76.1 Confidentiality, reasons given for unavailability, such as medical or family matters, are confidential and are never published or shared.",
+     "cited": [
+      "P-PRIVACY"
+     ],
+     "retrieved": [
+      "P-PRIVACY",
+      "EXAM-3.4",
+      "P-PREFS",
+      "P-SWAP",
+      "GUEST-1"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-15",
+     "id": "Q-15",
+     "query": "How many hours a week am I expected to teach at most?",
+     "gold": [
+      "P-LOAD"
+     ],
+     "answer": "Under \u00a72.5 Teaching load, a full-time faculty member teaches at most sixteen contact hours per week, and a guest faculty member teaches at most eight contact hours per week.",
+     "cited": [
+      "P-LOAD"
+     ],
+     "retrieved": [
+      "P-LOAD",
+      "GUEST-3",
+      "EXAM-3.3",
+      "P-CREDITS",
+      "P-MAXCONSEC"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-16",
+     "id": "Q-16",
+     "query": "How many hours does a four credit course with a lab get each week?",
+     "gold": [
+      "P-CREDITS"
+     ],
+     "answer": "Under \u00a72.4 Contact hours and credits, a 4-credit course with a laboratory has three lectures and one two-hour practical, totaling five contact hours per week.",
+     "cited": [
+      "P-CREDITS"
+     ],
+     "retrieved": [
+      "P-CREDITS",
+      "P-MAXCONSEC",
+      "EXAM-3.5",
+      "GUEST-3",
+      "P-LOAD"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-17",
+     "id": "Q-17",
+     "query": "Am I allowed to ask for my mornings to be kept free?",
+     "gold": [
+      "P-PREFS"
+     ],
+     "answer": "Under \u00a73.1 Teaching preferences, faculty may state preferences about days and times, such as keeping mornings or a particular day free.",
+     "cited": [
+      "P-PREFS"
+     ],
+     "retrieved": [
+      "P-PREFS",
+      "EXAM-3.3",
+      "EXAM-3.5",
+      "ROOM-4.3",
+      "P-LUNCH"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-18",
+     "id": "Q-18",
+     "query": "Can a professor ask to move a class that belongs to someone else?",
+     "gold": [
+      "P-AUTHORITY"
+     ],
+     "answer": "Under \u00a71.2 Who may request changes, a faculty member may request changes only to their own classes.",
+     "cited": [
+      "P-AUTHORITY"
+     ],
+     "retrieved": [
+      "P-AUTHORITY",
+      "P-ONLINE",
+      "P-CAPACITY",
+      "ROOM-4.2",
+      "P-MAKEUP"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-19",
+     "id": "Q-19",
+     "query": "Does the timetable office also handle exam scheduling and events?",
+     "gold": [
+      "P-SCOPE"
+     ],
+     "answer": "No, under \u00a71.1 Scope, the regulations govern only the weekly teaching timetable of the department; examinations, events, and room bookings for non-teaching purposes are outside their scope. Additionally, \u00a74.3 Event and room bookings specifies that such bookings are handled by the Estate Office, not the timetable office.",
+     "cited": [
+      "P-SCOPE",
+      "P-BOOKING"
+     ],
+     "retrieved": [
+      "P-BOOKING",
+      "ROOM-4.1",
+      "P-SCOPE",
+      "EXAM-3.2",
+      "P-CLASH"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-20",
+     "id": "Q-20",
+     "query": "When are the midterms held?",
+     "gold": [
+      "EXAM-3.1"
+     ],
+     "answer": "Mid-semester examinations are held in week 8 of the teaching calendar, as specified in \u00a73.1 Examination weeks.",
+     "cited": [
+      "EXAM-3.1"
+     ],
+     "retrieved": [
+      "EXAM-3.1",
+      "P-HOURS",
+      "P-CAPACITY",
+      "GUEST-4",
+      "LAB-3"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-21",
+     "id": "Q-21",
+     "query": "Can I move my class in the week before the midterm?",
+     "gold": [
+      "EXAM-3.2"
+     ],
+     "answer": "Under \u00a73.1 Examination weeks, mid-semester examinations are held in week 8 and end-semester examinations in week 16 of the teaching calendar, with no regular classes scheduled during these weeks.",
+     "cited": [
+      "EXAM-3.1"
+     ],
+     "retrieved": [
+      "EXAM-3.5",
+      "EXAM-3.1",
+      "P-SWAP",
+      "EXAM-3.2",
+      "P-MAKEUP"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-22",
+     "id": "Q-22",
+     "query": "How many times can I be put on exam hall supervision in one week?",
+     "gold": [
+      "EXAM-3.3"
+     ],
+     "answer": "Under \u00a73.3 Invigilation duties, every faculty member is assigned at most two invigilation duties per examination week.",
+     "cited": [
+      "EXAM-3.3"
+     ],
+     "retrieved": [
+      "P-LOAD",
+      "EXAM-3.1",
+      "EXAM-3.3",
+      "EXAM-3.2",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-23",
+     "id": "Q-23",
+     "query": "A student was ill during the midsem, can they retake it?",
+     "gold": [
+      "EXAM-3.4"
+     ],
+     "answer": "Under \u00a73.4 Make-up tests, a student who misses a mid-semester examination for a documented medical reason may take a make-up test within ten working days.",
+     "cited": [
+      "EXAM-3.4"
+     ],
+     "retrieved": [
+      "LAB-2",
+      "EXAM-3.4",
+      "EXAM-3.5",
+      "P-LUNCH",
+      "P-PRIVACY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-24",
+     "id": "Q-24",
+     "query": "Can I run an additional revision session just before the finals?",
+     "gold": [
+      "EXAM-3.5"
+     ],
+     "answer": "Under \u00a73.5 Extra classes before examinations, extra revision classes in week 7 or week 15 are allowed only outside the regular timetable, must not exceed two hours per course, and must be announced to students at least three working days in advance.",
+     "cited": [
+      "EXAM-3.5"
+     ],
+     "retrieved": [
+      "EXAM-3.5",
+      "P-SWAP",
+      "P-MAXCONSEC",
+      "EXAM-3.3",
+      "LAB-3"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-25",
+     "id": "Q-25",
+     "query": "Our visiting lecturer wants a slot outside the times in her contract.",
+     "gold": [
+      "GUEST-1"
+     ],
+     "answer": "Under \u00a72.1 Working hours, teaching takes place Monday to Friday between 9:00 and 17:00; weekend classes or slots outside these hours require written approval from the Head of Department.",
+     "cited": [
+      "P-HOURS"
+     ],
+     "retrieved": [
+      "P-SWAP",
+      "P-PREFS",
+      "P-HOURS",
+      "P-LOAD",
+      "EXAM-3.3"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "rag/Q-26",
+     "id": "Q-26",
+     "query": "How early do we have to warn a visiting lecturer before rescheduling her talk?",
+     "gold": [
+      "GUEST-2"
+     ],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-SWAP",
+      "EXAM-3.5",
+      "P-ONLINE",
+      "ROOM-4.1",
+      "ROOM-4.3"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/Q-27",
+     "id": "Q-27",
+     "query": "How much can a visiting professor teach in a single day?",
+     "gold": [
+      "GUEST-3"
+     ],
+     "answer": "Under \u00a73 Teaching load, a guest faculty member teaches at most eight contact hours per week, and never more than three hours on a single day.",
+     "cited": [
+      "GUEST-3"
+     ],
+     "retrieved": [
+      "GUEST-3",
+      "P-LOAD",
+      "P-PREFS",
+      "EXAM-3.3",
+      "ROOM-4.3"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-28",
+     "id": "Q-28",
+     "query": "Which room does the visiting lecturer get, and who confirms it?",
+     "gold": [
+      "GUEST-4"
+     ],
+     "answer": "Under \u00a74 Rooms, guest lectures are held in lecture rooms with a projector, and the Head of Department confirms the room when the window is fixed.",
+     "cited": [
+      "GUEST-4"
+     ],
+     "retrieved": [
+      "GUEST-4",
+      "P-CAPACITY",
+      "P-AUTHORITY",
+      "P-BOOKING",
+      "ROOM-4.2"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-29",
+     "id": "Q-29",
+     "query": "I no longer need the seminar room I reserved, what should I do?",
+     "gold": [
+      "ROOM-4.3"
+     ],
+     "answer": "Under \u00a74.3 Cancelling a booking, a booking that is no longer needed must be cancelled at least one working day in advance, so the room can be offered to others.",
+     "cited": [
+      "ROOM-4.3"
+     ],
+     "retrieved": [
+      "ROOM-4.3",
+      "ROOM-4.2",
+      "P-BOOKING",
+      "P-SCOPE",
+      "GUEST-4"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-30",
+     "id": "Q-30",
+     "query": "Can I grab a seminar room for an extra tutorial during the day?",
+     "gold": [
+      "ROOM-4.2"
+     ],
+     "answer": "Under \u00a74.2 Seminar rooms for extra classes, seminar rooms may be booked for extra classes only outside timetabled hours.",
+     "cited": [
+      "ROOM-4.2"
+     ],
+     "retrieved": [
+      "ROOM-4.2",
+      "ROOM-4.3",
+      "P-BOOKING",
+      "P-SCOPE",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-31",
+     "id": "Q-31",
+     "query": "I need a lab with GPUs for my deep learning practical.",
+     "gold": [
+      "P-LABS"
+     ],
+     "answer": "Under the institute regulations, practical sessions are held in laboratories with the equipment the course requires, which allows requesting a specific lab type.",
+     "cited": [
+      "P-LABS"
+     ],
+     "retrieved": [
+      "P-LABS",
+      "LAB-3",
+      "LAB-2",
+      "P-AUTHORITY",
+      "LAB-1"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-32",
+     "id": "Q-32",
+     "query": "Is there a cap on sessions a course can have online?",
+     "gold": [
+      "P-ONLINE"
+     ],
+     "answer": "Under \u00a73.4 Online and covered classes, a course may have no more than two online classes in a semester.",
+     "cited": [
+      "P-ONLINE"
+     ],
+     "retrieved": [
+      "P-ONLINE",
+      "P-LABS",
+      "ROOM-4.2",
+      "P-CREDITS",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-33",
+     "id": "Q-33",
+     "query": "Can the head of department waive the 1 pm break for our section?",
+     "gold": [
+      "P-LUNCH"
+     ],
+     "answer": "Under \u00a72.2 Common lunch break, the hour from 13:00 to 14:00 is a common lunch break with no scheduled classes, and only the Dean may grant an exception.",
+     "cited": [
+      "P-LUNCH"
+     ],
+     "retrieved": [
+      "P-LUNCH",
+      "P-AUTHORITY",
+      "P-MAXCONSEC",
+      "P-SWAP",
+      "P-SCOPE"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-34",
+     "id": "Q-34",
+     "query": "Please put all three of my lectures back to back with the lab after them.",
+     "gold": [
+      "P-MAXCONSEC"
+     ],
+     "answer": "Under \u00a72.3 Consecutive teaching hours, no faculty member or section may be scheduled for more than three consecutive teaching hours without a break of at least one hour.",
+     "cited": [
+      "P-MAXCONSEC"
+     ],
+     "retrieved": [
+      "P-MAXCONSEC",
+      "P-CREDITS",
+      "GUEST-4",
+      "EXAM-3.5",
+      "P-AUTHORITY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-35",
+     "id": "Q-35",
+     "query": "I'll be out for a family matter in week 6, please rearrange things.",
+     "gold": [
+      "P-MAKEUP"
+     ],
+     "answer": "Under \u00a76.1 Confidentiality, reasons given for unavailability, such as medical or family matters, are confidential and the reason itself is never published or shared.",
+     "cited": [
+      "P-PRIVACY"
+     ],
+     "retrieved": [
+      "EXAM-3.5",
+      "EXAM-3.2",
+      "EXAM-3.1",
+      "GUEST-2",
+      "P-PRIVACY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/Q-36",
+     "id": "Q-36",
+     "query": "Who needs to know before two teachers exchange their slots?",
+     "gold": [
+      "P-SWAP"
+     ],
+     "answer": "Under \u00a73.3 Swapping slots, two faculty members may swap teaching slots with the consent of both, and the timetable coordinator must be informed before the swap takes effect.",
+     "cited": [
+      "P-SWAP"
+     ],
+     "retrieved": [
+      "P-SWAP",
+      "P-AUTHORITY",
+      "EXAM-3.5",
+      "EXAM-3.3",
+      "P-MAXCONSEC"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-37",
+     "id": "Q-37",
+     "query": "Can I teach late in the evening, say from 6 pm?",
+     "gold": [
+      "P-HOURS"
+     ],
+     "answer": "Under \u00a72.1 Working hours, teaching takes place Monday to Friday between 9:00 and 17:00; weekend classes or slots outside these hours require written approval from the Head of Department.",
+     "cited": [
+      "P-HOURS"
+     ],
+     "retrieved": [
+      "P-LOAD",
+      "EXAM-3.3",
+      "GUEST-1",
+      "P-HOURS",
+      "P-MAXCONSEC"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-38",
+     "id": "Q-38",
+     "query": "The networking lab will be under repair, where do the practicals go?",
+     "gold": [
+      "P-LABS"
+     ],
+     "answer": "Under \u00a74.1 Laboratories and equipment, practical sessions are held in laboratories with the equipment the course requires, and the lab in-charge reports laboratory closures for maintenance, with affected sessions moved to another suitable laboratory or slot.",
+     "cited": [
+      "P-LABS"
+     ],
+     "retrieved": [
+      "P-LABS",
+      "LAB-3",
+      "LAB-1",
+      "P-AUTHORITY",
+      "LAB-2"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-39",
+     "id": "Q-39",
+     "query": "Our batch has 45 students, can they all be in the lab together?",
+     "gold": [
+      "LAB-2"
+     ],
+     "answer": "Under \u00a72 Capacity, no more than 30 students may be present in a laboratory during a practical; larger sections must be split into batches.",
+     "cited": [
+      "LAB-2"
+     ],
+     "retrieved": [
+      "P-AUTHORITY",
+      "LAB-3",
+      "LAB-2",
+      "P-CAPACITY",
+      "P-CREDITS"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/Q-40",
+     "id": "Q-40",
+     "query": "Is teaching allowed during the exam weeks?",
+     "gold": [
+      "EXAM-3.1"
+     ],
+     "answer": "Under \u00a73.1 Examination weeks, mid-semester examinations are held in week 8 and end-semester examinations in week 16 of the teaching calendar, and no regular classes are scheduled during these weeks.",
+     "cited": [
+      "EXAM-3.1"
+     ],
+     "retrieved": [
+      "EXAM-3.1",
+      "EXAM-3.5",
+      "EXAM-3.2",
+      "ROOM-4.1",
+      "P-SCOPE"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "rag/U-01",
+     "id": "U-01",
+     "query": "How many days of casual leave does a faculty member get in a year?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-PREFS",
+      "P-LOAD",
+      "GUEST-3",
+      "EXAM-3.3",
+      "P-MAKEUP"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-02",
+     "id": "U-02",
+     "query": "What attendance percentage do students need to be allowed into the end-semester exam?",
+     "gold": [],
+     "answer": "The institute regulations do not specify an attendance percentage requirement for the end-semester exam; \u00a73.1 only states that end-semester examinations are held in week 16 and that no regular classes are scheduled during examination weeks.",
+     "cited": [
+      "EXAM-3.1"
+     ],
+     "retrieved": [
+      "EXAM-3.1",
+      "LAB-2",
+      "EXAM-3.5",
+      "EXAM-3.4",
+      "P-CAPACITY"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-03",
+     "id": "U-03",
+     "query": "Who decides the grading scheme for my course, me or the department?",
+     "gold": [],
+     "answer": "Under the relevant institute regulations, the policy specifies the scope of the timetabling rules, which governs the weekly teaching timetable but does not address grading schemes.",
+     "cited": [
+      "P-SCOPE"
+     ],
+     "retrieved": [
+      "P-AUTHORITY",
+      "P-CLASH",
+      "P-ONLINE",
+      "P-SCOPE",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-04",
+     "id": "U-04",
+     "query": "What is the deadline for uploading end-semester marks?",
+     "gold": [],
+     "answer": "This question is outside the scope of the retrieved timetabling rules, which cover examination weeks, make-up classes, online classes, and extra revision classes before examinations.",
+     "cited": [],
+     "retrieved": [
+      "EXAM-3.1",
+      "P-MAKEUP",
+      "EXAM-3.4",
+      "P-ONLINE",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-05",
+     "id": "U-05",
+     "query": "Can a student take an elective offered by another department?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies which types of requests are permitted, forbidden, or require approval; it does not address inter-departmental electives.",
+     "cited": [],
+     "retrieved": [
+      "P-AUTHORITY",
+      "P-SWAP",
+      "P-CAPACITY",
+      "P-ONLINE",
+      "EXAM-3.5"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-06",
+     "id": "U-06",
+     "query": "Is there a dress code students must follow in the lab?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-AUTHORITY",
+      "LAB-2",
+      "P-CAPACITY",
+      "LAB-3",
+      "P-LABS"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-07",
+     "id": "U-07",
+     "query": "How do I apply for a departmental research grant?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-LUNCH",
+      "P-AUTHORITY",
+      "P-CREDITS",
+      "LAB-3",
+      "GUEST-1"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-08",
+     "id": "U-08",
+     "query": "What is the late fee if a student registers for courses after the deadline?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "EXAM-3.5",
+      "P-CLASH",
+      "P-CREDITS",
+      "P-MAXCONSEC",
+      "ROOM-4.2"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-09",
+     "id": "U-09",
+     "query": "How many PhD students can one faculty member supervise at a time?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-LOAD",
+      "EXAM-3.3",
+      "P-MAXCONSEC",
+      "LAB-3",
+      "GUEST-3"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-10",
+     "id": "U-10",
+     "query": "How are teaching assistants allotted to courses?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "GUEST-3",
+      "P-LOAD",
+      "P-PREFS",
+      "P-MAXCONSEC",
+      "P-SCOPE"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-11",
+     "id": "U-11",
+     "query": "Is campus parking available for guest faculty?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "GUEST-1",
+      "GUEST-2",
+      "P-PREFS",
+      "GUEST-4",
+      "P-LOAD"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-12",
+     "id": "U-12",
+     "query": "What minimum CGPA does a student need to continue in the programme?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "LAB-2",
+      "EXAM-3.5",
+      "P-CAPACITY",
+      "EXAM-3.4",
+      "P-LUNCH"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-13",
+     "id": "U-13",
+     "query": "How many pages can I photocopy per month for my course material?",
+     "gold": [],
+     "answer": "This question is outside the scope of the timetabling regulations provided.",
+     "cited": [],
+     "retrieved": [
+      "P-CREDITS",
+      "EXAM-3.5",
+      "P-ONLINE",
+      "P-LOAD",
+      "GUEST-3"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-14",
+     "id": "U-14",
+     "query": "What is the procedure for a student to ask for revaluation of an answer script?",
+     "gold": [],
+     "answer": "This is a policy question about procedures not covered in the retrieved rules, so the answer is provided without referencing any specific regulation.",
+     "cited": [],
+     "retrieved": [
+      "P-AUTHORITY",
+      "EXAM-3.5",
+      "P-CLASH",
+      "EXAM-3.4",
+      "LAB-2"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-15",
+     "id": "U-15",
+     "query": "Are exam question papers set by the course instructor or by an external examiner?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-LABS",
+      "EXAM-3.5",
+      "P-ONLINE",
+      "P-CLASH",
+      "ROOM-4.2"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-16",
+     "id": "U-16",
+     "query": "How long do I have to keep students' answer scripts after the exam?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-MAXCONSEC",
+      "EXAM-3.5",
+      "EXAM-3.4",
+      "P-CLASH",
+      "P-AUTHORITY"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-17",
+     "id": "U-17",
+     "query": "How much travel allowance do I get for presenting at a conference?",
+     "gold": [],
+     "answer": "I couldn't find a rule about that. The timetable office can tell you.",
+     "cited": [],
+     "retrieved": [
+      "P-MAKEUP",
+      "ROOM-4.1",
+      "ROOM-4.3",
+      "GUEST-3",
+      "P-LOAD"
+     ],
+     "no_rule": true,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-18",
+     "id": "U-18",
+     "query": "Can students record my lectures on their phones?",
+     "gold": [],
+     "answer": "This is a general policy question with no relevant rules preventing the answer.",
+     "cited": [],
+     "retrieved": [
+      "GUEST-4",
+      "GUEST-2",
+      "P-CAPACITY",
+      "P-AUTHORITY",
+      "P-CREDITS"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-19",
+     "id": "U-19",
+     "query": "What time does the canteen open in the morning?",
+     "gold": [],
+     "answer": "The rules do not contain information about canteen opening hours.",
+     "cited": [],
+     "retrieved": [
+      "P-PREFS",
+      "EXAM-3.3",
+      "P-LOAD",
+      "P-LUNCH",
+      "P-HOURS"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "rag/U-20",
+     "id": "U-20",
+     "query": "Can a student drop a course in the middle of the semester, and is there a penalty?",
+     "gold": [],
+     "answer": "The institute regulations do not specify any policy regarding dropping courses or associated penalties.",
+     "cited": [],
+     "retrieved": [
+      "EXAM-3.5",
+      "EXAM-3.1",
+      "P-ONLINE",
+      "P-MAKEUP",
+      "P-CLASH"
+     ],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    }
+   ]
+  },
+  "no-rag": {
+   "summary": {
+    "answerable": 40,
+    "unanswerable": 20,
+    "answer_accuracy": 0.2,
+    "answer_accuracy_ci": [
+     0.075,
+     0.325
+    ],
+    "false_abstention": 0.15,
+    "citation_recall": 0.0,
+    "citation_precision": null,
+    "retrieval_recall": null,
+    "abstention_on_unanswerable": 0.75,
+    "hallucination_on_unanswerable": 0.25,
+    "hallucinated_citations": 0
+   },
+   "rows": [
+    {
+     "key": "no-rag/Q-01",
+     "id": "Q-01",
+     "query": "Can I shift my practical to another lab next week?",
+     "gold": [
+      "LAB-1"
+     ],
+     "answer": "Yes, you can shift your practical to another lab next week.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-02",
+     "id": "Q-02",
+     "query": "Is there a limit on how many students can sit in the lab at once?",
+     "gold": [
+      "LAB-2"
+     ],
+     "answer": "Under the institute regulations, there is no specified limit on the number of students allowed in the lab at once.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-03",
+     "id": "Q-03",
+     "query": "Can the practical go ahead if nobody from staff is around to supervise?",
+     "gold": [
+      "LAB-3"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-04",
+     "id": "Q-04",
+     "query": "Are the labs shut on some weekends for servicing?",
+     "gold": [
+      "LAB-4"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-05",
+     "id": "Q-05",
+     "query": "Can I put my class in the midday break?",
+     "gold": [
+      "P-LUNCH"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-06",
+     "id": "Q-06",
+     "query": "Is it okay to teach four periods without stopping?",
+     "gold": [
+      "P-MAXCONSEC"
+     ],
+     "answer": "Under the institute regulations, there are no rules preventing this action.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-07",
+     "id": "Q-07",
+     "query": "Could I hold a session on Saturday morning?",
+     "gold": [
+      "P-HOURS"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-08",
+     "id": "Q-08",
+     "query": "What happens to the lecture I lose while I'm at a workshop abroad?",
+     "gold": [
+      "P-MAKEUP"
+     ],
+     "answer": "Under the institute regulations, if a class is missed due to absence in specific weeks, a make-up class is scheduled in an available slot.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-09",
+     "id": "Q-09",
+     "query": "Dr. Iyer and I want to trade our Tuesday and Thursday lectures.",
+     "gold": [
+      "P-SWAP"
+     ],
+     "answer": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-10",
+     "id": "Q-10",
+     "query": "Can a colleague take my class for me, or can I teach it over Zoom?",
+     "gold": [
+      "P-ONLINE"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-11",
+     "id": "Q-11",
+     "query": "The room is too small for my section, what does the rule say?",
+     "gold": [
+      "P-CAPACITY"
+     ],
+     "answer": "The rules retrieved indicate no relevant regulations address this topic.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-12",
+     "id": "Q-12",
+     "query": "I want to reserve the big hall for the coding club meetup.",
+     "gold": [
+      "P-BOOKING",
+      "ROOM-4.1"
+     ],
+     "answer": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-13",
+     "id": "Q-13",
+     "query": "Two of our courses are at the same time, who do we tell?",
+     "gold": [
+      "P-CLASH"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-14",
+     "id": "Q-14",
+     "query": "Will my medical reason be shown to the other faculty?",
+     "gold": [
+      "P-PRIVACY"
+     ],
+     "answer": "Under the institute regulations, privacy protections ensure that medical reasons are not disclosed to other faculty members.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-15",
+     "id": "Q-15",
+     "query": "How many hours a week am I expected to teach at most?",
+     "gold": [
+      "P-LOAD"
+     ],
+     "answer": "Under the institute regulations, there is no specified maximum number of hours per week for teaching.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-16",
+     "id": "Q-16",
+     "query": "How many hours does a four credit course with a lab get each week?",
+     "gold": [
+      "P-CREDITS"
+     ],
+     "answer": "Under the institute regulations, a four credit course with a lab gets 5 hours each week.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-17",
+     "id": "Q-17",
+     "query": "Am I allowed to ask for my mornings to be kept free?",
+     "gold": [
+      "P-PREFS"
+     ],
+     "answer": "Under the institute regulations, preferences and unavailability are normally allowed without violating any rules.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-18",
+     "id": "Q-18",
+     "query": "Can a professor ask to move a class that belongs to someone else?",
+     "gold": [
+      "P-AUTHORITY"
+     ],
+     "answer": "No, a professor cannot move a class that belongs to someone else without authorization.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-19",
+     "id": "Q-19",
+     "query": "Does the timetable office also handle exam scheduling and events?",
+     "gold": [
+      "P-SCOPE"
+     ],
+     "answer": "The timetable office only handles timetabling requests under the institute regulations; exam scheduling and events are managed separately.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-20",
+     "id": "Q-20",
+     "query": "When are the midterms held?",
+     "gold": [
+      "EXAM-3.1"
+     ],
+     "answer": "The institute regulations do not specify when the midterms are held.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-21",
+     "id": "Q-21",
+     "query": "Can I move my class in the week before the midterm?",
+     "gold": [
+      "EXAM-3.2"
+     ],
+     "answer": "Under the institute regulations, there are no relevant rules preventing this action.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-22",
+     "id": "Q-22",
+     "query": "How many times can I be put on exam hall supervision in one week?",
+     "gold": [
+      "EXAM-3.3"
+     ],
+     "answer": "Under the institute regulations, there are no restrictions on the number of times a person can be put on exam hall supervision in one week.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-23",
+     "id": "Q-23",
+     "query": "A student was ill during the midsem, can they retake it?",
+     "gold": [
+      "EXAM-3.4"
+     ],
+     "answer": "Under the institute regulations, the policy specifies that a student who is ill during the midsem can retake the exam.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": true
+    },
+    {
+     "key": "no-rag/Q-24",
+     "id": "Q-24",
+     "query": "Can I run an additional revision session just before the finals?",
+     "gold": [
+      "EXAM-3.5"
+     ],
+     "answer": "Under the institute regulations, there are no relevant rules preventing this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-25",
+     "id": "Q-25",
+     "query": "Our visiting lecturer wants a slot outside the times in her contract.",
+     "gold": [
+      "GUEST-1"
+     ],
+     "answer": "Under the institute regulations, the policy specifies that visiting lecturers may request slots outside their contract hours with appropriate approval.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-26",
+     "id": "Q-26",
+     "query": "How early do we have to warn a visiting lecturer before rescheduling her talk?",
+     "gold": [
+      "GUEST-2"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/Q-27",
+     "id": "Q-27",
+     "query": "How much can a visiting professor teach in a single day?",
+     "gold": [
+      "GUEST-3"
+     ],
+     "answer": "Under the institute regulations, there is no specified limit on the number of hours a visiting professor can teach in a single day.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-28",
+     "id": "Q-28",
+     "query": "Which room does the visiting lecturer get, and who confirms it?",
+     "gold": [
+      "GUEST-4"
+     ],
+     "answer": "Under the institute regulations, the policy specifies that visiting lecturers are assigned to Room 300, and the confirmation responsibility lies with the department head.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-29",
+     "id": "Q-29",
+     "query": "I no longer need the seminar room I reserved, what should I do?",
+     "gold": [
+      "ROOM-4.3"
+     ],
+     "answer": "Under the institute regulations, there is no relevant rule specified that prevents this action.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-30",
+     "id": "Q-30",
+     "query": "Can I grab a seminar room for an extra tutorial during the day?",
+     "gold": [
+      "ROOM-4.2"
+     ],
+     "answer": "Under the institute regulations, there are no relevant rules preventing this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-31",
+     "id": "Q-31",
+     "query": "I need a lab with GPUs for my deep learning practical.",
+     "gold": [
+      "P-LABS"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines:",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/Q-32",
+     "id": "Q-32",
+     "query": "Is there a cap on sessions a course can have online?",
+     "gold": [
+      "P-ONLINE"
+     ],
+     "answer": "Under the institute regulations, there is no specified cap on the number of online sessions a course can have.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-33",
+     "id": "Q-33",
+     "query": "Can the head of department waive the 1 pm break for our section?",
+     "gold": [
+      "P-LUNCH"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/Q-34",
+     "id": "Q-34",
+     "query": "Please put all three of my lectures back to back with the lab after them.",
+     "gold": [
+      "P-MAXCONSEC"
+     ],
+     "answer": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-35",
+     "id": "Q-35",
+     "query": "I'll be out for a family matter in week 6, please rearrange things.",
+     "gold": [
+      "P-MAKEUP"
+     ],
+     "answer": "Under the institute regulations, absence is normally allowed without additional constraints.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-36",
+     "id": "Q-36",
+     "query": "Who needs to know before two teachers exchange their slots?",
+     "gold": [
+      "P-SWAP"
+     ],
+     "answer": "Under the institute regulations, the policy specifies that when two teachers exchange their slots, the relevant party who needs to be notified is the department head.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-37",
+     "id": "Q-37",
+     "query": "Can I teach late in the evening, say from 6 pm?",
+     "gold": [
+      "P-HOURS"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/Q-38",
+     "id": "Q-38",
+     "query": "The networking lab will be under repair, where do the practicals go?",
+     "gold": [
+      "P-LABS"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/Q-39",
+     "id": "Q-39",
+     "query": "Our batch has 45 students, can they all be in the lab together?",
+     "gold": [
+      "LAB-2"
+     ],
+     "answer": "Preferences and unavailability are normally allowed under the institute regulations, and no rule prevents this request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": false
+    },
+    {
+     "key": "no-rag/Q-40",
+     "id": "Q-40",
+     "query": "Is teaching allowed during the exam weeks?",
+     "gold": [
+      "EXAM-3.1"
+     ],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-01",
+     "id": "U-01",
+     "query": "How many days of casual leave does a faculty member get in a year?",
+     "gold": [],
+     "answer": "Under the institute regulations, faculty members are entitled to 10 days of casual leave per year.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-02",
+     "id": "U-02",
+     "query": "What attendance percentage do students need to be allowed into the end-semester exam?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies that students must achieve a minimum attendance percentage of 75% to be eligible for the end-semester exam.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-03",
+     "id": "U-03",
+     "query": "Who decides the grading scheme for my course, me or the department?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-04",
+     "id": "U-04",
+     "query": "What is the deadline for uploading end-semester marks?",
+     "gold": [],
+     "answer": "The institute regulations do not specify a deadline for uploading end-semester marks.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-05",
+     "id": "U-05",
+     "query": "Can a student take an elective offered by another department?",
+     "gold": [],
+     "answer": "Under the institute regulations, there are no restrictions preventing a student from taking an elective offered by another department.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-06",
+     "id": "U-06",
+     "query": "Is there a dress code students must follow in the lab?",
+     "gold": [],
+     "answer": "The policy specifies only timetabling regulations; dress code rules are not included in the relevant institute regulations.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-07",
+     "id": "U-07",
+     "query": "How do I apply for a departmental research grant?",
+     "gold": [],
+     "answer": "This is a policy question, not a timetabling request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-08",
+     "id": "U-08",
+     "query": "What is the late fee if a student registers for courses after the deadline?",
+     "gold": [],
+     "answer": "Under the institute regulations, there is no late fee specified for registering for courses after the deadline.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-09",
+     "id": "U-09",
+     "query": "How many PhD students can one faculty member supervise at a time?",
+     "gold": [],
+     "answer": "Under the institute regulations, there is no specified limit on the number of PhD students a faculty member can supervise at a time.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": false,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-10",
+     "id": "U-10",
+     "query": "How are teaching assistants allotted to courses?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-11",
+     "id": "U-11",
+     "query": "Is campus parking available for guest faculty?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-12",
+     "id": "U-12",
+     "query": "What minimum CGPA does a student need to continue in the programme?",
+     "gold": [],
+     "answer": "The institute regulations do not specify a minimum CGPA requirement for continuing in the programme.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-13",
+     "id": "U-13",
+     "query": "How many pages can I photocopy per month for my course material?",
+     "gold": [],
+     "answer": "This is a policy question, and the rules specify no relevant guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-14",
+     "id": "U-14",
+     "query": "What is the procedure for a student to ask for revaluation of an answer script?",
+     "gold": [],
+     "answer": "The institute regulations do not specify a procedure for revaluation of answer scripts.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-15",
+     "id": "U-15",
+     "query": "Are exam question papers set by the course instructor or by an external examiner?",
+     "gold": [],
+     "answer": "This is a policy question, not a timetabling request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-16",
+     "id": "U-16",
+     "query": "How long do I have to keep students' answer scripts after the exam?",
+     "gold": [],
+     "answer": "This is a policy question with no relevant rules found, so the answer is general.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-17",
+     "id": "U-17",
+     "query": "How much travel allowance do I get for presenting at a conference?",
+     "gold": [],
+     "answer": "This is a policy question with no relevant rules found, so the answer is general.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-18",
+     "id": "U-18",
+     "query": "Can students record my lectures on their phones?",
+     "gold": [],
+     "answer": "This is a policy question with no relevant rules found, so the answer is general.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-19",
+     "id": "U-19",
+     "query": "What time does the canteen open in the morning?",
+     "gold": [],
+     "answer": "This is a policy question, not a timetabling request.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    },
+    {
+     "key": "no-rag/U-20",
+     "id": "U-20",
+     "query": "Can a student drop a course in the middle of the semester, and is there a penalty?",
+     "gold": [],
+     "answer": "Under the institute regulations, the policy specifies the following guidelines.",
+     "cited": [],
+     "retrieved": [],
+     "no_rule": false,
+     "hallucinated_citations": [],
+     "abstains": true,
+     "agrees": null
+    }
+   ]
+  }
+ }
+}

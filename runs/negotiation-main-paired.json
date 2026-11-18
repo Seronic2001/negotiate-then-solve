@@ -1,0 +1,71 @@
+{
+ "ours-llm vs B3": {
+  "pairs": 180,
+  "correct_outcome_mcnemar": {
+   "only_first": 14,
+   "only_second": 3,
+   "p": 0.012725830078125
+  },
+  "resolved_mcnemar": {
+   "only_first": 14,
+   "only_second": 3,
+   "p": 0.012725830078125
+  },
+  "rounds_wilcoxon": {
+   "n": 57,
+   "p": 0.3737943264824489,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 57,
+   "p": 1.5866596509876708e-05,
+   "median_diff": 0.0
+  }
+ },
+ "ours-llm vs B4": {
+  "pairs": 180,
+  "correct_outcome_mcnemar": {
+   "only_first": 28,
+   "only_second": 3,
+   "p": 4.649162292480469e-06
+  },
+  "resolved_mcnemar": {
+   "only_first": 28,
+   "only_second": 3,
+   "p": 4.649162292480469e-06
+  },
+  "rounds_wilcoxon": {
+   "n": 43,
+   "p": 0.7643127593238577,
+   "median_diff": 0
+  },
+  "objective_wilcoxon": {
+   "n": 43,
+   "p": 1.402739569330522e-06,
+   "median_diff": -0.1394736842105262
+  }
+ },
+ "ours-llm vs B1": {
+  "pairs": 20,
+  "correct_outcome_mcnemar": {
+   "only_first": 18,
+   "only_second": 0,
+   "p": 7.62939453125e-06
+  },
+  "resolved_mcnemar": {
+   "only_first": 7,
+   "only_second": 0,
+   "p": 0.015625
+  },
+  "rounds_wilcoxon": {
+   "n": 0,
+   "p": 1.0,
+   "median_diff": 0.0
+  },
+  "objective_wilcoxon": {
+   "n": 0,
+   "p": 1.0,
+   "median_diff": 0.0
+  }
+ }
+}
